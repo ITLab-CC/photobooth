@@ -1,0 +1,13 @@
+{
+  "name": "fotobox",
+  "version": "1.0.0",
+  "author": "Julian Kropp, Patrick Hutter",
+  "description": "Fotobox-Anwendung mit Node.js und Express",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
