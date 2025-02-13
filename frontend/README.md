@@ -1,7 +1,3 @@
-Hier ist eine Markdown-Dokumentation für das gesamte Frontend deiner **IT LAB PHOTOBOOTH**-Anwendung.
-
----
-
 # 📸 IT LAB PHOTOBOOTH - Frontend Dokumentation
 
 ## 📌 Inhaltsverzeichnis
