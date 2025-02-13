@@ -104,8 +104,8 @@ function playShutterSound() {
 function captureImage() {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = 1920;
+  canvas.height = 1080;
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   const dataUrl = canvas.toDataURL("image/png");
@@ -144,8 +144,8 @@ function generateQRCode(url) {
   qrCodeContainer.innerHTML = "";
   new QRCode(qrCodeContainer, {
     text: url,
-    width: 256,
-    height: 256,
+    width: 400,
+    height: 400,
   });
 }
 

@@ -39,3 +39,30 @@ app.post("/upload", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server läuft auf http://localhost:${PORT}`);
 });
+
+app.get("/images", (req, res) => {
+  const imagesDir = path.join(__dirname, "public", "images");
+
+  fs.readdir(imagesDir, (err, files) => {
+    if (err) {
+      return res.status(500).json({ error: "Fehler beim Laden der Bilder." });
+    }
+
+    const imageFiles = files.filter((file) =>
+      /\.(jpg|jpeg|png|gif)$/i.test(file)
+    );
+    res.json(imageFiles);
+  });
+});
+
+app.delete("/delete-image/:imageName", (req, res) => {
+  const { imageName } = req.params;
+  const filePath = path.join(__dirname, "public", "images", imageName);
+
+  fs.unlink(filePath, (err) => {
+    if (err) {
+      return res.status(500).json({ error: "Fehler beim Löschen des Bildes." });
+    }
+    res.sendStatus(200);
+  });
+});
