@@ -234,3 +234,20 @@ footer img {
   color: white;
   cursor: pointer;
 }
+
+/* Filter für verschiedene Effekte */
+.sepia {
+  filter: sepia(100%);
+}
+.grayscale {
+  filter: grayscale(100%);
+}
+.invert {
+  filter: invert(100%);
+}
+.blur {
+  filter: blur(5px);
+}
+.brightness {
+  filter: brightness(150%);
+}

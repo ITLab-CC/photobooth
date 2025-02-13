@@ -27,6 +27,11 @@ async function startCamera() {
   }
 }
 
+function applyFilter(filter) {
+  const video = document.getElementById("video");
+  video.className = filter;
+}
+
 function startCountdown(seconds) {
   let counter = seconds;
 
@@ -103,15 +108,18 @@ function playShutterSound() {
 
 function captureImage() {
   const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
   canvas.width = 1920;
   canvas.height = 1080;
+  const ctx = canvas.getContext("2d");
+
+  const video = document.getElementById("video");
+  ctx.filter = getComputedStyle(video).filter;
+
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   const dataUrl = canvas.toDataURL("image/png");
-
-  showResult(dataUrl);
   uploadImage(dataUrl);
+  showResult(dataUrl);
 }
 
 function showResult(dataUrl) {
