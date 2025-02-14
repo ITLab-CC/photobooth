@@ -21,17 +21,25 @@ FAKE_USERNAME = "user"
 FAKE_PASSWORD = "password"
 Bearer_TIMEOUT = 3600  # 1 hour
 
+MONGODB_URI = "localhost:27017"
+MONGODB_USER = "root"
+MONGODB_PASSWORD = "example"
+MONGODB_DB_NAME = "photobooth"
+MONGODB_DB_IMAGES_COLLECTION_NAME = "images"
+MONGODB_DB_BACKGROUNDS_COLLECTION_NAME = "backgrounds"
+MONGODB_DB_GALLERIES_COLLECTION_NAME = "galleries"
+
 # ---------------------------
 # Initialize MongoDB Manager
 # ---------------------------
 mongo_manager = MongoDBManager(
-    mongo_uri="localhost:27017",
-    user="root",
-    password="example",
-    db_name="photobooth",
-    images_collection_name="images",
-    background_collection_name="backgrounds",
-    gallery_collection_name="galleries"
+    mongo_uri=MONGODB_URI,
+    user=MONGODB_USER,
+    password=MONGODB_PASSWORD,
+    db_name=MONGODB_DB_NAME,
+    images_collection_name=MONGODB_DB_IMAGES_COLLECTION_NAME,
+    background_collection_name=MONGODB_DB_BACKGROUNDS_COLLECTION_NAME,
+    gallery_collection_name=MONGODB_DB_GALLERIES_COLLECTION_NAME
 )
 
 # ---------------------------
@@ -163,7 +171,7 @@ async def create_gallery(gallery_req: GalleryCreateRequest, token: str = Depends
     creation_time = datetime.now()
     gallery = Gallery(creation_time=creation_time, expiration_time=gallery_req.expiration_time)
     try:
-        mongo_manager.store_gallery(gallery, collection_name="galleries")
+        mongo_manager.store_gallery(gallery, collection_name=MONGODB_DB_GALLERIES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return GalleryResponse(id=gallery.id, creation_time=gallery.creation_time, expiration_time=gallery.expiration_time)
@@ -171,7 +179,7 @@ async def create_gallery(gallery_req: GalleryCreateRequest, token: str = Depends
 @app.get("/api/v1/gallerys", response_model=GalleriesListResponse)
 async def list_galleries(token: str = Depends(get_current_token)) -> GalleriesListResponse:
     try:
-        galleries = mongo_manager.get_all_galleries(collection_name="galleries")
+        galleries = mongo_manager.get_all_galleries(collection_name=MONGODB_DB_GALLERIES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     response_galleries = [
@@ -183,12 +191,12 @@ async def list_galleries(token: str = Depends(get_current_token)) -> GalleriesLi
 @app.put("/api/v1/gallerys/{gallery_id}", response_model=GalleryResponse)
 async def update_gallery(gallery_id: str, gallery_req: GalleryUpdateRequest, token: str = Depends(get_current_token)) -> GalleryResponse:
     try:
-        gallery = mongo_manager.load_gallery(gallery_id, collection_name="galleries")
+        gallery = mongo_manager.load_gallery(gallery_id, collection_name=MONGODB_DB_GALLERIES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     gallery.expiration_time = gallery_req.expiration_time
     try:
-        mongo_manager.update_gallery(gallery, collection_name="galleries")
+        mongo_manager.update_gallery(gallery, collection_name=MONGODB_DB_GALLERIES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return GalleryResponse(id=gallery.id, creation_time=gallery.creation_time, expiration_time=gallery.expiration_time)
@@ -196,7 +204,7 @@ async def update_gallery(gallery_id: str, gallery_req: GalleryUpdateRequest, tok
 @app.delete("/api/v1/gallerys/{gallery_id}")
 async def delete_gallery(gallery_id: str, token: str = Depends(get_current_token)) -> dict:
     try:
-        mongo_manager.remove_gallery(gallery_id, collection_name="galleries")
+        mongo_manager.remove_gallery(gallery_id, collection_name=MONGODB_DB_GALLERIES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "ok"}
@@ -221,7 +229,7 @@ async def create_image(image_req: ImageCreateRequest, token: str = Depends(get_c
         gallery=image_req.gallery_id,
     )
     try:
-        mongo_manager.store_img(img_obj, collection_name="images")
+        mongo_manager.store_img(img_obj, collection_name=MONGODB_DB_IMAGES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -236,7 +244,7 @@ async def create_image(image_req: ImageCreateRequest, token: str = Depends(get_c
 @app.get("/api/v1/images", response_model=ImagesListResponse)
 async def list_images(token: str = Depends(get_current_token)) -> ImagesListResponse:
     try:
-        imgs = mongo_manager.get_all_imgs(collection_name="images")
+        imgs = mongo_manager.get_all_imgs(collection_name=MONGODB_DB_IMAGES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     response_images = [
@@ -254,7 +262,7 @@ async def list_images(token: str = Depends(get_current_token)) -> ImagesListResp
 @app.get("/api/v1/images/{image_id}")
 async def get_image(image_id: str, token: str = Depends(get_current_token)) -> StreamingResponse:
     try:
-        img_obj = mongo_manager.load_img(image_id, collection_name="images")
+        img_obj = mongo_manager.load_img(image_id, collection_name=MONGODB_DB_IMAGES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     
@@ -275,7 +283,7 @@ async def update_image(image_id: str, image_req: ImageUpdateRequest, token: str 
         raise HTTPException(status_code=400, detail="Invalid image data")
     
     try:
-        img_obj = mongo_manager.load_img(image_id, collection_name="images")
+        img_obj = mongo_manager.load_img(image_id, collection_name=MONGODB_DB_IMAGES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     
@@ -285,7 +293,7 @@ async def update_image(image_id: str, image_req: ImageUpdateRequest, token: str 
     img_obj.img = pil_image
     img_obj.gallery = image_req.gallery_id
     try:
-        mongo_manager.update_img(img_obj, collection_name="images")
+        mongo_manager.update_img(img_obj, collection_name=MONGODB_DB_IMAGES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -300,7 +308,7 @@ async def update_image(image_id: str, image_req: ImageUpdateRequest, token: str 
 @app.delete("/api/v1/images/{image_id}")
 async def delete_image(image_id: str, token: str = Depends(get_current_token)) -> dict:
     try:
-        mongo_manager.remove_img(image_id, collection_name="images")
+        mongo_manager.remove_img(image_id, collection_name=MONGODB_DB_IMAGES_COLLECTION_NAME)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "ok"}
