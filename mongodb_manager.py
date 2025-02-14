@@ -310,7 +310,7 @@ if __name__ == "__main__":
 
 
     # Creat a Gallery
-    gallery = Gallery(creation_time=datetime.now(), deletion_time=datetime.now() + timedelta(seconds=3600))
+    gallery = Gallery(creation_time=datetime.now(), expiration_time=datetime.now() + timedelta(seconds=3600))
     mongo_manager.store_gallery(gallery, collection_name="galleries")
 
     # Load the gallery back using its ID.

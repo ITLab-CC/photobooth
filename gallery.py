@@ -9,7 +9,7 @@ import json
 @dataclass
 class Gallery:
     creation_time: datetime
-    deletion_time: datetime
+    expiration_time: datetime
     _id: str = field(default_factory=lambda: f"IMG-{uuid.uuid4()}")
 
     @property
@@ -21,7 +21,7 @@ class Gallery:
         return {
             "id": self._id,  # Note: MongoDB uses _id as the primary key.
             "creation_time": self.creation_time,
-            "deletion_time": self.deletion_time
+            "expiration_time": self.expiration_time
         }
 
     def __str__(self) -> str:
@@ -29,7 +29,7 @@ class Gallery:
         return json.dumps({
             "id": self._id,
             "creation_time": self.creation_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "deletion_time": self.deletion_time.strftime("%Y-%m-%d %H:%M:%S")
+            "expiration_time": self.expiration_time.strftime("%Y-%m-%d %H:%M:%S")
         }, indent=4)
     
     def __repr__(self) -> str:
@@ -52,7 +52,7 @@ class Gallery:
             "validator": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": ["_id", "creation_time", "deletion_time"],
+                    "required": ["_id", "creation_time", "expiration_time"],
                     "properties": {
                         "_id": {
                             "bsonType": "string",
@@ -62,7 +62,7 @@ class Gallery:
                             "bsonType": "date",
                             "description": "The time the gallery was created"
                         },
-                        "deletion_time": {
+                        "expiration_time": {
                             "bsonType": "date",
                             "description": "The time the gallery will be deleted"
                         }
