@@ -1,0 +1,5 @@
+mypy
+torch
+Pillow
+git+https://github.com/PramaLLC/BEN2.git#egg=ben2
+opencv-python
