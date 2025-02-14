@@ -1,7 +1,10 @@
+import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 import io
 import base64
 from datetime import datetime, timedelta
+import uuid
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
@@ -13,97 +16,10 @@ from gallery import Gallery
 from img import IMG
 from PIL import Image
 
-# ---------------------------
-# Shutdown Event
-# ---------------------------
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    try:
-        yield
-    finally:
-        mongo_manager.close()
-
-app = FastAPI(lifespan=lifespan)
-
-# ---------------------------
-# Authentication Dependencies
-# ---------------------------
-# For demo purposes, we use a fixed username/password and token.
+# For demo purposes, we use a fixed username/password.
 FAKE_USERNAME = "user"
 FAKE_PASSWORD = "password"
-FAKE_TOKEN = "fake-token"
-
-security = HTTPBearer()
-
-
-def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    token = credentials.credentials
-    if token != FAKE_TOKEN:
-        raise HTTPException(status_code=403, detail="Invalid authentication token")
-    return token
-
-
-# ---------------------------
-# Request and Response Models
-# ---------------------------
-
-# Auth models
-class AuthRequest(BaseModel):
-    username: str
-    password: str
-
-
-class AuthResponse(BaseModel):
-    token: str
-    token_type: str
-    expires_in: int
-
-
-# Gallery models
-class GalleryCreateRequest(BaseModel):
-    expiration_time: datetime
-
-
-class GalleryUpdateRequest(BaseModel):
-    expiration_time: datetime
-
-
-class GalleryResponse(BaseModel):
-    id: str
-    creation_time: datetime
-    expiration_time: datetime
-
-
-class GalleriesListResponse(BaseModel):
-    galleries: List[GalleryResponse]
-
-
-# Image models
-class ImageCreateRequest(BaseModel):
-    name: str
-    description: str
-    img: str  # base64-encoded image data
-    gallery_id: Optional[str] = None
-
-
-class ImageUpdateRequest(BaseModel):
-    name: str
-    description: str
-    img: str  # base64-encoded image data
-    gallery_id: Optional[str] = None
-
-
-class ImageResponse(BaseModel):
-    id: str
-    name: str
-    description: str
-    url: str
-    gallery_id: Optional[str] = None
-
-
-class ImagesListResponse(BaseModel):
-    images: List[ImageResponse]
-
+Bearer_TIMEOUT = 3600  # 1 hour
 
 # ---------------------------
 # Initialize MongoDB Manager
@@ -118,32 +34,133 @@ mongo_manager = MongoDBManager(
     gallery_collection_name="galleries"
 )
 
+# ---------------------------
+# FastAPI App Initialization
+# ---------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    try:
+        yield
+    finally:
+        mongo_manager.close()
+
+app = FastAPI(lifespan=lifespan)
+
+# ---------------------------
+# Authentication Dependencies
+# ---------------------------
+security = HTTPBearer()
+
+seasons_lock = asyncio.Lock()
+seasons: dict[str, "Season"] = {}
+
+async def remove_season(token: str) -> None:
+    await asyncio.sleep(Bearer_TIMEOUT)
+    async with seasons_lock:
+        if token in seasons:
+            print(f"Removing season: {seasons[token]}")
+            del seasons[token]
+
+@dataclass
+class Season:
+    user: str
+    tocken: str = f"Bearer-{uuid.uuid4()}"
+    start_date: datetime = datetime.now()
+    end_date: datetime = datetime.now() + timedelta(seconds=Bearer_TIMEOUT)
+
+    def __post_init__(self) -> None:
+        # Register season timeout by scheduling an async task.
+        asyncio.create_task(remove_season(self.tocken))
+
+async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    token = credentials.credentials
+    async with seasons_lock:
+        print(seasons)
+        if token not in seasons:
+            raise HTTPException(status_code=403, detail="Invalid authentication token")
+        return token
+
+# ---------------------------
+# Request and Response Models
+# ---------------------------
+
+# Auth models
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+
+class AuthResponse(BaseModel):
+    token: str
+    token_type: str
+    expires_in: int
+
+# Gallery models
+class GalleryCreateRequest(BaseModel):
+    expiration_time: datetime
+
+class GalleryUpdateRequest(BaseModel):
+    expiration_time: datetime
+
+class GalleryResponse(BaseModel):
+    id: str
+    creation_time: datetime
+    expiration_time: datetime
+
+class GalleriesListResponse(BaseModel):
+    galleries: List[GalleryResponse]
+
+# Image models
+class ImageCreateRequest(BaseModel):
+    name: str
+    description: str
+    img: str  # base64-encoded image data
+    gallery_id: Optional[str] = None
+
+class ImageUpdateRequest(BaseModel):
+    name: str
+    description: str
+    img: str  # base64-encoded image data
+    gallery_id: Optional[str] = None
+
+class ImageResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    url: str
+    gallery_id: Optional[str] = None
+
+class ImagesListResponse(BaseModel):
+    images: List[ImageResponse]
 
 # ---------------------------
 # Auth Endpoints
 # ---------------------------
 @app.post("/api/v1/auth/token", response_model=AuthResponse)
-def login(auth: AuthRequest) -> AuthResponse:
+async def login(auth: AuthRequest) -> AuthResponse:
     if auth.username == FAKE_USERNAME and auth.password == FAKE_PASSWORD:
-        return AuthResponse(token=FAKE_TOKEN, token_type="Bearer", expires_in=3600)
-    raise HTTPException(status_code=400, detail="Incorrect username or password")
+        ses = Season(auth.username)
+        # Protect seasons dict modification with the lock.
+        async with seasons_lock:
+            seasons[ses.tocken] = ses
+            print(f"Created season: {seasons}")
 
+        return AuthResponse(token=ses.tocken, token_type="Bearer", expires_in=Bearer_TIMEOUT)
+    raise HTTPException(status_code=400, detail="Incorrect username or password")
 
 # ---------------------------
 # Health Endpoint
 # ---------------------------
 @app.get("/api/v1/health")
-def health() -> dict:
+async def health() -> dict:
     # For simplicity, always return "ok".
     return {"status": "ok"}
-
 
 # ---------------------------
 # Gallery Endpoints
 # ---------------------------
 @app.post("/api/v1/gallerys", response_model=GalleryResponse)
-def create_gallery(gallery_req: GalleryCreateRequest, token: str = Depends(get_current_token)) -> GalleryResponse:
-    creation_time = datetime.utcnow()
+async def create_gallery(gallery_req: GalleryCreateRequest, token: str = Depends(get_current_token)) -> GalleryResponse:
+    creation_time = datetime.now()
     gallery = Gallery(creation_time=creation_time, expiration_time=gallery_req.expiration_time)
     try:
         mongo_manager.store_gallery(gallery, collection_name="galleries")
@@ -151,9 +168,8 @@ def create_gallery(gallery_req: GalleryCreateRequest, token: str = Depends(get_c
         raise HTTPException(status_code=500, detail=str(e))
     return GalleryResponse(id=gallery.id, creation_time=gallery.creation_time, expiration_time=gallery.expiration_time)
 
-
 @app.get("/api/v1/gallerys", response_model=GalleriesListResponse)
-def list_galleries(token: str = Depends(get_current_token)) -> GalleriesListResponse:
+async def list_galleries(token: str = Depends(get_current_token)) -> GalleriesListResponse:
     try:
         galleries = mongo_manager.get_all_galleries(collection_name="galleries")
     except Exception as e:
@@ -164,9 +180,8 @@ def list_galleries(token: str = Depends(get_current_token)) -> GalleriesListResp
     ]
     return GalleriesListResponse(galleries=response_galleries)
 
-
 @app.put("/api/v1/gallerys/{gallery_id}", response_model=GalleryResponse)
-def update_gallery(gallery_id: str, gallery_req: GalleryUpdateRequest, token: str = Depends(get_current_token)) -> GalleryResponse:
+async def update_gallery(gallery_id: str, gallery_req: GalleryUpdateRequest, token: str = Depends(get_current_token)) -> GalleryResponse:
     try:
         gallery = mongo_manager.load_gallery(gallery_id, collection_name="galleries")
     except Exception as e:
@@ -178,21 +193,19 @@ def update_gallery(gallery_id: str, gallery_req: GalleryUpdateRequest, token: st
         raise HTTPException(status_code=500, detail=str(e))
     return GalleryResponse(id=gallery.id, creation_time=gallery.creation_time, expiration_time=gallery.expiration_time)
 
-
 @app.delete("/api/v1/gallerys/{gallery_id}")
-def delete_gallery(gallery_id: str, token: str = Depends(get_current_token)) -> dict:
+async def delete_gallery(gallery_id: str, token: str = Depends(get_current_token)) -> dict:
     try:
         mongo_manager.remove_gallery(gallery_id, collection_name="galleries")
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "ok"}
 
-
 # ---------------------------
 # Image Endpoints
 # ---------------------------
 @app.post("/api/v1/images", response_model=ImageResponse)
-def create_image(image_req: ImageCreateRequest, token: str = Depends(get_current_token)) -> ImageResponse:
+async def create_image(image_req: ImageCreateRequest, token: str = Depends(get_current_token)) -> ImageResponse:
     try:
         # Decode the base64 image data.
         image_bytes = base64.b64decode(image_req.img)
@@ -220,9 +233,8 @@ def create_image(image_req: ImageCreateRequest, token: str = Depends(get_current
         gallery_id=img_obj.gallery,
     )
 
-
 @app.get("/api/v1/images", response_model=ImagesListResponse)
-def list_images(token: str = Depends(get_current_token)) -> ImagesListResponse:
+async def list_images(token: str = Depends(get_current_token)) -> ImagesListResponse:
     try:
         imgs = mongo_manager.get_all_imgs(collection_name="images")
     except Exception as e:
@@ -239,9 +251,8 @@ def list_images(token: str = Depends(get_current_token)) -> ImagesListResponse:
     ]
     return ImagesListResponse(images=response_images)
 
-
 @app.get("/api/v1/images/{image_id}")
-def get_image(image_id: str, token: str = Depends(get_current_token)) -> StreamingResponse:
+async def get_image(image_id: str, token: str = Depends(get_current_token)) -> StreamingResponse:
     try:
         img_obj = mongo_manager.load_img(image_id, collection_name="images")
     except Exception as e:
@@ -253,9 +264,8 @@ def get_image(image_id: str, token: str = Depends(get_current_token)) -> Streami
     img_bytes_io.seek(0)
     return StreamingResponse(img_bytes_io, media_type="image/png")
 
-
 @app.put("/api/v1/images/{image_id}", response_model=ImageResponse)
-def update_image(image_id: str, image_req: ImageUpdateRequest, token: str = Depends(get_current_token)) -> ImageResponse:
+async def update_image(image_id: str, image_req: ImageUpdateRequest, token: str = Depends(get_current_token)) -> ImageResponse:
     try:
         # Decode the base64 image data.
         image_bytes = base64.b64decode(image_req.img)
@@ -287,15 +297,13 @@ def update_image(image_id: str, image_req: ImageUpdateRequest, token: str = Depe
         gallery_id=img_obj.gallery,
     )
 
-
 @app.delete("/api/v1/images/{image_id}")
-def delete_image(image_id: str, token: str = Depends(get_current_token)) -> dict:
+async def delete_image(image_id: str, token: str = Depends(get_current_token)) -> dict:
     try:
         mongo_manager.remove_img(image_id, collection_name="images")
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "ok"}
-
 
 # ---------------------------
 # Main
