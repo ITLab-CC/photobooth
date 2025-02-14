@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field, asdict
+from typing import Optional
 from PIL import Image
 import uuid
 import json
@@ -9,6 +10,7 @@ class IMG:
     img: Image.Image
     name: str
     description: str
+    gallery: Optional[str] = None
     _id: str = field(default_factory=lambda: f"IMG-{uuid.uuid4()}")
 
     @property
@@ -21,7 +23,8 @@ class IMG:
             "_id": self._id,  # Note: MongoDB uses _id as the primary key.
             "name": self.name,
             "description": self.description,
-            "img": self.img
+            "img": self.img,
+            "gallery": self.gallery
         }
 
     def __str__(self) -> str:
@@ -30,6 +33,7 @@ class IMG:
             "id": self._id,
             "name": self.name,
             "description": self.description,
+            "gallery": self.gallery,
             "img": {
                 "size": self.img.size,
                 "mode": self.img.mode
@@ -73,6 +77,10 @@ class IMG:
                         "description": {
                             "bsonType": "string",
                             "description": "Description of the image"
+                        },
+                        "gallery": {
+                            "bsonType": "string",
+                            "description": "Gallery to which the image belongs"
                         }
                     }
                 }

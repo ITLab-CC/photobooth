@@ -168,6 +168,21 @@ class MongoDBManager:
         collection.delete_one({"_id": img_id})
         print(f"Removed IMG object with id: {img_id}")
 
+    def get_all_imgs_of_gallery(self, gallery_id: str, collection_name: str) -> list[IMG]:
+        """
+        Retrieve all IMG objects from a gallery in MongoDB.
+        """
+        collection = self._get_collection(collection_name, IMG)
+        all_images = []
+        for data in collection.find({"gallery": gallery_id}):
+            # Convert the binary data back into a PIL image and copy it so the stream can close.
+            img_bytes = data["img"]
+            with io.BytesIO(img_bytes) as stream:
+                image = Image.open(stream).copy()
+            data["img"] = image
+            all_images.append(IMG(**data))
+        return all_images
+
 if __name__ == "__main__":
     # Initialize the MongoDB manager.
     mongo_manager = MongoDBManager(
@@ -205,3 +220,14 @@ if __name__ == "__main__":
     time.sleep(10)
     # Remove the IMG object.
     mongo_manager.remove_img(loaded_img.id, collection_name="background")
+
+
+    # Add a new image to with a gallery ID.
+    img2 = IMG(img=input_img, name="Another Image", description="Another example image.", gallery="gallery-1")
+    mongo_manager.store_img(img2, collection_name="images")
+
+    # Retrieve all images in a gallery.
+    all_gallery_images = mongo_manager.get_all_imgs_of_gallery("gallery-1", collection_name="images")
+
+    for img in all_gallery_images:
+        print(img)
