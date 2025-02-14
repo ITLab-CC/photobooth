@@ -182,6 +182,14 @@ class MongoDBManager:
             data["img"] = image
             all_images.append(IMG(**data))
         return all_images
+    
+    def remove_all_imgs_of_gallery(self, gallery_id: str, collection_name: str) -> None:
+        """
+        Remove all IMG objects from a gallery in MongoDB.
+        """
+        collection = self._get_collection(collection_name, IMG)
+        collection.delete_many({"gallery": gallery_id})
+        print(f"Removed all IMG objects from gallery with id: {gallery_id}")
 
 if __name__ == "__main__":
     # Initialize the MongoDB manager.
@@ -231,3 +239,6 @@ if __name__ == "__main__":
 
     for img in all_gallery_images:
         print(img)
+
+    # Remove all images in a gallery.
+    mongo_manager.remove_all_imgs_of_gallery("gallery-1", collection_name="images")
