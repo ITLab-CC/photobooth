@@ -79,7 +79,7 @@ class IMG:
                             "description": "Description of the image"
                         },
                         "gallery": {
-                            "bsonType": "string",
+                            "bsonType": ["string", "null"],
                             "description": "Gallery to which the image belongs"
                         }
                     }
