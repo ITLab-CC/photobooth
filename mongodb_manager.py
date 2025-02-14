@@ -1,6 +1,7 @@
 import io
 import time
 from typing import Optional, Union
+from datetime import datetime, timedelta
 from bson import Binary
 from pymongo import MongoClient
 from pymongo.database import Database
@@ -9,6 +10,7 @@ from PIL import Image
 from dataclasses import asdict, dataclass
 
 from img import IMG
+from gallery import Gallery
 
 class MongoDBManager:
     """
@@ -27,26 +29,38 @@ class MongoDBManager:
                  password: str,
                  db_name: str,
                  background_collection_name: str,
-                 images_collection_name: str
+                 images_collection_name: str,
+                 gallery_collection_name: str
                  ) -> None:
         new_uri = f"mongodb://{user}:{password}@{mongo_uri}"
         self.client: MongoClient = MongoClient(new_uri)
         self.db: Database = self.client[db_name]
         # We store a dictionary mapping logical names to their settings
         self.collections: dict[str, MongoDBManager.DBCollection] = {
-            "background": MongoDBManager.DBCollection(
+            background_collection_name: MongoDBManager.DBCollection(
                 name=background_collection_name,
                 type=IMG,
                 collection=self.db[background_collection_name]
             ),
-            "images": MongoDBManager.DBCollection(
+            images_collection_name: MongoDBManager.DBCollection(
                 name=images_collection_name,
                 type=IMG,
                 collection=self.db[images_collection_name]
+            ),
+            gallery_collection_name: MongoDBManager.DBCollection(
+                name=gallery_collection_name,
+                type=Gallery,
+                collection=self.db[gallery_collection_name]
             )
         }
 
         self._setup_collections()
+
+    def close(self) -> None:
+        """
+        Close the MongoDB client.
+        """
+        self.client.close()
 
     def _setup_collections(self) -> None:
         """
@@ -191,6 +205,56 @@ class MongoDBManager:
         collection.delete_many({"gallery": gallery_id})
         print(f"Removed all IMG objects from gallery with id: {gallery_id}")
 
+    def store_gallery(self, gallery_obj: Gallery, collection_name: str) -> None:
+        """
+        Store a Gallery object in MongoDB.
+        """
+        collection = self._get_collection(collection_name, Gallery)
+        doc = asdict(gallery_obj)
+        collection.insert_one(doc)
+        print(f"Stored: {gallery_obj}")
+
+    def load_gallery(self, gallery_id: str, collection_name: str) -> Gallery:
+        """
+        Retrieve a Gallery object by its id from MongoDB.
+        """
+        collection = self._get_collection(collection_name, Gallery)
+        data = collection.find_one({"_id": gallery_id})
+        if data is not None:
+            return Gallery(**data)
+        raise ValueError(f"Gallery object with id '{gallery_id}' not found in DB.")
+    
+    def get_all_galleries(self, collection_name: str) -> list[Gallery]:
+        """
+        Retrieve all Gallery objects from a collection in MongoDB.
+        """
+        collection = self._get_collection(collection_name, Gallery)
+        all_galleries = []
+        for data in collection.find():
+            all_galleries.append(Gallery(**data))
+        return all_galleries
+    
+    def update_gallery(self, gallery_obj: Gallery, collection_name: str) -> None:
+        """
+        Update an existing Gallery object in MongoDB.
+        """
+        collection = self._get_collection(collection_name, Gallery)
+        doc = asdict(gallery_obj)
+        result = collection.update_one({"_id": gallery_obj.id}, {"$set": doc})
+        if result.matched_count == 0:
+            raise ValueError(f"Gallery object with id '{gallery_obj.id}' not found in DB.")
+        print(f"Updated: {gallery_obj}")
+
+    def remove_gallery(self, gallery_id: str, collection_name: str) -> None:
+        """
+        Remove a Gallery object from MongoDB by its id.
+        """
+        collection = self._get_collection(collection_name, Gallery)
+        collection.delete_one({"_id": gallery_id})
+        print(f"Removed Gallery object with id: {gallery_id}")
+
+    
+
 if __name__ == "__main__":
     # Initialize the MongoDB manager.
     mongo_manager = MongoDBManager(
@@ -199,7 +263,8 @@ if __name__ == "__main__":
         password="example",
         db_name="photobooth",
         images_collection_name="images",
-        background_collection_name="background"
+        background_collection_name="backgrounds",
+        gallery_collection_name="galleries"
     )
 
     # Create an IMG object.
@@ -207,10 +272,10 @@ if __name__ == "__main__":
     img1 = IMG(img=input_img, name="Sample Image", description="An example image.")
     
     # Store the IMG object.
-    mongo_manager.store_img(img1, collection_name="background")
+    mongo_manager.store_img(img1, collection_name="backgrounds")
 
     # Load it back using its ID.
-    loaded_img = mongo_manager.load_img(img1.id, collection_name="background")
+    loaded_img = mongo_manager.load_img(img1.id, collection_name="backgrounds")
     print(f"Loaded from DB: {loaded_img}")
 
     # Save the loaded image to disk.
@@ -218,16 +283,16 @@ if __name__ == "__main__":
 
     # Update the description and store it back.
     loaded_img.description = "An updated description."
-    mongo_manager.update_img(loaded_img, collection_name="background")
+    mongo_manager.update_img(loaded_img, collection_name="backgrounds")
 
     # List all images in the collection.
-    all_images = mongo_manager.get_all_imgs(collection_name="background")
+    all_images = mongo_manager.get_all_imgs(collection_name="backgrounds")
     for img in all_images:
         print(img)
 
     time.sleep(10)
     # Remove the IMG object.
-    mongo_manager.remove_img(loaded_img.id, collection_name="background")
+    mongo_manager.remove_img(loaded_img.id, collection_name="backgrounds")
 
 
     # Add a new image to with a gallery ID.
@@ -242,3 +307,28 @@ if __name__ == "__main__":
 
     # Remove all images in a gallery.
     mongo_manager.remove_all_imgs_of_gallery("gallery-1", collection_name="images")
+
+
+    # Creat a Gallery
+    gallery = Gallery(creation_time=datetime.now(), deletion_time=datetime.now() + timedelta(seconds=3600))
+    mongo_manager.store_gallery(gallery, collection_name="galleries")
+
+    # Load the gallery back using its ID.
+    loaded_gallery = mongo_manager.load_gallery(gallery.id, collection_name="galleries")
+    print(f"Loaded from DB: {loaded_gallery}")
+
+    # Update the creation date and store it back.
+    loaded_gallery.creation_time = datetime.now() - timedelta(seconds=3600)
+    mongo_manager.update_gallery(loaded_gallery, collection_name="galleries")
+
+    # List all galleries in the collection.
+    all_galleries = mongo_manager.get_all_galleries(collection_name="galleries")
+    for gal in all_galleries:
+        print(gal)
+
+    time.sleep(10)
+    # Remove the gallery.
+    mongo_manager.remove_gallery(loaded_gallery.id, collection_name="galleries")
+
+    # Close the MongoDB client.
+    mongo_manager.close()
