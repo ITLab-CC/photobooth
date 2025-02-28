@@ -8,6 +8,7 @@ import uuid
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import AsyncIterator, List, Optional
 
@@ -52,7 +53,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         mongo_manager.close()
 
+
 app = FastAPI(lifespan=lifespan)
+
+# ---------------------------
+# CORS Middleware
+# ---------------------------
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Erlaubt Anfragen von deiner Frontend-URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ---------------------------
 # Authentication Dependencies
