@@ -4,11 +4,14 @@ from dataclasses import dataclass
 import io
 import base64
 from datetime import datetime, timedelta
+import os
 import uuid
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from typing import AsyncIterator, List, Optional
 
@@ -326,6 +329,30 @@ async def delete_image(image_id: str, token: str = Depends(get_current_token)) -
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "ok"}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ---------------------------
+# Webpage
+# ---------------------------
+app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
+
+# Catch-all route: For any path, serve the index.html so React can handle routing.
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def serve_react_app(full_path: str):
+    index_path = os.path.join("frontend/dist", "index.html")
+    return FileResponse(index_path)
 
 # ---------------------------
 # Main
