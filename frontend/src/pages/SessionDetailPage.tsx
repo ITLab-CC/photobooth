@@ -14,9 +14,7 @@ interface ImageData {
 
 const SessionDetailPage: React.FC = () => {
   const { galleryId } = useParams<{ galleryId: string }>();
-  const [authToken, setAuthToken] = useState<string>(
-    () => localStorage.getItem("authToken") || ""
-  );
+  const authToken = localStorage.getItem("authToken") || "";
   const [images, setImages] = useState<ImageData[]>([]);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [error, setError] = useState<string>("");

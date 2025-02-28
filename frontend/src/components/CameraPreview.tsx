@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { Box, Paper } from "@mui/material";
 
 interface CameraPreviewProps {
-  videoRef: React.RefObject<HTMLVideoElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
 }
 
 const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef }) => {
