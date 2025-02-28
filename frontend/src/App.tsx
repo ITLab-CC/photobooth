@@ -1,7 +1,8 @@
-import React from "react";
+// App.tsx
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import PhotoboothPage from "./pages/PhotoboothPage";
 import AdminPage from "./pages/AdminPage";
+import SessionDetailPage from "./pages/SessionDetailPage";
+import PhotoboothPage from "./pages/PhotoboothPage";
 
 const App: React.FC = () => {
   return (
@@ -9,6 +10,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<PhotoboothPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/session/:galleryId" element={<SessionDetailPage />} />
       </Routes>
     </BrowserRouter>
   );

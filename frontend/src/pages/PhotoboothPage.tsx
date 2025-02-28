@@ -1,5 +1,16 @@
 import React, { useRef, useState, useEffect } from "react";
-import { Container, Box, Typography } from "@mui/material";
+import {
+  Container,
+  Box,
+  Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  FormControlLabel,
+  Checkbox,
+} from "@mui/material";
 import { keyframes } from "@emotion/react";
 import CameraPreview from "../components/CameraPreview";
 import Countdown from "../components/Countdown";
@@ -21,27 +32,77 @@ const PhotoboothPage: React.FC = () => {
   const [flashActive, setFlashActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [authToken, setAuthToken] = useState<string>("");
+  const [galleryId, setGalleryId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(true);
+  const [checkboxChecked, setCheckboxChecked] = useState(false);
 
   useEffect(() => {
-    if (currentStep > 0 && currentStep < 3 && !countdownActive) {
-      const timer = setTimeout(() => {
-        setCountdownActive(true);
-      }, 3000);
-      return () => clearTimeout(timer);
+    const fetchAuthToken = async () => {
+      try {
+        const response = await fetch(
+          "http://localhost:8000/api/v1/auth/token",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: "user", password: "password" }),
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setAuthToken(data.token);
+          console.log("Auth token received in PhotoboothPage:", data.token);
+        } else {
+          console.error("Failed to fetch auth token");
+        }
+      } catch (error) {
+        console.error("Error fetching auth token:", error);
+      }
+    };
+    fetchAuthToken();
+  }, []);
+
+  useEffect(() => {
+    if (!modalOpen && authToken && !galleryId) {
+      const createGallery = async () => {
+        try {
+          const expirationTime = new Date(
+            Date.now() + 3600 * 1000
+          ).toISOString();
+          const response = await fetch(
+            "http://localhost:8000/api/v1/gallerys",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${authToken.replace("Bearer-", "")}`,
+              },
+              body: JSON.stringify({ expiration_time: expirationTime }),
+            }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            setGalleryId(data.id);
+            console.log("Gallery created with id:", data.id);
+          } else {
+            console.error("Failed to create gallery");
+          }
+        } catch (error) {
+          console.error("Error creating gallery:", error);
+        }
+      };
+      createGallery();
     }
-  }, [currentStep, countdownActive]);
+  }, [modalOpen, authToken, galleryId]);
 
   useEffect(() => {
     if (currentStep === 3) {
-      const timer = setTimeout(() => {
-        resetPhotobooth();
-      }, 3000);
+      const timer = setTimeout(() => resetPhotobooth(), 3000);
       return () => clearTimeout(timer);
     }
   }, [currentStep]);
 
   const handleOverlayClick = () => {
-    if (currentStep === 0) {
+    if (currentStep < 3 && !countdownActive) {
       setOverlayVisible(false);
       setCountdownActive(true);
     }
@@ -69,7 +130,11 @@ const PhotoboothPage: React.FC = () => {
       setFlashActive(true);
       setTimeout(() => setFlashActive(false), 300);
       triggerConfetti();
-      setCurrentStep((prev) => prev + 1);
+      const newStep = currentStep + 1;
+      setCurrentStep(newStep);
+      if (newStep < 3) {
+        setOverlayVisible(true);
+      }
     }
   };
 
@@ -79,16 +144,32 @@ const PhotoboothPage: React.FC = () => {
   };
 
   const uploadImage = async (dataUrl: string) => {
+    if (!authToken) {
+      console.error("No auth token available for upload");
+      return;
+    }
     setUploading(true);
     try {
       const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
-      const response = await fetch("http://localhost:5000/upload", {
+      const payload: any = {
+        name: "Photobooth Image",
+        description: "Automatically captured image",
+        img: base64Data,
+      };
+      if (galleryId) {
+        payload.gallery_id = galleryId;
+      }
+      const response = await fetch("http://localhost:8000/api/v1/images", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({ image: base64Data }),
+        body: JSON.stringify(payload),
       });
+      if (!response.ok) {
+        console.error("Image upload failed with status", response.status);
+      }
       const result = await response.json();
       console.log("Image uploaded:", result);
     } catch (error) {
@@ -102,6 +183,15 @@ const PhotoboothPage: React.FC = () => {
     setCurrentStep(0);
     setOverlayVisible(true);
     setCountdownActive(false);
+    setModalOpen(true);
+    setCheckboxChecked(false);
+    setGalleryId(null);
+  };
+
+  const handleModalConfirm = () => {
+    if (checkboxChecked) {
+      setModalOpen(false);
+    }
   };
 
   return (
@@ -122,6 +212,33 @@ const PhotoboothPage: React.FC = () => {
         position: "relative",
       }}
     >
+      <Dialog open={modalOpen} disableEscapeKeyDown>
+        <DialogTitle>Information</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" gutterBottom>
+            Julian ist der Beste!
+          </Typography>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={checkboxChecked}
+                onChange={(e) => setCheckboxChecked(e.target.checked)}
+              />
+            }
+            label="Ich habe die Informationen gelesen und verstanden."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleModalConfirm}
+            variant="contained"
+            disabled={!checkboxChecked}
+          >
+            Bestätigen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Box sx={{ width: "95%", maxWidth: 800 }}>
         <Box
           sx={{
@@ -134,7 +251,7 @@ const PhotoboothPage: React.FC = () => {
           }}
         >
           <CameraPreview videoRef={videoRef} />
-          {overlayVisible && currentStep === 0 && !countdownActive && (
+          {overlayVisible && currentStep < 3 && !countdownActive && (
             <Box
               onClick={handleOverlayClick}
               sx={{
@@ -155,7 +272,7 @@ const PhotoboothPage: React.FC = () => {
             >
               <PhotoCameraIcon sx={{ fontSize: 64, color: "black" }} />
               <Typography variant="h6" color="black" sx={{ mt: 1 }}>
-                Klicken, um 3 Bilder zu machen
+                Klicken, um Bild {currentStep + 1} zu machen
               </Typography>
             </Box>
           )}
@@ -193,7 +310,7 @@ const PhotoboothPage: React.FC = () => {
           zIndex: 1000,
         }}
       >
-        <img src={itlab} alt="Dekoration" style={{ width: "75px" }} />
+        <img src={itlab} alt="Dekoration" style={{ width: "100px" }} />
       </Box>
     </Container>
   );
