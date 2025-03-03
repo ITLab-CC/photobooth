@@ -1,6 +1,7 @@
 from db_connection import MongoDBConnection
 from gallery import Gallery
 from img import IMG
+from user import BaseUser
 
 MONGODB_URI = "localhost:27017"
 MONGODB_ADMIN_USER = "root"
@@ -26,10 +27,12 @@ def main():
     )
 
     # Drop all collections (TODO: remove this in production)
+    BaseUser.db_drop_collection(admin_db)
     Gallery.db_drop_collection(admin_db)
     IMG.db_drop_collection(admin_db)
 
     # Create all collections
+    BaseUser.db_create_collection(admin_db)
     Gallery.db_create_collection(admin_db)
     IMG.db_create_collection(admin_db)
 
@@ -40,12 +43,15 @@ def main():
     #  - view images
     #  - view galleries
 
-    # user_viewer:
+    # img_viewer:
     #  - view images
     #  - view galleries
 
     # expiration_deleter:
     #  - delete expired galleries
+
+    # user_viewer:
+    #  - view users
 
     # boss:
     #  - admin all
@@ -54,13 +60,16 @@ def main():
             {"resource": {"db": MONGODB_DB_NAME, "collection": Gallery.COLLECTION_NAME}, "actions": ["insert"]},
             {"resource": {"db": MONGODB_DB_NAME, "collection": IMG.COLLECTION_NAME}, "actions": ["insert", "find"]}
         ],
-        "user_viewer": [
+        "img_viewer": [
             {"resource": {"db": MONGODB_DB_NAME, "collection": Gallery.COLLECTION_NAME}, "actions": ["find"]},
             {"resource": {"db": MONGODB_DB_NAME, "collection": IMG.COLLECTION_NAME}, "actions": ["find"]}
         ],
         "expiration_deleter": [
             {"resource": {"db": MONGODB_DB_NAME, "collection": Gallery.COLLECTION_NAME}, "actions": ["remove"]},
             {"resource": {"db": MONGODB_DB_NAME, "collection": IMG.COLLECTION_NAME}, "actions": ["remove"]}
+        ],
+        "user_viewer": [
+            {"resource": {"db": MONGODB_DB_NAME, "collection": BaseUser.COLLECTION_NAME}, "actions": ["find"]}
         ],
         "boss": [
             {"resource": {"db": MONGODB_DB_NAME, "collection": Gallery.COLLECTION_NAME}, "actions": ["insert", "find", "dropCollection"]},
@@ -75,17 +84,25 @@ def main():
 
     # Create users
     # photo_booth_user
-    # user_viewer_user
+    # img_viewer_user
     # expiration_deleter_user
+    # login_user
     # boss_user
     users = {
-        "photo_booth_user": ("photo_booth_password", ["photo_booth"]),
-        "user_viewer_user": ("user_viewer_password", ["user_viewer"]),
-        "expiration_deleter_user": ("expiration_deleter_password", ["expiration_deleter"]),
-        "boss_user": ("boss_password", ["boss"])
+        "photo_booth": ("photo_booth_password", ["photo_booth"]),
+        "img_viewer": ("img_viewer_password", ["img_viewer"]),
+        "expiration_deleter": ("expiration_deleter_password", ["expiration_deleter"]),
+        "login_manager": ("user_viewer_password", ["user_viewer"]),
+        "boss": ("boss_password", ["boss"])
     }
 
+    existing_users = [user["user"] for user in admin_db.db.command("usersInfo").get("users", [])]
+
     for user, (password, roles) in users.items():
+        # check if user exists
+        if user in existing_users:
+            admin_db.db.command("dropUser", user)
+
         admin_db.db.command("createUser", user, pwd=password, roles=roles)
 
     # Close the admin connection

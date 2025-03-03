@@ -6,3 +6,4 @@ opencv-python
 pymongo
 fastapi[standard]
 uvicorn[standard]
+bcrypt
