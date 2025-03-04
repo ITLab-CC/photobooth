@@ -1,42 +1,9 @@
 import inspect
 import enum
-from typing import Dict, Optional, List, Union, Callable
+from typing import Dict, Optional, List, Set, Tuple, Union, Callable
 
 from pymongo import MongoClient
 from pymongo.database import Database
-
-class MongoDBConnection:
-    def __init__(self,
-                 mongo_uri: str,
-                 user: str,
-                 password: str,
-                 db_name: str,
-                ) -> None:
-        self.mongo_uri = mongo_uri
-        self.user = user
-        self.password = password
-        self.db_name = db_name
-
-        new_uri = f"mongodb://{user}:{password}@{mongo_uri}"
-        self.client: MongoClient = MongoClient(new_uri)
-        self.db: Database = self.client[db_name]
-
-    def close(self) -> None:
-        """
-        Close the MongoDB client.
-        """
-        self.client.close()
-
-
-
-
-# Use Python's enum module instead of the built-in enumerate.
-class UserRoles(enum.Enum):
-    PHOTO_BOOTH = "photo_booth"
-    EXPIRATION_DELETER = "expiration_deleter"
-    USER_VIEWER = "user_viewer"
-    PRINTER = "printer"
-    BOSS = "boss"
 
 class MongoDBPermissions(enum.Enum):
     # Read and Write Actions
@@ -107,7 +74,7 @@ class MongoDBPermissions(enum.Enum):
     ANY_ACTION = "anyAction"
     SET_PARAMETER = "setParameter"
 
-def mongodb_permissions(collection: str, actions: List[MongoDBPermissions], roles: List[UserRoles]) -> Callable:
+def mongodb_permissions(collection: str, actions: List[MongoDBPermissions], roles: List[str]) -> Callable:
     """A decorator to attach metadata to methods."""
     def decorator(func):
         func.__annotations__ = {"mongodb_permissions": {"collection": collection, "actions": actions, "roles": roles}}
@@ -115,47 +82,183 @@ def mongodb_permissions(collection: str, actions: List[MongoDBPermissions], role
     return decorator
 
 def mongodb_get_user_permissions(
-    cls, 
+    classes: Union[type, List[type]],
     db_name: str, 
-    roles: List[UserRoles]
+    roles: Union[str, List[str]]
 ) -> List[Dict[str, Union[Dict[str, str], List[str]]]]:
-    annotated_methods = {}
+    # Use a dict to aggregate permissions per collection
+    permissions_by_collection: Dict[str, Set[str]] = {}
 
-    for name, method in inspect.getmembers(cls):
-        # Unwrap if the member is a bound method (including class methods)
-        func = getattr(method, "__func__", None)
-        if func is None:
-            if inspect.isfunction(method):
-                func = method
-            else:
-                continue
+    # if classes is only a single class, convert it to a list
+    if not isinstance(classes, list):
+        classes = [classes]
+    if not isinstance(roles, list):
+        roles = [roles]
 
-        annotations = getattr(method, "__annotations__", {})
-        if "mongodb_permissions" in annotations:
-            if not any(role in roles for role in annotations["mongodb_permissions"]["roles"]):
-                continue
+    # Iterate over each class in the list
+    for cls in classes:
+        for name, method in inspect.getmembers(cls):
+            # Unwrap bound methods (e.g. classmethods)
+            func = getattr(method, "__func__", None)
+            if func is None:
+                if inspect.isfunction(method):
+                    func = method
+                else:
+                    continue
 
-            annotated_methods[name] = annotations["mongodb_permissions"]
+            annotations = getattr(func, "__annotations__", {})
+            if "mongodb_permissions" in annotations:
+                metadata = annotations["mongodb_permissions"]
+                # Skip if none of the roles match
+                if not any(role in roles for role in metadata["roles"]):
+                    continue
 
-    # for each method, get the metadata and combine the actions of the same collection
-    # goal to create a list like this:
-    # [
-    #     {"resource": {"db": MONGODB_DB_NAME, "collection": Gallery.COLLECTION_NAME}, "actions": ["insert"]},
-    #     {"resource": {"db": MONGODB_DB_NAME, "collection": IMG.COLLECTION_NAME}, "actions": ["insert", "find"]}
-    # ]
+                collection = str(metadata["collection"])
+                actions = {ac.value for ac in metadata["actions"]}
+
+                if collection in permissions_by_collection:
+                    permissions_by_collection[collection].update(actions)
+                else:
+                    permissions_by_collection[collection] = actions
+
+    # Build the permissions list with explicit type annotations
     permissions: List[Dict[str, Union[Dict[str, str], List[str]]]] = []
-    for method, metadata in annotated_methods.items():
-        collection = str(metadata["collection"])
-        if collection not in [p["resource"]["collection"] for p in permissions]:
-            permissions.append({
-                "resource": {"db": db_name, "collection": collection},
-                "actions": [ac.value for ac in metadata["actions"]]
-            })
-        else:
-            for p in permissions:
-                if p["resource"]["collection"] == collection:
-                    for ac in metadata["actions"]:
-                        if ac.value not in p["actions"]:
-                            p["actions"].append(ac.value)
+    for collection, actions in permissions_by_collection.items():
+        perm: Dict[str, Union[Dict[str, str], List[str]]] = {
+            "resource": {"db": db_name, "collection": collection},
+            "actions": list(actions)
+        }
+        permissions.append(perm)
     
     return permissions
+
+def mongodb_get_roles(classes: Union[type, List[type]]) -> List[str]:
+    # if classes is only a single class, convert it to a list
+    if not isinstance(classes, list):
+        classes = [classes]
+
+    roles = set()
+    for cls in classes:
+        for name, method in inspect.getmembers(cls):
+            # Unwrap bound methods (e.g. classmethods)
+            func = getattr(method, "__func__", None)
+            if func is None:
+                if inspect.isfunction(method):
+                    func = method
+                else:
+                    continue
+
+            annotations = getattr(func, "__annotations__", {})
+            if "mongodb_permissions" in annotations:
+                metadata = annotations["mongodb_permissions"]
+                roles.update(metadata["roles"])
+
+    return list(roles)
+
+
+class MongoDBConnection:
+    def __init__(self,
+                 mongo_uri: str,
+                 user: str,
+                 password: str,
+                 db_name: str,
+                ) -> None:
+        self.mongo_uri = mongo_uri
+        self.user = user
+        self.password = password
+        self.db_name = db_name
+
+        new_uri = f"mongodb://{user}:{password}@{mongo_uri}"
+        self.client: MongoClient = MongoClient(new_uri)
+        self.db: Database = self.client[db_name]
+
+    def close(self) -> None:
+        """
+        Close the MongoDB client.
+        """
+        self.client.close()
+
+    def get_roles(self, role_name: str) -> List[str]:
+        """Check if a role already exists in MongoDB."""
+        roles_info = self.db.command("rolesInfo", role_name)
+        roles_list = roles_info.get("roles", [])
+        return [role.get("role") for role in roles_list]
+
+    def remove_role(self, role_name: str) -> None:
+        """Remove an existing role if it exists."""
+        if role_name in self.get_roles(role_name):
+            self.db.command("dropRole", role_name)
+
+    def create_roles(self, classes: Union[type, List[type]]) -> List[str]:
+        """
+        Create roles in the MongoDB database based on the annotations of the methods in the classes.
+        """
+        # get a list of all roles
+        roles = mongodb_get_roles(classes)
+
+        for role in roles:
+            permissions = mongodb_get_user_permissions(classes, self.db_name, role)
+            # remove existing role
+            self.remove_role(role)
+            # create new role
+            self.db.command("createRole", role, privileges=permissions, roles=[])
+
+        return roles
+        
+    def get_users(self) -> List[str]:
+        """
+        Get all users in the MongoDB database.
+        """
+        return [user["user"] for user in self.db.command("usersInfo").get("users", [])]
+    
+    def remove_user(self, user: str) -> None:
+        """
+        Remove a user from the MongoDB database.
+        """
+        if user in self.get_users():
+            self.db.command("dropUser", user)
+
+    def create_user(self, name, password, roles):
+        """
+        Create users in the MongoDB database.
+        """
+        if name in self.get_users():
+            self.remove_user(name)
+        
+        self.db.command("createUser", name, pwd=password, roles=roles)
+
+
+def main() -> None:
+    MONGODB_URI = "localhost:27017"
+    MONGODB_ADMIN_USER = "root"
+    MONGODB_ADMIN_PASSWORD = "example"
+    MONGODB_DB_NAME = "photo_booth"
+
+    admin_db = MongoDBConnection(
+        mongo_uri=MONGODB_URI,
+        user=MONGODB_ADMIN_USER,
+        password=MONGODB_ADMIN_PASSWORD,
+        db_name=MONGODB_DB_NAME
+    )
+
+    from user import User
+    admin_db.create_roles(User)
+
+    # print role
+    print(admin_db.db.command("rolesInfo", "boss", showPrivileges=True))
+    print(admin_db.db.command("rolesInfo", "user_viewer", showPrivileges=True))
+
+    # create user
+    admin_db.create_user("admin", "admin", ["boss"])
+    admin_db.create_user("viewer", "viewer", ["user_viewer"])
+
+    # print user with roles
+    users = admin_db.db.command("usersInfo")["users"]
+    for user in users:
+        if user["user"] in ["admin", "viewer"]:
+            print(user["user"], user["roles"])
+
+    admin_db.close()
+
+if __name__ == "__main__":
+    main()

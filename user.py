@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, List
 
-from db_connection import MongoDBConnection, UserRoles, MongoDBPermissions, mongodb_permissions, mongodb_get_user_permissions
+from db_connection import MongoDBConnection, MongoDBPermissions, mongodb_permissions, mongodb_get_user_permissions
 
 # Define a module-level constant for the collection name.
 USERS_COLLECTION = "users"
@@ -16,7 +16,7 @@ class User:
     password_hash: str
     password_salt: str
     last_login: datetime
-    roles: List[UserRoles] = field(default_factory=list)
+    roles: List[str] = field(default_factory=list)
     _id: str = field(default_factory=lambda: f"USER-{uuid.uuid4()}")
 
     # Collection name for MongoDB.
@@ -34,7 +34,7 @@ class User:
             "password_hash": self.password_hash,
             "password_salt": self.password_salt,
             "last_login": self.last_login,
-            "roles": [role.value for role in self.roles]
+            "roles": self.roles
         }
 
     def __str__(self) -> str:
@@ -45,7 +45,7 @@ class User:
             "password_hash": self.password_hash,
             "password_salt": self.password_salt,
             "last_login": self.last_login.strftime("%Y-%m-%d %H:%M:%S"),
-            "roles": [role.value for role in self.roles]
+            "roles": self.roles
         }, indent=4)
 
     def __repr__(self) -> str:
@@ -60,7 +60,7 @@ class User:
         return hash(self.id)
 
     @classmethod
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.CREATE_COLLECTION], roles=[UserRoles.BOSS])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.CREATE_COLLECTION], roles=["boss"])
     def db_create_collection(cls, db_connection: MongoDBConnection) -> None:
         """
         Create the MongoDB collection for users with validation.
@@ -113,14 +113,14 @@ class User:
             )
 
     @classmethod
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.DROP_COLLECTION], roles=[UserRoles.BOSS])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.DROP_COLLECTION], roles=["boss"])
     def db_drop_collection(cls, db_connection: MongoDBConnection) -> None:
         """
         Drop the MongoDB collection for users.
         """
         db_connection.db.drop_collection(cls.COLLECTION_NAME)
 
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.INSERT], roles=[UserRoles.BOSS])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.INSERT], roles=["boss"])
     def db_save(self, db_connection: MongoDBConnection) -> None:
         """
         Save the user object to MongoDB.
@@ -130,7 +130,7 @@ class User:
         collection.insert_one(data)
 
     @classmethod
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=[UserRoles.BOSS, UserRoles.USER_VIEWER])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "user_viewer"])
     def db_find(cls, db_connection: MongoDBConnection, _id: str) -> Optional['User']:
         """
         Find a User object in the database by _id.
@@ -142,7 +142,7 @@ class User:
             return cls._db_load(data)
         return None
 
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=[UserRoles.BOSS])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
     def db_update(self, db_connection: MongoDBConnection) -> None:
         """
         Update the User object in the database.
@@ -151,7 +151,7 @@ class User:
         data = self.to_dict()
         collection.update_one({"_id": self._id}, {"$set": data})
 
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=[UserRoles.BOSS])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss"])
     def db_delete(self, db_connection: MongoDBConnection) -> None:
         """
         Delete the User object from the database.
@@ -160,7 +160,7 @@ class User:
         collection.delete_one({"_id": self._id})
 
     @classmethod
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=[UserRoles.BOSS, UserRoles.USER_VIEWER])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "user_viewer"])
     def db_find_all(cls, db_connection: MongoDBConnection) -> List['User']:
         """
         Retrieve all User objects from the database.
@@ -177,7 +177,7 @@ class User:
             password_hash=data["password_hash"],
             password_salt=data["password_salt"],
             last_login=data["last_login"],
-            roles=[UserRoles(role) for role in data.get("roles", [])],
+            roles=[str(role) for role in data.get("roles", [])],
             _id=data["_id"]
         )
 
@@ -197,7 +197,7 @@ def main() -> None:
     User.db_drop_collection(admin_db)
     User.db_create_collection(admin_db)
 
-    roles = mongodb_get_user_permissions(User, MONGODB_DB_NAME, [UserRoles.BOSS])
+    roles = mongodb_get_user_permissions(User, MONGODB_DB_NAME, ["boss"])
     print(roles)
 
     def role_exists(admin_db, role_name: str) -> bool:
@@ -212,12 +212,12 @@ def main() -> None:
             admin_db.db.command("dropRole", role_name)
 
     # When removing/creating roles via db commands, use the enum's value.
-    remove_role(admin_db, UserRoles.BOSS.value)
-    admin_db.db.command("createRole", UserRoles.BOSS.value, privileges=roles, roles=[])
+    remove_role(admin_db, "boss")
+    admin_db.db.command("createRole", "boss", privileges=roles, roles=[])
     print("Role created")
 
     # print role
-    print(admin_db.db.command("rolesInfo", UserRoles.BOSS.value, showPrivileges=True))
+    print(admin_db.db.command("rolesInfo", "boss", showPrivileges=True))
 
 if __name__ == "__main__":
     main()
