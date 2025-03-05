@@ -76,7 +76,7 @@ class MongoDBPermissions(enum.Enum):
 
 def mongodb_permissions(collection: str, actions: List[MongoDBPermissions], roles: List[str]) -> Callable:
     """A decorator to attach metadata to methods."""
-    def decorator(func):
+    def decorator(func: Callable) -> Callable:
         func.__annotations__ = {"mongodb_permissions": {"collection": collection, "actions": actions, "roles": roles}}
         return func
     return decorator
@@ -158,17 +158,23 @@ def mongodb_get_roles(classes: Union[type, List[type]]) -> List[str]:
 
 class MongoDBConnection:
     def __init__(self,
-                 mongo_uri: str,
-                 user: str,
-                 password: str,
-                 db_name: str,
+                    mongo_uri: str,
+                    user: str,
+                    password: str,
+                    db_name: str,
+                    admin: bool = False
                 ) -> None:
         self.mongo_uri = mongo_uri
         self.user = user
         self.password = password
         self.db_name = db_name
 
-        new_uri = f"mongodb://{user}:{password}@{mongo_uri}"
+        if admin:
+            # mongodb://{username}:{password}@localhost:27017
+            new_uri = f"mongodb://{user}:{password}@{mongo_uri}"
+        else:
+            # mongodb://{username}:{password}@localhost:27017/{database}?authSource={database}
+            new_uri = f"mongodb://{user}:{password}@{mongo_uri}/{db_name}?authSource={db_name}"
         self.client: MongoClient = MongoClient(new_uri)
         self.db: Database = self.client[db_name]
 
@@ -218,7 +224,7 @@ class MongoDBConnection:
         if user in self.get_users():
             self.db.command("dropUser", user)
 
-    def create_user(self, name, password, roles):
+    def create_user(self, name: str, password: str, roles: List[str]) -> None:
         """
         Create users in the MongoDB database.
         """
