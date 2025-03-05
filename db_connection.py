@@ -200,7 +200,10 @@ class MongoDBConnection:
         self.db: Database = self.client[db_name]
 
         # get the roles of this user
-        self.roles: List[str] = self.get_user_roles()
+        try:
+            self.roles: List[str] = self.get_user_roles()
+        except Exception as e:
+            raise PermissionError(f"User {user} does not have permission to access {db_name}.")
 
     def get_user_roles(self) -> list[str]:
         

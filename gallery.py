@@ -5,7 +5,10 @@ import uuid
 import json
 
 
-from db_connection import MongoDBConnection
+from db_connection import MongoDBConnection, MongoDBPermissions, mongodb_permissions
+
+# Define a module-level constant for the collection name.
+GALLERY_COLLECTION = "galleries"
 
 @dataclass
 class Gallery:
@@ -15,7 +18,7 @@ class Gallery:
     _id: str = field(default_factory=lambda: f"GAL-{uuid.uuid4()}")
 
     # Collection name for MongoDB
-    COLLECTION_NAME: str = "galleries"
+    COLLECTION_NAME: str = GALLERY_COLLECTION
 
     @property
     def id(self) -> str:
@@ -50,8 +53,9 @@ class Gallery:
     def __hash__(self) -> int:
         return hash(self.id)
     
-    @staticmethod
-    def db_create_collection(db_c: MongoDBConnection) -> None:
+    @classmethod
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.CREATE_COLLECTION], roles=["boss"])
+    def db_create_collection(cls, db_c: MongoDBConnection) -> None:
         """
         Create the MongoDB collection for galleries with validation.
         """
@@ -59,7 +63,7 @@ class Gallery:
             "validator": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": ["_id", "creation_time", "expiration_time"],
+                    "required": ["_id", "creation_time", "expiration_time", "images"],
                     "properties": {
                         "_id": {
                             "bsonType": "string",
@@ -89,34 +93,36 @@ class Gallery:
 
         # Get existing collections
         collections = db_c.db.list_collection_names()
-        if Gallery.COLLECTION_NAME in collections:
+        if cls.COLLECTION_NAME in collections:
             # skip
             return
 
         db_c.db.create_collection(
-            name=Gallery.COLLECTION_NAME,
+            name=cls.COLLECTION_NAME,
             validator=schema["validator"],
             validationLevel=schema["validationLevel"],
             validationAction=schema["validationAction"]
         )
 
-    @staticmethod
-    def db_drop_collection(db_c: MongoDBConnection) -> None:
+    @classmethod
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.DROP_COLLECTION], roles=["boss"])
+    def db_drop_collection(cls, db_c: MongoDBConnection) -> None:
         """
         Drop the MongoDB collection for galleries.
         """
-        db_c.db.drop_collection(Gallery.COLLECTION_NAME)
+        db_c.db.drop_collection(cls.COLLECTION_NAME)
 
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.INSERT], roles=["boss", "photo_booth"])
     def db_save(self, db_c: MongoDBConnection) -> None:
         """
         Save the Gallery object to MongoDB.
         """
-        collection = db_c.db[Gallery.COLLECTION_NAME]
+        collection = db_c.db[self.COLLECTION_NAME]
         data = self.to_dict()
         collection.insert_one(data)
 
-    @staticmethod
-    def _db_load(data: dict) -> 'Gallery':
+    @classmethod
+    def _db_load(cls, data: dict) -> 'Gallery':
         """
         Load a Gallery object from a dictionary (as retrieved from MongoDB).
         Ensures that 'creation_time' and 'expiration_time' are converted to datetime.
@@ -148,38 +154,42 @@ class Gallery:
 
 
 
-    @staticmethod
-    def db_find(db_c: MongoDBConnection, _id: str) -> Optional['Gallery']:
+    @classmethod
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "expiration_deleter"])
+    def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['Gallery']:
         """
         Find a Gallery object in the database by _id.
         Returns a Gallery instance if found, else None.
         """
-        collection = db_c.db[Gallery.COLLECTION_NAME]
+        collection = db_c.db[cls.COLLECTION_NAME]
         data = collection.find_one({"_id": _id})
         if data:
-            return Gallery._db_load(data)
+            return cls._db_load(data)
         return None
 
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss", "photo_booth"])
     def db_update(self, db_c: MongoDBConnection) -> None:
         """
         Update the Gallery object in the database.
         """
-        collection = db_c.db[Gallery.COLLECTION_NAME]
+        collection = db_c.db[self.COLLECTION_NAME]
         data = self.to_dict()
         collection.update_one({"_id": self._id}, {"$set": data})
 
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "expiration_deleter"])
     def db_delete(self, db_c: MongoDBConnection) -> None:
         """
         Delete the Gallery object from the database.
         """
-        collection = db_c.db[Gallery.COLLECTION_NAME]
+        collection = db_c.db[self.COLLECTION_NAME]
         collection.delete_one({"_id": self._id})
 
-    @staticmethod
-    def db_find_all(db_c: MongoDBConnection) -> List['Gallery']:
+    @classmethod
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer"])
+    def db_find_all(cls, db_c: MongoDBConnection) -> List['Gallery']:
         """
         Retrieve all Gallery objects from the database.
         """
-        collection = db_c.db[Gallery.COLLECTION_NAME]
+        collection = db_c.db[cls.COLLECTION_NAME]
         docs = collection.find()
-        return [Gallery._db_load(doc) for doc in docs]
+        return [cls._db_load(doc) for doc in docs]
