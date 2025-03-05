@@ -1,6 +1,7 @@
+from functools import wraps
 import inspect
 import enum
-from typing import Dict, Optional, List, Set, Tuple, Union, Callable
+from typing import Any, Dict, Optional, List, Set, Tuple, Union, Callable
 
 from pymongo import MongoClient
 from pymongo.database import Database
@@ -75,10 +76,29 @@ class MongoDBPermissions(enum.Enum):
     SET_PARAMETER = "setParameter"
 
 def mongodb_permissions(collection: str, actions: List[MongoDBPermissions], roles: List[str]) -> Callable:
-    """A decorator to attach metadata to methods."""
+    """A decorator to attach metadata to methods and enforce permission checks."""
     def decorator(func: Callable) -> Callable:
-        func.__annotations__ = {"mongodb_permissions": {"collection": collection, "actions": actions, "roles": roles}}
-        return func
+        # Store metadata in function annotations
+        func.__annotations__ = {
+            "mongodb_permissions": {"collection": collection, "actions": actions, "roles": roles}
+        }
+
+        @wraps(func)
+        def wrapper(cls: type, db_connection: "MongoDBConnection", *args: Tuple, **kwargs: Dict) -> Optional[Union[Dict, List]]:
+            # Check permissions before executing the function
+            if db_connection.admin:
+                return func(cls, db_connection, *args, **kwargs)
+
+            # get new permissions from db
+            db_connection.get_user_roles()
+            if any(role in db_connection.roles for role in roles):
+                # we have permissions
+                return func(cls, db_connection, *args, **kwargs)
+            else:
+                # no permissions
+                raise PermissionError(f"User does not have permission to execute {func.__name__}")
+
+        return wrapper
     return decorator
 
 def mongodb_get_user_permissions(
@@ -168,6 +188,7 @@ class MongoDBConnection:
         self.user = user
         self.password = password
         self.db_name = db_name
+        self.admin = admin
 
         if admin:
             # mongodb://{username}:{password}@localhost:27017
@@ -177,6 +198,22 @@ class MongoDBConnection:
             new_uri = f"mongodb://{user}:{password}@{mongo_uri}/{db_name}?authSource={db_name}"
         self.client: MongoClient = MongoClient(new_uri)
         self.db: Database = self.client[db_name]
+
+        # get the roles of this user
+        self.roles: List[str] = self.get_user_roles()
+
+    def get_user_roles(self) -> list[str]:
+        
+        user_inf = self.db.command("usersInfo", self.user)
+        
+        def get_roles(user_info: dict[str, Any]) -> List[str]:
+            if "users" in user_info and user_info["users"]:
+                roles = [role["role"] for role in user_info["users"][0].get("roles", [])]
+                return roles
+            return []
+        
+        self.roles = get_roles(user_inf)
+        return self.roles
 
     def close(self) -> None:
         """
