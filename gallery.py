@@ -119,13 +119,34 @@ class Gallery:
     def _db_load(data: dict) -> 'Gallery':
         """
         Load a Gallery object from a dictionary (as retrieved from MongoDB).
+        Ensures that 'creation_time' and 'expiration_time' are converted to datetime.
         """
+        creation_time_raw = data.get("creation_time")
+        expiration_time_raw = data.get("expiration_time")
+
+        # Ensure proper datetime conversion
+        creation_time = (
+            datetime.fromisoformat(creation_time_raw)
+            if isinstance(creation_time_raw, str)
+            else creation_time_raw
+        ) or datetime.now()  # Default to now if None
+
+        expiration_time = (
+            datetime.fromisoformat(expiration_time_raw)
+            if isinstance(expiration_time_raw, str)
+            else expiration_time_raw
+        ) or datetime.now()  # Default to now if None
+
+        _id = str(data.get("_id")) if data.get("_id") is not None else f"GAL-{uuid.uuid4()}"
+
         return Gallery(
-            creation_time=data.get("creation_time"),
-            expiration_time=data.get("expiration_time"),
+            creation_time=creation_time,
+            expiration_time=expiration_time,
             images=data.get("images", []),
-            _id=data.get("_id")
+            _id=_id
         )
+
+
 
     @staticmethod
     def db_find(db_c: MongoDBConnection, _id: str) -> Optional['Gallery']:

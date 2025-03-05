@@ -1,7 +1,7 @@
 from db_connection import MongoDBConnection
 from gallery import Gallery
 from img import IMG
-from user import BaseUser
+from user import User
 
 MONGODB_URI = "localhost:27017"
 MONGODB_ADMIN_USER = "root"
@@ -27,12 +27,12 @@ def main():
     )
 
     # Drop all collections (TODO: remove this in production)
-    BaseUser.db_drop_collection(admin_db)
+    User.db_drop_collection(admin_db)
     Gallery.db_drop_collection(admin_db)
     IMG.db_drop_collection(admin_db)
 
     # Create all collections
-    BaseUser.db_create_collection(admin_db)
+    User.db_create_collection(admin_db)
     Gallery.db_create_collection(admin_db)
     IMG.db_create_collection(admin_db)
 
@@ -69,7 +69,7 @@ def main():
             {"resource": {"db": MONGODB_DB_NAME, "collection": IMG.COLLECTION_NAME}, "actions": ["remove"]}
         ],
         "user_viewer": [
-            {"resource": {"db": MONGODB_DB_NAME, "collection": BaseUser.COLLECTION_NAME}, "actions": ["find"]}
+            {"resource": {"db": MONGODB_DB_NAME, "collection": User.COLLECTION_NAME}, "actions": ["find"]}
         ],
         "boss": [
             {"resource": {"db": MONGODB_DB_NAME, "collection": Gallery.COLLECTION_NAME}, "actions": ["insert", "find", "dropCollection"]},

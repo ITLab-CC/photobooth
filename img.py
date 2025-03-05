@@ -147,17 +147,27 @@ class IMG:
         Converts the stored binary data back into a PIL Image.
         """
         img_data = data.get("img")
+        
+        if img_data is None:
+            raise ValueError("Image data is missing from the database entry.")
+
         # Ensure the image data is in bytes (in case it comes as a different binary type)
         if not isinstance(img_data, bytes):
-            img_data = bytes(img_data)
+            try:
+                img_data = bytes(img_data)
+            except TypeError:
+                raise ValueError("Invalid image data format; cannot convert to bytes.")
+
         image = IMG._bytes_to_image(img_data)
+        
         return IMG(
             img=image,
             name=data.get("name", ""),
             description=data.get("description", ""),
             gallery=data.get("gallery"),
-            _id=data.get("_id")
+            _id=str(data.get("_id"))
         )
+
     
     def db_save(self, db_c: MongoDBConnection) -> None:
         """

@@ -15,7 +15,7 @@ class User:
     username: str
     password_hash: str
     password_salt: str
-    last_login: datetime
+    last_login: Optional[datetime] = None
     roles: List[str] = field(default_factory=list)
     _id: str = field(default_factory=lambda: f"USER-{uuid.uuid4()}")
 
@@ -44,7 +44,7 @@ class User:
             "username": self.username,
             "password_hash": self.password_hash,
             "password_salt": self.password_salt,
-            "last_login": self.last_login.strftime("%Y-%m-%d %H:%M:%S"),
+            "last_login": self.last_login.strftime("%Y-%m-%d %H:%M:%S") if self.last_login else None,
             "roles": self.roles
         }, indent=4)
 
@@ -88,7 +88,7 @@ class User:
                             "description": "must be a string and is required"
                         },
                         "last_login": {
-                            "bsonType": "date",
+                            "bsonType": ["date", "null"],
                             "description": "must be a date and is required"
                         },
                         "roles": {
@@ -200,13 +200,13 @@ def main() -> None:
     roles = mongodb_get_user_permissions(User, MONGODB_DB_NAME, ["boss"])
     print(roles)
 
-    def role_exists(admin_db, role_name: str) -> bool:
+    def role_exists(admin_db: MongoDBConnection, role_name: str) -> bool:
         """Check if a role already exists in MongoDB."""
         roles_info = admin_db.db.command("rolesInfo", role_name)
         roles_list = roles_info.get("roles", [])
         return any(role.get("role") == role_name for role in roles_list)
 
-    def remove_role(admin_db, role_name: str) -> None:
+    def remove_role(admin_db: MongoDBConnection, role_name: str) -> None:
         """Remove an existing role if it exists."""
         if role_exists(admin_db, role_name):
             admin_db.db.command("dropRole", role_name)

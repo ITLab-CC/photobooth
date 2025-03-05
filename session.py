@@ -9,10 +9,10 @@ import time
 import bcrypt
 
 from db_connection import MongoDBConnection
-from user import BaseUser
+from user import User
 
 
-SESSION_DURATION_SECONDS = 5
+SESSION_DURATION_SECONDS = 60 * 60 * 24
 
 
 class Status(Enum):
@@ -22,7 +22,7 @@ class Status(Enum):
 
 @dataclass
 class Session:
-    user: BaseUser
+    user: User
     expiration_date: datetime
     _logout_callback_toremove_from_session_manager: Callable[["Session"], None]
     _expiration_callback: Optional[Callable[["Session"], None]] = None
@@ -43,29 +43,29 @@ class Session:
                 self.mongodb_connection.close()
                 self.mongodb_connection = None
 
-            await self._logout_callback_toremove_from_session_manager(self)
+            self._logout_callback_toremove_from_session_manager(self)
 
             # Cancel the expiration worker if it's still running
             if self._expiration_task and not self._expiration_task.done():
                 self._expiration_task.cancel()
 
             if self._expiration_callback:
-                await self._expiration_callback(self)
+                self._expiration_callback(self)
 
 
 class SessionManager:
     _instance = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._sessions: Dict[str, Session] = {}
         self._lock = asyncio.Lock()  # Use asyncio.Lock for async safety
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args: Tuple, **kwargs: Dict) -> "SessionManager":
         if not cls._instance:
             cls._instance = super(SessionManager, cls).__new__(cls)
         return cls._instance
 
-    async def _expire_session(self, session: Session):
+    async def _expire_session(self, session: Session) -> None:
         """Handles session expiration asynchronously."""
         try:
             await asyncio.sleep(SESSION_DURATION_SECONDS)  # Wait until session expires
@@ -75,7 +75,8 @@ class SessionManager:
             # Task was cancelled before expiration (user logged out manually)
             print(f"Session {session._id} logout cancelled before expiration.")
 
-    def _hash_password(self, password: str, salt: Optional[str] = None) -> Tuple[str, str]:
+    @staticmethod
+    def hash_password(password: str, salt: Optional[str] = None) -> Tuple[str, str]:
         """
         Hash the given password using bcrypt. Generates a new salt if not provided.
         Returns a tuple of (hashed_password, salt).
@@ -86,20 +87,25 @@ class SessionManager:
         hashed = bcrypt.hashpw(password.encode(), salt.encode()).decode()
         return hashed, salt
 
-    async def login(self, db_connection: MongoDBConnection, username: str, password: str, expiration_callback: Optional[Callable[["Session"], None]]) -> Session:
+    async def login(self, 
+                        db_connection: MongoDBConnection, 
+                        username: str, 
+                        password: str, 
+                        expiration_callback: Optional[Callable[["Session"], None]]
+                    ) -> Session:
         """Handles user login and session creation."""
-        collection = db_connection.db[BaseUser.COLLECTION_NAME]
+        collection = db_connection.db[User.COLLECTION_NAME]
         user_data = collection.find_one({"username": username})
         if user_data is None:
             raise ValueError("User not found")
 
         salt = user_data["password_salt"]
-        hashed, _ = self._hash_password(password, salt)
+        hashed, _ = self.hash_password(password, salt)
         if hashed != user_data["password_hash"]:
             raise ValueError("Incorrect password")
         
         # Create user instance
-        user = BaseUser(
+        user = User(
             username=username,
             password_hash=user_data["password_hash"],
             password_salt=user_data["password_salt"],
@@ -115,10 +121,16 @@ class SessionManager:
             db_name=db_connection.db_name
         )
 
-        async def logout_user(session: Session):
+        async def _async_logout_user(session: Session) -> None:
+            """Actual async function to remove session safely within async context."""
             async with self._lock:
-                print(f"Logging out user {username} from session {session._id}")
+                print(f"Logging out user {session.user.username} from session {session._id}")
                 self._sessions.pop(session._id, None)
+
+        def logout_user(session: Session) -> None:
+            """Synchronous logout function as required by Session."""
+            asyncio.create_task(_async_logout_user(session))
+
 
         # Create a session for the user
         new_session = Session(
@@ -150,7 +162,7 @@ class SessionManager:
 
 
 
-async def test_session_manager():
+async def test_session_manager() -> None:
     MONGODB_URI = "localhost:27017"
     MONGODB_DB_NAME = "photo_booth"
     MONGODB_ADMIN_USER = "root"
@@ -167,7 +179,7 @@ async def test_session_manager():
 
     session_manager = SessionManager()
 
-    async def expiration_callback(session: Session):
+    def expiration_callback(session: Session) -> None:
         print(f"Session {session._id} expired!")
 
     # Test login
