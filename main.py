@@ -1,18 +1,29 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
+from math import ceil
 import os
 from typing import AsyncIterator, Dict, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import redis.asyncio as redis
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
+
 from setup import setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
+
+# ---------------------------
+# Redis Connection
+# ---------------------------
+REDIS_URL = "redis://127.0.0.1:6379"
+
 
 # ---------------------------
 # MongoDB Connection
@@ -56,24 +67,47 @@ System: Dict[str, MongoDBConnection] = {
 # ---------------------------
 # FastAPI App Initialization
 # ---------------------------
+# Identify the service by the Service-Name header or the IP address
+async def service_name_identifier(request: Request):
+    return request.headers.get("Service-Name") or request.client.host  # Identify by IP if no header
+
+async def rate_limit_exceeded_callback(request: Request, response: Response, pexpire: int):
+    """
+    default callback when too many requests
+    :param request:
+    :param pexpire: The remaining milliseconds
+    :param response:
+    :return:
+    """
+    expire = ceil(pexpire / 1000)
+
+    raise HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        f"Too Many Requests. Retry after {expire} seconds.",
+        headers={"Retry-After": str(expire)},
+    )
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    redis_connection = redis.from_url(REDIS_URL, encoding="utf8", decode_responses=True)
+    await FastAPILimiter.init(
+        redis_connection,
+        identifier=service_name_identifier,
+        http_callback=rate_limit_exceeded_callback,
+        )
     try:
         yield
     finally:
-        # Close all mongodb connections
         for conn in System.values():
             conn.close()
-
+        await FastAPILimiter.close()
 
 app = FastAPI(
-                lifespan=lifespan,
-                title="Photo Booth",
-                description="A simple photo booth application.",
-                version="1.0",
-
-            )
-
+    lifespan=lifespan,
+    title="Photo Booth",
+    description="A simple photo booth application.",
+    version="1.0",
+)
 
 # ---------------------------
 # CORS Middleware
@@ -87,7 +121,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ---------------------------
 # Authentication Dependencies
 # ---------------------------
@@ -98,8 +131,8 @@ SM = SessionManager()
 
 # get session from token
 async def auth(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Session:
-    tocken = credentials.credentials
-    session = await SM.get_session(tocken)
+    token = credentials.credentials
+    session = await SM.get_session(token)
     if session is None:
         raise HTTPException(status_code=403, detail="Invalid authentication token")
     return session
@@ -123,9 +156,8 @@ class AuthResponse(BaseModel):
     expiration_date: datetime
     user: User
 
-# Auth endpoint
-@app.post("/api/v1/auth/token", response_model=AuthResponse)
-async def login(auth: AuthRequest) -> AuthResponse:
+@app.post("/api/v1/auth/token", response_model=AuthResponse, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
+async def api_auth_login(auth: AuthRequest) -> AuthResponse:
     try:
         session: Session = await SM.login(System["login_manager"], auth.username, auth.password, None)
     except Exception as e:
@@ -136,15 +168,15 @@ async def login(auth: AuthRequest) -> AuthResponse:
         creation_date=session.creation_date,
         expiration_date=session.expiration_date,
         user=User(
-                    username=session.user.username,
-                    last_login=session.user.last_login,
-                    roles=session.user.roles
-                )
+            username=session.user.username,
+            last_login=session.user.last_login,
+            roles=session.user.roles
+        )
     )
 
 # Auth status
-@app.get("/api/v1/auth/status", response_model=AuthResponse)
-async def status(session: Session = Depends(auth)) -> AuthResponse:
+@app.get("/api/v1/auth/status", response_model=AuthResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_auth_status(session: Session = Depends(auth)) -> AuthResponse:
     return AuthResponse(
         token=session._id,
         creation_date=session.creation_date,
@@ -161,8 +193,8 @@ class OK(BaseModel):
     ok: bool
 
 # Logout endpoint
-@app.get("/api/v1/auth/logout", response_model=OK)
-async def logout(session: Session = Depends(auth)) -> OK:
+@app.get("/api/v1/auth/logout", response_model=OK, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
+async def api_auth_logout(session: Session = Depends(auth)) -> OK:
     await session.logout()
     return OK(ok=True)
 

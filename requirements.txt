@@ -6,4 +6,6 @@ opencv-python
 pymongo
 fastapi[standard]
 uvicorn[standard]
+fastapi-limiter
 bcrypt
+redis
