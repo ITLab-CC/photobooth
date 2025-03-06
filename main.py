@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from math import ceil
 import os
-from typing import AsyncIterator, Dict, Optional
+from typing import AsyncIterator, Dict, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse
@@ -10,6 +10,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.datastructures import Headers
 
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
@@ -68,10 +69,12 @@ System: Dict[str, MongoDBConnection] = {
 # FastAPI App Initialization
 # ---------------------------
 # Identify the service by the Service-Name header or the IP address
-async def service_name_identifier(request: Request):
+async def service_name_identifier(request: Request) -> Union[str, Headers]:
+    if request.client is None:
+        return "unknown"
     return request.headers.get("Service-Name") or request.client.host  # Identify by IP if no header
 
-async def rate_limit_exceeded_callback(request: Request, response: Response, pexpire: int):
+async def rate_limit_exceeded_callback(request: Request, response: Response, pexpire: int) -> None:
     """
     default callback when too many requests
     :param request:
@@ -159,7 +162,7 @@ class AuthResponse(BaseModel):
 @app.post("/api/v1/auth/token", response_model=AuthResponse, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
 async def api_auth_login(auth: AuthRequest) -> AuthResponse:
     try:
-        session: Session = await SM.login(System["login_manager"], auth.username, auth.password, None)
+        session: Session = await SM.login(System["login_manager"], auth.username, auth.password)
     except Exception as e:
         raise HTTPException(status_code=403, detail=str(e))
     
@@ -230,7 +233,7 @@ app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets
 
 # Catch-all route: For any path, serve the index.html so React can handle routing.
 @app.get("/{full_path:path}", response_class=HTMLResponse)
-async def serve_react_app(full_path: str):
+async def serve_react_app(full_path: str) -> FileResponse:
     index_path = os.path.join("frontend/dist", "index.html")
     return FileResponse(index_path)
 

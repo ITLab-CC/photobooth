@@ -91,7 +91,7 @@ class SessionManager:
                         db_connection: MongoDBConnection, 
                         username: str, 
                         password: str, 
-                        expiration_callback: Optional[Callable[["Session"], None]]
+                        expiration_callback: Optional[Callable[["Session"], None]] = None
                     ) -> Session:
         """Handles user login and session creation."""
         user_data = User.db_find_by_username(db_connection, username)
