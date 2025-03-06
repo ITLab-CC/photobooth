@@ -196,14 +196,18 @@ class MongoDBConnection:
         else:
             # mongodb://{username}:{password}@localhost:27017/{database}?authSource={database}
             new_uri = f"mongodb://{user}:{password}@{mongo_uri}/{db_name}?authSource={db_name}"
-        self.client: MongoClient = MongoClient(new_uri)
+        
+        try:
+            self.client: MongoClient = MongoClient(new_uri, connect=True)
+        except Exception as e:
+            raise PermissionError(f"User {user} does not have permission to access {db_name}.")
+        
         self.db: Database = self.client[db_name]
 
         # get the roles of this user
-        try:
-            self.roles: List[str] = self.get_user_roles()
-        except Exception as e:
-            raise PermissionError(f"User {user} does not have permission to access {db_name}.")
+        self.roles: List[str] = self.get_user_roles()
+            
+        
 
     def get_user_roles(self) -> list[str]:
         
