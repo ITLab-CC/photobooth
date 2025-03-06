@@ -94,24 +94,12 @@ class SessionManager:
                         expiration_callback: Optional[Callable[["Session"], None]]
                     ) -> Session:
         """Handles user login and session creation."""
-        collection = db_connection.db[User.COLLECTION_NAME]
-        user_data = collection.find_one({"username": username})
-        if user_data is None:
-            raise ValueError("User not found")
+        user_data = User.db_find_by_username(db_connection, username)
 
-        salt = user_data["password_salt"]
+        salt = user_data.password_salt
         hashed, _ = self.hash_password(password, salt)
-        if hashed != user_data["password_hash"]:
+        if hashed != user_data.password_hash:
             raise ValueError("Incorrect password")
-        
-        # Create user instance
-        user = User(
-            username=username,
-            password_hash=user_data["password_hash"],
-            password_salt=user_data["password_salt"],
-            last_login=user_data["last_login"],
-            _id=user_data["_id"]
-        )
 
         # Try to login to the DB
         new_db_connection = MongoDBConnection(
@@ -132,9 +120,13 @@ class SessionManager:
             asyncio.create_task(_async_logout_user(session))
 
 
+        # save new date
+        user_data.last_login = datetime.now()
+        user_data.db_update(db_connection)
+
         # Create a session for the user
         new_session = Session(
-            user = user,
+            user = user_data,
             expiration_date=datetime.now() + timedelta(seconds=SESSION_DURATION_SECONDS),
             _logout_callback_toremove_from_session_manager=logout_user,
             _expiration_callback=expiration_callback,
@@ -152,7 +144,13 @@ class SessionManager:
     async def get_sessions(self) -> Dict[str, Session]:
         async with self._lock:
             return self._sessions.copy()
-        
+
+    async def get_session(self, session_id: str) -> Optional[Session]:
+        async with self._lock:
+            if session_id in self._sessions:
+                return self._sessions[session_id]
+            return None
+
     async def validate_session(self, session_id: str) -> bool:
         async with self._lock:
             return session_id in self._sessions

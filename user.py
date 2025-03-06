@@ -130,8 +130,8 @@ class User:
         collection.insert_one(data)
 
     @classmethod
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "user_viewer"])
-    def db_find(cls, db_connection: MongoDBConnection, _id: str) -> Optional['User']:
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "login_manager"])
+    def db_find_by_id(cls, db_connection: MongoDBConnection, _id: str) -> Optional['User']:
         """
         Find a User object in the database by _id.
         Returns a User instance if found, else None.
@@ -141,8 +141,21 @@ class User:
         if data:
             return cls._db_load(data)
         return None
+    
+    @classmethod
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "login_manager"])
+    def db_find_by_username(cls, db_connection: MongoDBConnection, username: str) -> Optional['User']:
+        """
+        Find a User object in the database by username.
+        Returns a User instance if found, else None.
+        """
+        collection = db_connection.db[cls.COLLECTION_NAME]
+        data = collection.find_one({"username": username})
+        if data:
+            return cls._db_load(data)
+        return None
 
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss", "login_manager"])
     def db_update(self, db_connection: MongoDBConnection) -> None:
         """
         Update the User object in the database.
@@ -160,7 +173,7 @@ class User:
         collection.delete_one({"_id": self._id})
 
     @classmethod
-    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "user_viewer"])
+    @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "login_manager"])
     def db_find_all(cls, db_connection: MongoDBConnection) -> List['User']:
         """
         Retrieve all User objects from the database.

@@ -292,11 +292,11 @@ def main() -> None:
 
     # print role
     print(admin_db.db.command("rolesInfo", "boss", showPrivileges=True))
-    print(admin_db.db.command("rolesInfo", "user_viewer", showPrivileges=True))
+    print(admin_db.db.command("rolesInfo", "login_manager", showPrivileges=True))
 
     # create user
     admin_db.create_user("admin", "admin", ["boss"])
-    admin_db.create_user("viewer", "viewer", ["user_viewer"])
+    admin_db.create_user("viewer", "viewer", ["login_manager"])
 
     # print user with roles
     users = admin_db.db.command("usersInfo")["users"]

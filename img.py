@@ -207,7 +207,7 @@ class IMG:
         data["img"] = self._image_to_bytes(self.img)
         collection.update_one({"_id": self._id}, {"$set": data})
     
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "expiration_deleter"])
+    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser"])
     def db_delete(self, db_c: MongoDBConnection) -> None:
         """
         Delete the IMG object from the database.
@@ -216,7 +216,7 @@ class IMG:
         collection.delete_one({"_id": self._id})
     
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "expiration_deleter"])
+    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "old_img_eraser"])
     def db_find_all(cls, db_c: MongoDBConnection) -> List['IMG']:
         """
         Find all IMG objects in the database.
@@ -227,7 +227,7 @@ class IMG:
         return [cls._db_load(doc) for doc in docs]
     
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "expiration_deleter"])
+    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser"])
     def db_delete_by_gallery(cls, db_c: MongoDBConnection, gallery_id: str) -> None:
         """
         Delete all IMG objects belonging to a specific gallery from the database.

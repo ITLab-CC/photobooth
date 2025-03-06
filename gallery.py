@@ -155,7 +155,7 @@ class Gallery:
 
 
     @classmethod
-    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "expiration_deleter"])
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "old_img_eraser"])
     def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['Gallery']:
         """
         Find a Gallery object in the database by _id.
@@ -176,7 +176,7 @@ class Gallery:
         data = self.to_dict()
         collection.update_one({"_id": self._id}, {"$set": data})
 
-    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "expiration_deleter"])
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser"])
     def db_delete(self, db_c: MongoDBConnection) -> None:
         """
         Delete the Gallery object from the database.
