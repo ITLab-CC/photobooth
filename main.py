@@ -661,6 +661,13 @@ async def api_image_process(image: ImageProcessRequest) -> ImageProcessResponse:
     processed_img_for_db = IMG(img=processed_img, gallery=img.gallery)
     processed_img_for_db.db_save(db)
 
+    # add the processed image to the gallery
+    g = Gallery.db_find(db, img.gallery)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    g.db_add_image(db, processed_img_for_db._id)
+
     # retrun new img id
     return ImageProcessResponse(image_id=processed_img_for_db._id, gallery=processed_img_for_db.gallery)
 
