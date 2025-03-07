@@ -431,7 +431,7 @@ class ResponseImage(BaseModel):
     image_id: str
     gallery: str
 
-@app.put("/api/v1/gallery/{gallery_id}/image", response_model=ResponseImage, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.post("/api/v1/gallery/{gallery_id}/image", response_model=ResponseImage, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
 async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> ResponseImage:
     db = System["photo_booth"]
 
