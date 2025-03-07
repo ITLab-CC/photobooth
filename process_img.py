@@ -7,7 +7,7 @@ from ben2 import BEN_Base # type: ignore
 from typing import Optional
 
 class IMGReplacer:
-    def __init__(self, refine_foreground: bool = False) -> None:
+    def __init__(self) -> None:
         """
         Initialize the IMGReplacer.
         Loads the BEN2 model onto the available device (GPU if available).
@@ -15,7 +15,6 @@ class IMGReplacer:
         :param refine_foreground: Whether to use refined matting for higher-quality results (slower inference).
         """
         self.device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.refine_foreground: bool = refine_foreground
         self.model: Optional[BEN_Base] = None
         self.model_name: str = "PramaLLC/BEN2"
         self._load_model()
@@ -33,7 +32,7 @@ class IMGReplacer:
         """
         self.model = None
 
-    def remove_background(self, img: Image.Image) -> Image.Image:
+    def remove_background(self, img: Image.Image, refine_foreground: bool = False) -> Image.Image:
         """
         Remove the background from a given PIL Image and return a foreground image (RGBA) with transparency.
 
@@ -47,10 +46,10 @@ class IMGReplacer:
         img_rgb: Image.Image = img.convert("RGB")
         
         # Perform inference (background removal)
-        foreground: Image.Image = self.model.inference(img_rgb, refine_foreground=self.refine_foreground)
+        foreground: Image.Image = self.model.inference(img_rgb, refine_foreground=refine_foreground)
         return foreground
 
-    def replace_background(self, img: Image.Image, new_background: Image.Image) -> Image.Image:
+    def replace_background(self, img: Image.Image, new_background: Image.Image, refine_foreground: bool = False) -> Image.Image:
         """
         Replace the background of a given PIL Image with a new background.
 
@@ -58,7 +57,7 @@ class IMGReplacer:
         :param new_background: New background PIL image.
         :return: Final composite image with new background.
         """
-        foreground = self.remove_background(img)
+        foreground = self.remove_background(img, refine_foreground)
 
         # Convert both to RGBA
         fg_rgba: Image.Image = foreground.convert("RGBA")
@@ -89,10 +88,10 @@ def main() -> None:
     background_img = Image.open(new_background_path)
 
     # Create an instance of IMGReplacer (assuming the class is in the same file or imported)
-    replacer = IMGReplacer(refine_foreground=False)
+    replacer = IMGReplacer()
 
     # 1) Remove background from the input image
-    final_img = replacer.replace_background(input_img, background_img)
+    final_img = replacer.replace_background(input_img, background_img, refine_foreground=False)
 
     # 2) Save the final composite image
     final_img.save(output_final_path)

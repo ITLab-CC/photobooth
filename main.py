@@ -635,6 +635,9 @@ class ImageProcessResponse(BaseModel):
     image_id: str
     gallery: Optional[str]
 
+# Load AI model for image processing
+Replacer = IMGReplacer()
+
 # process image
 @app.post("/api/v1/image/process", response_model=ImageProcessResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
 async def api_image_process(image: ImageProcessRequest) -> ImageProcessResponse:
@@ -652,8 +655,7 @@ async def api_image_process(image: ImageProcessRequest) -> ImageProcessResponse:
 
     # process the image
     try:
-        replacer = IMGReplacer(refine_foreground=image.refine_foreground)
-        processed_img = replacer.replace_background(img.img, background_img.img)
+        processed_img = Replacer.replace_background(img.img, background_img.img, image.refine_foreground)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error processing image: " + str(e))
     
