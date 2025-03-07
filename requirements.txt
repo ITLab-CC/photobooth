@@ -1,0 +1,11 @@
+mypy
+torch
+Pillow
+git+https://github.com/PramaLLC/BEN2.git#egg=ben2
+opencv-python
+pymongo
+fastapi[standard]
+uvicorn[standard]
+fastapi-limiter
+bcrypt
+redis
