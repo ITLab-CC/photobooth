@@ -461,6 +461,38 @@ async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> 
 
     return ResponseImage(image_id=img._id, gallery=img.gallery)
 
+class GalleryImageListResponse(BaseModel):
+    images: List[ResponseImage]
+
+# get all images of a gallery
+@app.get("/api/v1/gallery/{gallery_id}/images/pin/{pin}", response_model=GalleryImageListResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_gallery_get_images(gallery_id: str, pin: str) -> GalleryImageListResponse:
+    db = System["img_viewer"]
+
+    g = Gallery.db_find(db, gallery_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    # Ensure expiration time is timezone-aware before comparing
+    exp_time = g.expiration_time if g.expiration_time.tzinfo else g.expiration_time.replace(tzinfo=timezone.utc)
+    if exp_time < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Gallery has already expired")
+
+    if g.pin_hash is None:
+        raise HTTPException(status_code=400, detail="Gallery has no pin")
+
+    if not g.validate_pin(pin):
+        raise HTTPException(status_code=403, detail="Invalid pin")
+
+    images = g.images
+    return_images: List[ResponseImage] = []
+    for img_id in images:
+        img = IMG.db_find(db, img_id)
+        if img is not None:
+            return_images.append(ResponseImage(image_id=img._id, gallery=img.gallery))
+
+    return GalleryImageListResponse(images=return_images)
+
 # get image with pin
 @app.get("/api/v1/gallery/{gallery_id}/image/{image_id}/pin/{pin}", dependencies=[Depends(RateLimiter(times=1, seconds=1))])
 async def api_gallery_get_image_with_pin(gallery_id: str, image_id: str, pin: str) -> StreamingResponse:
