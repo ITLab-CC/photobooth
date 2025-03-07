@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from datetime import datetime
 import uuid
 import json
+
+import bcrypt
 
 
 from db_connection import MongoDBConnection, MongoDBPermissions, mongodb_permissions
@@ -15,6 +17,8 @@ class Gallery:
     creation_time: datetime
     expiration_time: datetime
     images: List[str] = field(default_factory=list)
+    pin_hash: Optional[str] = None
+    pin_salt: Optional[str] = None
     _id: str = field(default_factory=lambda: f"GAL-{uuid.uuid4()}")
 
     # Collection name for MongoDB
@@ -30,7 +34,9 @@ class Gallery:
             "_id": self._id,  # MongoDB expects the primary key field to be '_id'
             "creation_time": self.creation_time,
             "expiration_time": self.expiration_time,
-            "images": self.images
+            "images": self.images,
+            "pin_hash": self.pin_hash,
+            "pin_salt": self.pin_salt
         }
 
     def __str__(self) -> str:
@@ -39,7 +45,9 @@ class Gallery:
             "id": self._id,
             "creation_time": self.creation_time.strftime("%Y-%m-%d %H:%M:%S"),
             "expiration_time": self.expiration_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "images": self.images
+            "images": self.images,
+            "pin_hash": self.pin_hash,
+            "pin_salt": self.pin_salt
         }, indent=4)
     
     def __repr__(self) -> str:
@@ -63,7 +71,7 @@ class Gallery:
             "validator": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": ["_id", "creation_time", "expiration_time", "images"],
+                    "required": ["_id", "creation_time", "expiration_time", "images", "pin_hash", "pin_salt"],
                     "properties": {
                         "_id": {
                             "bsonType": "string",
@@ -83,6 +91,14 @@ class Gallery:
                             "items": {
                                 "bsonType": "string"
                             }
+                        },
+                        "pin_hash": {
+                            "bsonType": ["string", "null"],
+                            "description": "Hash of the PIN for the gallery"
+                        },
+                        "pin_salt": {
+                            "bsonType": ["string", "null"],
+                            "description": "Salt used to hash the PIN"
                         }
                     }
                 }
@@ -103,6 +119,18 @@ class Gallery:
             validationLevel=schema["validationLevel"],
             validationAction=schema["validationAction"]
         )
+
+    @staticmethod
+    def hash_pin(password: str, salt: Optional[str] = None) -> Tuple[str, str]:
+        """
+        Hash the given password using bcrypt. Generates a new salt if not provided.
+        Returns a tuple of (hashed_password, salt).
+        """
+        if salt is None:
+            salt_bytes = bcrypt.gensalt()
+            salt = salt_bytes.decode()
+        hashed = bcrypt.hashpw(password.encode(), salt.encode()).decode()
+        return hashed, salt
 
     @classmethod
     @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.DROP_COLLECTION], roles=["boss"])
@@ -143,19 +171,24 @@ class Gallery:
             else expiration_time_raw
         ) or datetime.now()  # Default to now if None
 
+        pin_hash = data.get("pin_hash")
+        pin_salt = data.get("pin_salt")
+
         _id = str(data.get("_id")) if data.get("_id") is not None else f"GAL-{uuid.uuid4()}"
 
         return Gallery(
             creation_time=creation_time,
             expiration_time=expiration_time,
             images=data.get("images", []),
-            _id=_id
+            _id=_id,
+            pin_hash=pin_hash,
+            pin_salt=pin_salt
         )
 
 
 
     @classmethod
-    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "old_img_eraser"])
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer", "old_img_eraser"])
     def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['Gallery']:
         """
         Find a Gallery object in the database by _id.
@@ -167,7 +200,7 @@ class Gallery:
             return cls._db_load(data)
         return None
 
-    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss", "photo_booth"])
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
     def db_update(self, db_c: MongoDBConnection) -> None:
         """
         Update the Gallery object in the database.
@@ -175,6 +208,42 @@ class Gallery:
         collection = db_c.db[self.COLLECTION_NAME]
         data = self.to_dict()
         collection.update_one({"_id": self._id}, {"$set": data})
+
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss", "photo_booth"])
+    def db_set_pin(self, db_c: MongoDBConnection, pin: Optional[str]) -> None:
+        """
+        Set a PIN for the gallery. Hashes the PIN and stores the hash and salt.
+        """
+        pin_hash = None
+        pin_salt = None
+        if pin is None:
+            self.pin_hash = None
+            self.pin_salt = None
+        else:
+            pin_hash, pin_salt = self.hash_pin(pin)
+            self.pin_hash = pin_hash
+            self.pin_salt = pin_salt
+        
+        collection = db_c.db[self.COLLECTION_NAME]
+        collection.update_one({"_id": self._id}, {"$set": {"pin_hash": pin_hash, "pin_salt": pin_salt}})
+
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss", "photo_booth"])
+    def db_add_image(self, db_c: MongoDBConnection, img_id: str) -> None:
+        """
+        Add an image to the gallery.
+        """
+        self.images.append(img_id)
+        collection = db_c.db[self.COLLECTION_NAME]
+        collection.update_one({"_id": self._id}, {"$set": {"images": self.images}})
+
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
+    def db_remove_image(self, db_c: MongoDBConnection, img_id: str) -> None:
+        """
+        Remove an image from the gallery.
+        """
+        self.images.remove(img_id)
+        collection = db_c.db[self.COLLECTION_NAME]
+        collection.update_one({"_id": self._id}, {"$set": {"images": self.images}})
 
     @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser"])
     def db_delete(self, db_c: MongoDBConnection) -> None:

@@ -1,4 +1,6 @@
+import base64
 from dataclasses import dataclass, field
+import io
 from typing import Optional, List
 from PIL import Image
 import uuid
@@ -15,8 +17,6 @@ IMG_COLLECTION = "images"
 @dataclass
 class IMG:
     img: Image.Image
-    name: str
-    description: str
     gallery: Optional[str] = None
     _id: str = field(default_factory=lambda: f"IMG-{uuid.uuid4()}")
 
@@ -35,8 +35,6 @@ class IMG:
         """
         return {
             "_id": self._id,  # MongoDB uses _id as the primary key.
-            "name": self.name,
-            "description": self.description,
             "img": self.img,  # Convert to binary data before saving.
             "gallery": self.gallery
         }
@@ -48,8 +46,6 @@ class IMG:
         """
         return json.dumps({
             "id": self._id,
-            "name": self.name,
-            "description": self.description,
             "gallery": self.gallery,
             "img": {
                 "size": self.img.size,
@@ -78,7 +74,7 @@ class IMG:
             "validator": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": ["_id", "img", "name", "description"],
+                    "required": ["_id", "img", "gallery"],
                     "properties": {
                         "_id": {
                             "bsonType": "string",
@@ -87,14 +83,6 @@ class IMG:
                         "img": {
                             "bsonType": "binData",
                             "description": "Image data stored as binary"
-                        },
-                        "name": {
-                            "bsonType": "string",
-                            "description": "Name of the image"
-                        },
-                        "description": {
-                            "bsonType": "string",
-                            "description": "Description of the image"
                         },
                         "gallery": {
                             "bsonType": ["string", "null"],
@@ -145,6 +133,21 @@ class IMG:
         """
         return Image.open(BytesIO(data))
     
+    @staticmethod
+    def from_base64(base64_str: str) -> 'IMG':
+        """
+        Create an IMG object from a base64 string.
+        """
+        try:
+            image_bytes = base64.b64decode(base64_str)
+            image_file = io.BytesIO(image_bytes)
+            pil_image = Image.open(image_file).convert("RGB")
+        except Exception:
+            raise ValueError("Invalid base64 string; cannot convert to image.")
+        
+        return IMG(img=pil_image)
+
+
     @classmethod
     def _db_load(cls, data: dict) -> 'IMG':
         """
@@ -167,8 +170,6 @@ class IMG:
         
         return cls(
             img=image,
-            name=data.get("name", ""),
-            description=data.get("description", ""),
             gallery=data.get("gallery"),
             _id=str(data.get("_id"))
         )
@@ -185,7 +186,7 @@ class IMG:
         collection.insert_one(data)
     
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer"])
+    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "photo_booth"])
     def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['IMG']:
         """
         Find the IMG object in the database by _id.
