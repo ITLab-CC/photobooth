@@ -1,11 +1,12 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+import io
 from math import ceil
 import os
 from typing import AsyncIterator, Dict, List, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,8 +17,10 @@ import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 
+from background import Background
 from gallery import Gallery
 from img import IMG
+from process_img import IMGReplacer
 from setup import setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -259,7 +262,7 @@ class GalleryRequest(BaseModel):
     pin: Optional[str] = None
 
 class GalleryResponse(BaseModel):
-    id: str
+    gallery_id: str
     creation_time: datetime
     expiration_time: datetime
     images: List[str]
@@ -301,7 +304,7 @@ async def api_gallery_create(gallery: Optional[GalleryRequest] = None) -> Galler
     g.db_save(db)
 
     return GalleryResponse(
-        id=g._id,
+        gallery_id=g._id,
         creation_time=g.creation_time,
         expiration_time=g.expiration_time,
         images=g.images,
@@ -321,7 +324,7 @@ async def api_gallery_list(session: Session = Depends(auth)) -> GalleryListRespo
     return_galleries: List[GalleryResponse] = []
     for g in galleries:
         return_galleries.append(GalleryResponse(
-            id=g._id,
+            gallery_id=g._id,
             creation_time=g.creation_time,
             expiration_time=g.expiration_time,
             images=g.images,
@@ -355,7 +358,7 @@ async def api_gallery_change_expiration(gallery_id: str, expiration: GalleryExpi
     g.db_update(db)
 
     return GalleryResponse(
-        id=g._id,
+        gallery_id=g._id,
         creation_time=g.creation_time,
         expiration_time=g.expiration_time,
         images=g.images,
@@ -386,7 +389,7 @@ async def api_gallery_change_pin(gallery_id: str, pin: Optional[GalleryPinReques
     g.db_set_pin(db, pin.pin)
 
     return GalleryResponse(
-        id=g._id,
+        gallery_id=g._id,
         creation_time=g.creation_time,
         expiration_time=g.expiration_time,
         images=g.images,
@@ -413,7 +416,7 @@ async def api_gallery_set_pin(gallery_id: str, pin: GalleryPinRequest) -> Galler
     g.db_set_pin(db, pin.pin)
 
     return GalleryResponse(
-        id=g._id,
+        gallery_id=g._id,
         creation_time=g.creation_time,
         expiration_time=g.expiration_time,
         images=g.images,
@@ -425,7 +428,7 @@ class GalleryImageRequest(BaseModel):
     image_base64: str # base64 encoded image
 
 class ResponseImage(BaseModel):
-    id: str
+    image_id: str
     gallery: str
 
 @app.put("/api/v1/gallery/{gallery_id}/image", response_model=ResponseImage, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
@@ -441,7 +444,11 @@ async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> 
     if exp_time < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Gallery has already expired")
 
-    img = IMG.from_base64(image.image_base64)
+    try:
+        img = IMG.from_base64(image.image_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     img.gallery = gallery_id
     img.db_save(db)
 
@@ -452,7 +459,7 @@ async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> 
         img.db_delete(System["old_img_eraser"])
         raise HTTPException(status_code=500, detail=str(e))
 
-    return ResponseImage(id=img._id, gallery=img.gallery)
+    return ResponseImage(image_id=img._id, gallery=img.gallery)
 
 # remove image
 @app.delete("/api/v1/gallery/{gallery_id}/image/{image_id}", response_model=GalleryResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
@@ -480,7 +487,7 @@ async def api_gallery_remove_image(gallery_id: str, image_id: str, session: Sess
     g.db_remove_image(db, image_id)
 
     return GalleryResponse(
-        id=g._id,
+        gallery_id=g._id,
         creation_time=g.creation_time,
         expiration_time=g.expiration_time,
         images=g.images,
@@ -504,10 +511,158 @@ async def api_gallery_delete(gallery_id: str, session: Session = Depends(auth)) 
     return OK(ok=True)
 
 
+# ---------------------------
+# Image Endpoints
+# ---------------------------
+# Image models
+class ImageResponse(BaseModel):
+    image_id: str
+    gallery: Optional[str]
+
+class ImageListResponse(BaseModel):
+    images: List[ImageResponse]
+
+# get all images
+@app.get("/api/v1/images", response_model=ImageListResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_image_list(session: Session = Depends(auth)) -> ImageListResponse:
+    db = session.mongodb_connection
+
+    images = IMG.db_find_all(db)
+    return_images: List[ImageResponse] = []
+    for img in images:
+        return_images.append(ImageResponse(
+            image_id=img._id,
+            gallery=img.gallery
+        ))
+
+    return ImageListResponse(images=return_images)
+
+# get image
+@app.get("/api/v1/image/{image_id}", response_model=ImageResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_image_get(image_id: str) -> StreamingResponse:
+    db = System["img_viewer"]
+
+    img = IMG.db_find(db, image_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    img_bytes_io = io.BytesIO()
+    img.img.save(img_bytes_io, format="PNG")
+    img_bytes_io.seek(0)
+
+    return StreamingResponse(content=img_bytes_io, media_type="image/png")
 
 
+# ---------------------------
+# Background Endpoints
+# ---------------------------
+# Background models
+class BackgroundRequest(BaseModel):
+    image_base64: str
 
+class BackgroundResponse(BaseModel):
+    background_id: str
 
+# add background
+@app.post("/api/v1/background", response_model=BackgroundResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_background_add(background_img: BackgroundRequest, session: Session = Depends(auth)) -> BackgroundResponse:
+    db = session.mongodb_connection
+
+    try:
+        img = Background.from_base64(background_img.image_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    img.db_save(db)
+
+    return BackgroundResponse(background_id=img._id)
+
+# get background
+@app.get("/api/v1/background/{background_id}", response_model=BackgroundResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_background_get(background_id: str) -> StreamingResponse:
+    db = System["img_viewer"]
+
+    img = Background.db_find(db, background_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Background image not found")
+    
+    img_bytes_io = io.BytesIO()
+    img.img.save(img_bytes_io, format="PNG")
+    img_bytes_io.seek(0)
+
+    return StreamingResponse(content=img_bytes_io, media_type="image/png")
+
+class BackgroundListResponse(BaseModel):
+    backgrounds: List[BackgroundResponse]
+
+# get all backgrounds
+@app.get("/api/v1/backgrounds", response_model=BackgroundListResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_background_list() -> BackgroundListResponse:
+    db = System["img_viewer"]
+
+    backgrounds = Background.db_find_all(db)
+    return_backgrounds: List[BackgroundResponse] = []
+    for img in backgrounds:
+        return_backgrounds.append(BackgroundResponse(
+            background_id=img._id
+        ))
+
+    return BackgroundListResponse(backgrounds=return_backgrounds)
+
+# delete background
+@app.delete("/api/v1/background/{background_id}", response_model=OK, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_background_delete(background_id: str, session: Session = Depends(auth)) -> OK:
+    db = session.mongodb_connection
+
+    img = Background.db_find(db, background_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Background image not found")
+    
+    img.db_delete(db)
+
+    return OK(ok=True)
+
+# ---------------------------
+# Img processing Endpoints
+# ---------------------------
+# Image processing models
+class ImageProcessRequest(BaseModel):
+    image_id: str
+    image_background_id: str
+    refine_foreground: bool = False
+
+class ImageProcessResponse(BaseModel):
+    image_id: str
+    gallery: Optional[str]
+
+# process image
+@app.post("/api/v1/image/process", response_model=ImageProcessResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_image_process(image: ImageProcessRequest) -> ImageProcessResponse:
+    db = System["photo_booth"]
+
+    # get the image
+    img = IMG.db_find(db, image.image_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # get the background image
+    background_img = Background.db_find(db, image.image_background_id)
+    if background_img is None:
+        raise HTTPException(status_code=404, detail="Background image not found")
+
+    # process the image
+    try:
+        replacer = IMGReplacer(refine_foreground=image.refine_foreground)
+        processed_img = replacer.replace_background(img.img, background_img.img)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error processing image: " + str(e))
+    
+    # save the processed image
+    processed_img_for_db = IMG(img=processed_img, gallery=img.gallery)
+    processed_img_for_db.db_save(db)
+
+    # retrun new img id
+    return ImageProcessResponse(image_id=processed_img_for_db._id, gallery=processed_img_for_db.gallery)
 
 
 

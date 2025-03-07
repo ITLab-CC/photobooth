@@ -3,6 +3,7 @@ import asyncio
 from db_connection import MongoDBConnection
 from user import User
 from img import IMG
+from background import Background
 from gallery import Gallery
 from session import SessionManager
 
@@ -48,14 +49,16 @@ def setup() -> None:
     User.db_drop_collection(admin_db)
     Gallery.db_drop_collection(admin_db)
     IMG.db_drop_collection(admin_db)
+    Background.db_drop_collection(admin_db)
 
     # Create all collections
     User.db_create_collection(admin_db)
     Gallery.db_create_collection(admin_db)
     IMG.db_create_collection(admin_db)
+    Background.db_create_collection(admin_db)
 
     # Create roles based on the annotations
-    admin_db.create_roles([User, Gallery, IMG])
+    admin_db.create_roles([User, Gallery, IMG, Background])
 
     # Create users
     admin_db.create_user(ADMIN, ADMIN_PASSWORD, ["boss"])

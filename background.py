@@ -12,16 +12,15 @@ from pymongo.collection import Collection
 from db_connection import MongoDBConnection, MongoDBPermissions, mongodb_permissions
 
 # Define a module-level constant for the collection name.
-IMG_COLLECTION = "images"
+BACKGROUND_COLLECTION = "backgrounds"
 
 @dataclass
-class IMG:
+class Background:
     img: Image.Image
-    gallery: Optional[str] = None
-    _id: str = field(default_factory=lambda: f"IMG-{uuid.uuid4()}")
+    _id: str = field(default_factory=lambda: f"Back-{uuid.uuid4()}")
 
     # Collection name for MongoDB
-    COLLECTION_NAME: str = IMG_COLLECTION
+    COLLECTION_NAME: str = BACKGROUND_COLLECTION
 
     @property
     def id(self) -> str:
@@ -36,7 +35,6 @@ class IMG:
         return {
             "_id": self._id,  # MongoDB uses _id as the primary key.
             "img": self.img,  # Convert to binary data before saving.
-            "gallery": self.gallery
         }
 
     def __str__(self) -> str:
@@ -46,7 +44,6 @@ class IMG:
         """
         return json.dumps({
             "id": self._id,
-            "gallery": self.gallery,
             "img": {
                 "size": self.img.size,
                 "mode": self.img.mode
@@ -57,7 +54,7 @@ class IMG:
         return self.__str__()
     
     def __eq__(self, o: object) -> bool:
-        if isinstance(o, IMG):
+        if isinstance(o, Background):
             return self.id == o.id
         return False
     
@@ -65,7 +62,7 @@ class IMG:
         return hash(self.id)
     
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.CREATE_COLLECTION], roles=["boss"])
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.CREATE_COLLECTION], roles=["boss"])
     def db_create_collection(cls, db_c: MongoDBConnection) -> None:
         """
         Create the MongoDB collection for images with validation.
@@ -74,7 +71,7 @@ class IMG:
             "validator": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": ["_id", "img", "gallery"],
+                    "required": ["_id", "img"],
                     "properties": {
                         "_id": {
                             "bsonType": "string",
@@ -83,10 +80,6 @@ class IMG:
                         "img": {
                             "bsonType": "binData",
                             "description": "Image data stored as binary"
-                        },
-                        "gallery": {
-                            "bsonType": ["string", "null"],
-                            "description": "Gallery to which the image belongs"
                         }
                     }
                 }
@@ -110,7 +103,7 @@ class IMG:
         )
 
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.DROP_COLLECTION], roles=["boss"])
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.DROP_COLLECTION], roles=["boss"])
     def db_drop_collection(cls, db_c: MongoDBConnection) -> None:
         """
         Drop the MongoDB collection for images.
@@ -134,9 +127,9 @@ class IMG:
         return Image.open(BytesIO(data))
     
     @staticmethod
-    def from_base64(base64_str: str) -> 'IMG':
+    def from_base64(base64_str: str) -> 'Background':
         """
-        Create an IMG object from a base64 string.
+        Create an Background object from a base64 string.
         """
         try:
             image_bytes = base64.b64decode(base64_str)
@@ -145,13 +138,13 @@ class IMG:
         except Exception:
             raise ValueError("Invalid base64 string; cannot convert to image.")
         
-        return IMG(img=pil_image)
+        return Background(img=pil_image)
 
 
     @classmethod
-    def _db_load(cls, data: dict) -> 'IMG':
+    def _db_load(cls, data: dict) -> 'Background':
         """
-        Load an IMG object from a dictionary (as retrieved from MongoDB).
+        Load an Background object from a dictionary (as retrieved from MongoDB).
         Converts the stored binary data back into a PIL Image.
         """
         img_data = data.get("img")
@@ -170,14 +163,13 @@ class IMG:
         
         return cls(
             img=image,
-            gallery=data.get("gallery"),
             _id=str(data.get("_id"))
         )
 
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.INSERT], roles=["boss", "photo_booth"])
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.INSERT], roles=["boss"])
     def db_save(self, db_c: MongoDBConnection) -> None:
         """
-        Save the IMG object to MongoDB.
+        Save the Background object to MongoDB.
         Converts the PIL Image to binary data before insertion.
         """
         collection: Collection = db_c.db[self.COLLECTION_NAME]
@@ -186,11 +178,11 @@ class IMG:
         collection.insert_one(data)
     
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "photo_booth"])
-    def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['IMG']:
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer"])
+    def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['Background']:
         """
-        Find the IMG object in the database by _id.
-        Returns an IMG instance if found, else None.
+        Find the Background object in the database by _id.
+        Returns an Background instance if found, else None.
         """
         collection: Collection = db_c.db[cls.COLLECTION_NAME]
         data = collection.find_one({"_id": _id})
@@ -198,40 +190,31 @@ class IMG:
             return cls._db_load(data)
         return None
     
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss", "photo_booth"])
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
     def db_update(self, db_c: MongoDBConnection) -> None:
         """
-        Update the IMG object in the database.
+        Update the Background object in the database.
         """
         collection: Collection = db_c.db[self.COLLECTION_NAME]
         data = self.to_dict()
         data["img"] = self._image_to_bytes(self.img)
         collection.update_one({"_id": self._id}, {"$set": data})
     
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser"])
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss"])
     def db_delete(self, db_c: MongoDBConnection) -> None:
         """
-        Delete the IMG object from the database.
+        Delete the Background object from the database.
         """
         collection: Collection = db_c.db[self.COLLECTION_NAME]
         collection.delete_one({"_id": self._id})
     
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "old_img_eraser"])
-    def db_find_all(cls, db_c: MongoDBConnection) -> List['IMG']:
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer"])
+    def db_find_all(cls, db_c: MongoDBConnection) -> List['Background']:
         """
-        Find all IMG objects in the database.
-        Returns a list of IMG instances.
+        Find all Background objects in the database.
+        Returns a list of Background instances.
         """
         collection: Collection = db_c.db[cls.COLLECTION_NAME]
         docs = collection.find()
         return [cls._db_load(doc) for doc in docs]
-    
-    @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser"])
-    def db_delete_by_gallery(cls, db_c: MongoDBConnection, gallery_id: str) -> None:
-        """
-        Delete all IMG objects belonging to a specific gallery from the database.
-        """
-        collection: Collection = db_c.db[cls.COLLECTION_NAME]
-        collection.delete_many({"gallery": gallery_id})
