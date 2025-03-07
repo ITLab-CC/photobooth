@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from math import ceil
 import os
-from typing import AsyncIterator, Dict, Optional, Union
+from typing import AsyncIterator, Dict, List, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse
@@ -148,7 +148,7 @@ class AuthRequest(BaseModel):
     username: str
     password: str
 
-class User(BaseModel):
+class AuthUser(BaseModel):
     username: str
     last_login: Optional[datetime]
     roles: list[str]
@@ -157,7 +157,7 @@ class AuthResponse(BaseModel):
     token: str
     creation_date: datetime
     expiration_date: datetime
-    user: User
+    user: AuthUser
 
 @app.post("/api/v1/auth/token", response_model=AuthResponse, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
 async def api_auth_login(auth: AuthRequest) -> AuthResponse:
@@ -170,7 +170,7 @@ async def api_auth_login(auth: AuthRequest) -> AuthResponse:
         token=session._id,
         creation_date=session.creation_date,
         expiration_date=session.expiration_date,
-        user=User(
+        user=AuthUser(
             username=session.user.username,
             last_login=session.user.last_login,
             roles=session.user.roles
@@ -184,7 +184,7 @@ async def api_auth_status(session: Session = Depends(auth)) -> AuthResponse:
         token=session._id,
         creation_date=session.creation_date,
         expiration_date=session.expiration_date,
-        user=User(
+        user=AuthUser(
                     username=session.user.username,
                     last_login=session.user.last_login,
                     roles=session.user.roles
@@ -201,7 +201,43 @@ async def api_auth_logout(session: Session = Depends(auth)) -> OK:
     await session.logout()
     return OK(ok=True)
 
+class AuthSessionResponse(BaseModel):
+    sessions: List[AuthResponse]
 
+# get session
+@app.get("/api/v1/auth/session", response_model=AuthSessionResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+async def api_auth_session(session: Session = Depends(auth)) -> AuthSessionResponse:
+    if await session.is_admin() is False:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    sessions = await SM.get_sessions()
+    return_sessions: List[AuthResponse] = []
+    for s in sessions.values():
+        return_sessions.append(AuthResponse(
+            token=s._id,
+            creation_date=s.creation_date,
+            expiration_date=s.expiration_date,
+            user=AuthUser(
+                username=s.user.username,
+                last_login=s.user.last_login,
+                roles=s.user.roles
+            )
+        ))
+
+    return AuthSessionResponse(sessions=return_sessions)
+
+# logout a sepcific session
+@app.get("/api/v1/auth/session/logout/{token}", response_model=OK, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
+async def api_auth_session_logout(token: str, session: Session = Depends(auth)) -> OK:
+    if await session.is_admin() is False:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    s = await SM.get_session(token)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    await s.logout()
+    return OK(ok=True)
 
 
 
@@ -243,4 +279,6 @@ async def serve_react_app(full_path: str) -> FileResponse:
 # ---------------------------
 if __name__ == "__main__":
     import uvicorn
+    print("Starting server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    

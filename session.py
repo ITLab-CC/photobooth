@@ -52,6 +52,11 @@ class Session:
             if self._expiration_callback:
                 self._expiration_callback(self)
 
+    async def is_admin(self) -> bool:
+        if self.status == Status.INACTIVE:
+            return False
+        return "admin" in self.user.roles or "boss" in self.user.roles
+
 
 class SessionManager:
     _instance = None
@@ -150,10 +155,6 @@ class SessionManager:
             if session_id in self._sessions:
                 return self._sessions[session_id]
             return None
-
-    async def validate_session(self, session_id: str) -> bool:
-        async with self._lock:
-            return session_id in self._sessions
 
 
 
