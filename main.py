@@ -171,8 +171,14 @@ class AuthResponse(BaseModel):
     expiration_date: datetime
     user: AuthUser
 
-@app.post("/api/v1/auth/token", response_model=AuthResponse, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
+@app.post(
+    "/api/v1/auth/token",
+    response_model=AuthResponse,
+    dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+    description="Authenticate a user with a username and password. Creates a new session token and returns detailed session information."
+)
 async def api_auth_login(auth: AuthRequest) -> AuthResponse:
+    """Authenticate a user and create a new session token."""
     try:
         session: Session = await SM.login(System["login_manager"], auth.username, auth.password)
     except Exception as e:
@@ -189,35 +195,49 @@ async def api_auth_login(auth: AuthRequest) -> AuthResponse:
         )
     )
 
-# Auth status
-@app.get("/api/v1/auth/status", response_model=AuthResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+
+@app.get(
+    "/api/v1/auth/status",
+    response_model=AuthResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Return the current authentication sessions details, including token and user information."
+)
 async def api_auth_status(session: Session = Depends(auth)) -> AuthResponse:
+    """Check the current authentication session status."""
     return AuthResponse(
         token=session._id,
         creation_date=session.creation_date,
         expiration_date=session.expiration_date,
         user=AuthUser(
-                    username=session.user.username,
-                    last_login=session.user.last_login,
-                    roles=session.user.roles
-                )
+            username=session.user.username,
+            last_login=session.user.last_login,
+            roles=session.user.roles
+        )
     )
 
 # Logout model
 class OK(BaseModel):
     ok: bool
-
-# Logout endpoint
-@app.get("/api/v1/auth/logout", response_model=OK, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
+@app.get(
+    "/api/v1/auth/logout",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+    description="Logout the current user session, invalidating the session token."
+)
 async def api_auth_logout(session: Session = Depends(auth)) -> OK:
     await session.logout()
     return OK(ok=True)
 
+
 class AuthSessionResponse(BaseModel):
     sessions: List[AuthResponse]
 
-# get session
-@app.get("/api/v1/auth/sessions", response_model=AuthSessionResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.get(
+    "/api/v1/auth/sessions",
+    response_model=AuthSessionResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="For administrative users: Retrieve a list of all active sessions with detailed session information."
+)
 async def api_auth_session(session: Session = Depends(auth)) -> AuthSessionResponse:
     if await session.is_admin() is False:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -238,8 +258,13 @@ async def api_auth_session(session: Session = Depends(auth)) -> AuthSessionRespo
 
     return AuthSessionResponse(sessions=return_sessions)
 
-# logout a sepcific session
-@app.get("/api/v1/auth/session/logout/{token}", response_model=OK, dependencies=[Depends(RateLimiter(times=5, minutes=1))])
+
+@app.get(
+    "/api/v1/auth/session/logout/{token}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+    description="For administrators only: Logout a specific session identified by its token."
+)
 async def api_auth_session_logout(token: str, session: Session = Depends(auth)) -> OK:
     if await session.is_admin() is False:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -269,7 +294,12 @@ class GalleryResponse(BaseModel):
     pin_set: bool
 
 # create gallery
-@app.post("/api/v1/gallery", response_model=GalleryResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.post(
+    "/api/v1/gallery",
+    response_model=GalleryResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Create a new gallery. Optionally, specify images, a pin, and an expiration time (which must be in the future)."
+)
 async def api_gallery_create(gallery: Optional[GalleryRequest] = None) -> GalleryResponse:
     # system photo_booth
     db = System["photo_booth"]
@@ -316,7 +346,12 @@ async def api_gallery_create(gallery: Optional[GalleryRequest] = None) -> Galler
 class GalleryListResponse(BaseModel):
     galleries: List[GalleryResponse]
 
-@app.get("/api/v1/galleries", response_model=GalleryListResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.get(
+    "/api/v1/galleries",
+    response_model=GalleryListResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a list of all galleries associated with the current user's session."
+)
 async def api_gallery_list(session: Session = Depends(auth)) -> GalleryListResponse:
     db = session.mongodb_connection
 
@@ -337,7 +372,12 @@ async def api_gallery_list(session: Session = Depends(auth)) -> GalleryListRespo
 class GalleryExpirationRequest(BaseModel):
     expiration_time: datetime
 
-@app.put("/api/v1/gallery/{gallery_id}/expiration", response_model=GalleryResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.put(
+    "/api/v1/gallery/{gallery_id}/expiration",
+    response_model=GalleryResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Update the expiration time of an existing gallery. The new expiration time must be in the future."
+)
 async def api_gallery_change_expiration(gallery_id: str, expiration: GalleryExpirationRequest, session: Session = Depends(auth)) -> GalleryResponse:
     db = session.mongodb_connection
 
@@ -369,7 +409,12 @@ async def api_gallery_change_expiration(gallery_id: str, expiration: GalleryExpi
 class GalleryPinRequest(BaseModel):
     pin: Optional[str] = None
 
-@app.put("/api/v1/gallery/{gallery_id}/pin", response_model=GalleryResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.put(
+    "/api/v1/gallery/{gallery_id}/pin",
+    response_model=GalleryResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Change the pin of an existing gallery. The endpoint validates that the gallery has not expired before updating."
+)
 async def api_gallery_change_pin(gallery_id: str, pin: Optional[GalleryPinRequest] = None, session: Session = Depends(auth)) -> GalleryResponse:
     db = session.mongodb_connection
 
@@ -397,7 +442,12 @@ async def api_gallery_change_pin(gallery_id: str, pin: Optional[GalleryPinReques
     )
 
 # set pin only if not set
-@app.put("/api/v1/gallery/{gallery_id}/pin/set", response_model=GalleryResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.put(
+    "/api/v1/gallery/{gallery_id}/pin/set",
+    response_model=GalleryResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Set a pin for a gallery that does not already have one. This endpoint is used when a gallery’s pin needs to be initialized."
+)
 async def api_gallery_set_pin(gallery_id: str, pin: GalleryPinRequest) -> GalleryResponse:
     db = System["photo_booth"]
 
@@ -431,7 +481,12 @@ class ResponseImage(BaseModel):
     image_id: str
     gallery: str
 
-@app.post("/api/v1/gallery/{gallery_id}/image", response_model=ResponseImage, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.post(
+    "/api/v1/gallery/{gallery_id}/image",
+    response_model=ResponseImage,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Add a new image (provided as a base64 encoded string) to the specified gallery. The gallery must exist and be unexpired."
+)
 async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> ResponseImage:
     db = System["photo_booth"]
 
@@ -465,7 +520,12 @@ class GalleryImageListResponse(BaseModel):
     images: List[ResponseImage]
 
 # get all images of a gallery
-@app.get("/api/v1/gallery/{gallery_id}/images/pin/{pin}", response_model=GalleryImageListResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.get(
+    "/api/v1/gallery/{gallery_id}/images/pin/{pin}",
+    response_model=GalleryImageListResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve all images from a gallery using a valid gallery pin. The gallery must have a pin and not be expired."
+)
 async def api_gallery_get_images(gallery_id: str, pin: str) -> GalleryImageListResponse:
     db = System["img_viewer"]
 
@@ -494,7 +554,11 @@ async def api_gallery_get_images(gallery_id: str, pin: str) -> GalleryImageListR
     return GalleryImageListResponse(images=return_images)
 
 # get image with pin
-@app.get("/api/v1/gallery/{gallery_id}/image/{image_id}/pin/{pin}", dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.get(
+    "/api/v1/gallery/{gallery_id}/image/{image_id}/pin/{pin}",
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a specific image from a gallery using a valid pin. Verifies that the image belongs to the specified gallery."
+)
 async def api_gallery_get_image_with_pin(gallery_id: str, image_id: str, pin: str) -> StreamingResponse:
     db = System["img_viewer"]
 
@@ -527,7 +591,12 @@ async def api_gallery_get_image_with_pin(gallery_id: str, image_id: str, pin: st
     return StreamingResponse(content=img_bytes_io, media_type="image/png")
 
 # remove image
-@app.delete("/api/v1/gallery/{gallery_id}/image/{image_id}", response_model=GalleryResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.delete(
+    "/api/v1/gallery/{gallery_id}/image/{image_id}",
+    response_model=GalleryResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Remove an image from the specified gallery. Ensures that the gallery and image exist, and that the image belongs to the gallery."
+)
 async def api_gallery_remove_image(gallery_id: str, image_id: str, session: Session = Depends(auth)) -> GalleryResponse:
     db = session.mongodb_connection
 
@@ -560,7 +629,12 @@ async def api_gallery_remove_image(gallery_id: str, image_id: str, session: Sess
     )
 
 # delete gallery
-@app.delete("/api/v1/gallery/{gallery_id}", response_model=OK, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.delete(
+    "/api/v1/gallery/{gallery_id}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Delete an entire gallery and all of its associated images."
+)
 async def api_gallery_delete(gallery_id: str, session: Session = Depends(auth)) -> OK:
     db = session.mongodb_connection
 
@@ -587,8 +661,12 @@ class ImageResponse(BaseModel):
 class ImageListResponse(BaseModel):
     images: List[ImageResponse]
 
-# get all images
-@app.get("/api/v1/images", response_model=ImageListResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.get(
+    "/api/v1/images",
+    response_model=ImageListResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a list of all images available in the database, along with their associated gallery (if any)."
+)
 async def api_image_list(session: Session = Depends(auth)) -> ImageListResponse:
     db = session.mongodb_connection
 
@@ -603,7 +681,11 @@ async def api_image_list(session: Session = Depends(auth)) -> ImageListResponse:
     return ImageListResponse(images=return_images)
 
 # get image
-@app.get("/api/v1/image/{image_id}", dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.get(
+    "/api/v1/image/{image_id}",
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a specific image by ID. Returns the image as a streaming PNG response."
+)
 async def api_image_get(image_id: str, session: Session = Depends(auth)) -> StreamingResponse:
     db = session.mongodb_connection
 
@@ -628,8 +710,12 @@ class BackgroundRequest(BaseModel):
 class BackgroundResponse(BaseModel):
     background_id: str
 
-# add background
-@app.post("/api/v1/background", response_model=BackgroundResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.post(
+    "/api/v1/background",
+    response_model=BackgroundResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Upload a new background image. The image is provided as a base64 encoded string and saved to the database."
+)
 async def api_background_add(background_img: BackgroundRequest, session: Session = Depends(auth)) -> BackgroundResponse:
     db = session.mongodb_connection
 
@@ -642,8 +728,35 @@ async def api_background_add(background_img: BackgroundRequest, session: Session
 
     return BackgroundResponse(background_id=img._id)
 
+class BackgroundListResponse(BaseModel):
+    backgrounds: List[BackgroundResponse]
+
+# get all backgrounds
+@app.get(
+    "/api/v1/backgrounds",
+    response_model=BackgroundListResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a list of all background images available in the database."
+)
+async def api_background_list() -> BackgroundListResponse:
+    db = System["img_viewer"]
+
+    backgrounds = Background.db_find_all(db)
+    return_backgrounds: List[BackgroundResponse] = []
+    for img in backgrounds:
+        return_backgrounds.append(BackgroundResponse(
+            background_id=img._id
+        ))
+
+    return BackgroundListResponse(backgrounds=return_backgrounds)
+
 # get background
-@app.get("/api/v1/background/{background_id}", response_model=BackgroundResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.get(
+    "/api/v1/background/{background_id}",
+    response_model=BackgroundResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a background image by its ID and return it as a streaming PNG response."
+)
 async def api_background_get(background_id: str) -> StreamingResponse:
     db = System["img_viewer"]
 
@@ -657,25 +770,13 @@ async def api_background_get(background_id: str) -> StreamingResponse:
 
     return StreamingResponse(content=img_bytes_io, media_type="image/png")
 
-class BackgroundListResponse(BaseModel):
-    backgrounds: List[BackgroundResponse]
-
-# get all backgrounds
-@app.get("/api/v1/backgrounds", response_model=BackgroundListResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
-async def api_background_list() -> BackgroundListResponse:
-    db = System["img_viewer"]
-
-    backgrounds = Background.db_find_all(db)
-    return_backgrounds: List[BackgroundResponse] = []
-    for img in backgrounds:
-        return_backgrounds.append(BackgroundResponse(
-            background_id=img._id
-        ))
-
-    return BackgroundListResponse(backgrounds=return_backgrounds)
-
 # delete background
-@app.delete("/api/v1/background/{background_id}", response_model=OK, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.delete(
+    "/api/v1/background/{background_id}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Delete a background image specified by its ID."
+)
 async def api_background_delete(background_id: str, session: Session = Depends(auth)) -> OK:
     db = session.mongodb_connection
 
@@ -703,8 +804,12 @@ class ImageProcessResponse(BaseModel):
 # Load AI model for image processing
 Replacer = IMGReplacer()
 
-# process image
-@app.post("/api/v1/image/process", response_model=ImageProcessResponse, dependencies=[Depends(RateLimiter(times=1, seconds=1))])
+@app.post(
+    "/api/v1/image/process",
+    response_model=ImageProcessResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Process an image by replacing its background using an AI model. Requires the target image ID and a background image ID. Optionally refine the foreground."
+)
 async def api_image_process(image: ImageProcessRequest) -> ImageProcessResponse:
     db = System["photo_booth"]
 
@@ -746,7 +851,11 @@ async def api_image_process(image: ImageProcessRequest) -> ImageProcessResponse:
 app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
 
 # Catch-all route: For any path, serve the index.html so React can handle routing.
-@app.get("/{full_path:path}", response_class=HTMLResponse)
+@app.get(
+    "/{full_path:path}",
+    response_class=HTMLResponse,
+    description="Catch-all route that serves the React application’s index.html for any unspecified path."
+)
 async def serve_react_app(full_path: str) -> FileResponse:
     index_path = os.path.join("frontend/dist", "index.html")
     return FileResponse(index_path)
