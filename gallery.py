@@ -132,6 +132,13 @@ class Gallery:
         hashed = bcrypt.hashpw(password.encode(), salt.encode()).decode()
         return hashed, salt
 
+    def validate_pin(self, pin: str) -> bool:
+        """
+        Validate the given PIN against the stored hash and salt.
+        """
+        pin_to_check, _ = self.hash_pin(pin, self.pin_salt)
+        return self.pin_hash == pin_to_check
+
     @classmethod
     @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.DROP_COLLECTION], roles=["boss"])
     def db_drop_collection(cls, db_c: MongoDBConnection) -> None:
