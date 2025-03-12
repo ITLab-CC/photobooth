@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.datastructures import Headers
+from dotenv import load_dotenv
 
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
@@ -25,50 +26,48 @@ from gallery import Gallery
 from img import IMG
 from printer import PrinterQueueItem
 from process_img import IMGReplacer
-from setup import setup
+from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
 
+load_dotenv()
+check_dotenv()
 # ---------------------------
 # Redis Connection
 # ---------------------------
-REDIS_URL = "redis://localhost:6379"
+REDIS_URL = os.getenv("REDIS_URL")
 
 
 # ---------------------------
 # MongoDB Connection
 # ---------------------------
-# TODO: Replace with .env variables!!!
-MONGODB_HOST = "localhost:27017"
-MONGODB_DB_NAME = "photo_booth"
+MONGODB_HOST = os.getenv("MONGODB_URL")
+MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME")
 
 # ---------------------------
 # URL
 # ---------------------------
-URL="http://localhost:8000"
-
-# Setup the DB with all collections, roles and users
-setup() # TODO: Remove this in production!!!
+URL=os.getenv("BASE_URL")
 
 # Create alle System Users
 # TODO: Replace with .env variables!!!
 System: Dict[str, MongoDBConnection] = {
     "login_manager": MongoDBConnection(
         mongo_uri=MONGODB_HOST,
-        user="login_manager",
-        password="login_manager",
+        user=os.getenv("LOGIN_MANAGER"),
+        password=os.getenv("LOGIN_MANAGER_PASSWORD"),
         db_name=MONGODB_DB_NAME
     ),
     "img_viewer": MongoDBConnection(
         mongo_uri=MONGODB_HOST,
-        user="img_viewer",
-        password="img_viewer",
+        user=os.getenv("IMG_VIEWER"),
+        password=os.getenv("IMG_VIEWER_PASSWORD"),
         db_name=MONGODB_DB_NAME
     ),
     "old_img_eraser": MongoDBConnection(
         mongo_uri=MONGODB_HOST,
-        user="old_img_eraser",
-        password="old_img_eraser",
+        user=os.getenv("OLD_IMG_ERASER"),
+        password=os.getenv("OLD_IMG_ERASER_PASSWORD"),
         db_name=MONGODB_DB_NAME
     ),
 }
@@ -77,7 +76,8 @@ System: Dict[str, MongoDBConnection] = {
 # ---------------------------
 # Values
 # ---------------------------
-GALLERY_EXPIRATION = timedelta(days=7)
+str_gallery_expiration = os.getenv("GALLERY_EXPIRATION_SECONDS")
+GALLERY_EXPIRATION = timedelta(seconds=int(str_gallery_expiration))
 
 
 # ---------------------------
