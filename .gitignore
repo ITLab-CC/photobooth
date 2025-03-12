@@ -1,6 +1,6 @@
 .vscode
 .vscode/*
-*.txt
+img_base64.txt
 *.png
 
 # Byte-compiled / optimized / DLL files
