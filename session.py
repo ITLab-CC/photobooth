@@ -59,7 +59,7 @@ class Session:
 
 
 class SessionManager:
-    _instance = None
+    _instance: Optional["SessionManager"] = None
 
     def __init__(self) -> None:
         self._sessions: Dict[str, Session] = {}

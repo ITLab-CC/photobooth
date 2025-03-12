@@ -1,11 +1,13 @@
 import asyncio
 
 from db_connection import MongoDBConnection
+import printer
 from user import User
 from img import IMG
 from background import Background
 from gallery import Gallery
 from session import SessionManager
+from printer import PrinterQueueItem
 
 def setup() -> None:
     # This will setup the db with all the users and roles.
@@ -36,6 +38,10 @@ def setup() -> None:
     OLD_IMG_ERASER = "old_img_eraser"
     OLD_IMG_ERASER_PASSWORD = "old_img_eraser"
 
+    # printer: can view img, delete printer queues
+    PRINTER = "printer"
+    PRINTER_PASSWORD = "printer"
+
 
     admin_db = MongoDBConnection(
         mongo_uri=MONGODB_URI,
@@ -50,15 +56,17 @@ def setup() -> None:
     Gallery.db_drop_collection(admin_db)
     IMG.db_drop_collection(admin_db)
     Background.db_drop_collection(admin_db)
+    PrinterQueueItem.db_drop_collection(admin_db)
 
     # Create all collections
     User.db_create_collection(admin_db)
     Gallery.db_create_collection(admin_db)
     IMG.db_create_collection(admin_db)
     Background.db_create_collection(admin_db)
+    PrinterQueueItem.db_create_collection(admin_db)
 
     # Create roles based on the annotations
-    admin_db.create_roles([User, Gallery, IMG, Background])
+    admin_db.create_roles([User, Gallery, IMG, Background, PrinterQueueItem])
 
     # Create users
     admin_db.create_user(ADMIN, ADMIN_PASSWORD, ["boss"])
@@ -66,6 +74,7 @@ def setup() -> None:
     admin_db.create_user(PHOTO_BOOTH, PHOTO_BOOTH_PASSWORD, ["photo_booth"])
     admin_db.create_user(IMG_VIEWER, IMG_VIEWER_PASSWORD, ["img_viewer"])
     admin_db.create_user(OLD_IMG_ERASER, OLD_IMG_ERASER_PASSWORD, ["old_img_eraser"])
+    admin_db.create_user(PRINTER, PRINTER_PASSWORD, ["printer"])
 
 
     admin_password_hash, admin_password_salt = SessionManager.hash_password(ADMIN_PASSWORD)
