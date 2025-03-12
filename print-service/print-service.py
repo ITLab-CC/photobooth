@@ -68,7 +68,7 @@ def make_request_with_retry(url, method="get", headers=None, json=None):
             time.sleep(1)
             continue
 
-        if res.status_code == 401:
+        if res.status_code == 401 or res.status_code == 403:
             raise Exception("Not authenticated")
 
         res.raise_for_status()
