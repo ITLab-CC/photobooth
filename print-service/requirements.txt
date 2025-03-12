@@ -2,3 +2,5 @@ requests
 pillow
 pywin32
 dotenv
+types-requests
+types-pywin32

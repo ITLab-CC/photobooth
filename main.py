@@ -548,7 +548,7 @@ async def api_gallery_qr(gallery_id: str) -> StreamingResponse:
     qr_img = qrcode.make(img_url)
 
     img_bytes_io = io.BytesIO()
-    qr_img.save(img_bytes_io, format="PNG")
+    qr_img.save(img_bytes_io)
     img_bytes_io.seek(0)
 
     return StreamingResponse(content=img_bytes_io, media_type="image/png")

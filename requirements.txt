@@ -10,3 +10,4 @@ fastapi-limiter
 bcrypt
 redis
 qrcode
+types-qrcode
