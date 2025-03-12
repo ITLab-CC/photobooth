@@ -9,6 +9,18 @@ from gallery import Gallery
 from session import SessionManager
 from printer import PrinterQueueItem
 
+def create_user(admin_db: MongoDBConnection, username: str, password: str, roles: list[str]) -> None:
+    admin_db.create_user(username, password, roles)
+    password_hash, password_salt = SessionManager.hash_password(password)
+    user = User(
+        username=username,
+        password_hash=password_hash,
+        password_salt=password_salt,
+        roles=roles
+    )
+    user.db_save(admin_db)
+
+
 def setup() -> None:
     # This will setup the db with all the users and roles.
     # It wil also create the users in the db
@@ -69,22 +81,14 @@ def setup() -> None:
     admin_db.create_roles([User, Gallery, IMG, Background, PrinterQueueItem])
 
     # Create users
-    admin_db.create_user(ADMIN, ADMIN_PASSWORD, ["boss"])
+    create_user(admin_db, ADMIN, ADMIN_PASSWORD, ["boss"])
+    create_user(admin_db, PHOTO_BOOTH, PHOTO_BOOTH_PASSWORD, ["photo_booth"])
+    create_user(admin_db, PRINTER, PRINTER_PASSWORD, ["printer"])
+
+    # Create System users. Not for login
     admin_db.create_user(LOGIN_MANAGER, LOGIN_MANAGER_PASSWORD, ["login_manager"])
-    admin_db.create_user(PHOTO_BOOTH, PHOTO_BOOTH_PASSWORD, ["photo_booth"])
     admin_db.create_user(IMG_VIEWER, IMG_VIEWER_PASSWORD, ["img_viewer"])
     admin_db.create_user(OLD_IMG_ERASER, OLD_IMG_ERASER_PASSWORD, ["old_img_eraser"])
-    admin_db.create_user(PRINTER, PRINTER_PASSWORD, ["printer"])
-
-
-    admin_password_hash, admin_password_salt = SessionManager.hash_password(ADMIN_PASSWORD)
-    admin_user = User(
-        username=ADMIN,
-        password_hash=admin_password_hash,
-        password_salt=admin_password_salt,
-        roles=["boss"]
-    )
-    admin_user.db_save(admin_db)
 
     # # print user with roles
     # users = admin_db.db.command("usersInfo")["users"]

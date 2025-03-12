@@ -59,12 +59,6 @@ System: Dict[str, MongoDBConnection] = {
         password="login_manager",
         db_name=MONGODB_DB_NAME
     ),
-    "photo_booth": MongoDBConnection(
-        mongo_uri=MONGODB_HOST,
-        user="photo_booth",
-        password="photo_booth",
-        db_name=MONGODB_DB_NAME
-    ),
     "img_viewer": MongoDBConnection(
         mongo_uri=MONGODB_HOST,
         user="img_viewer",
@@ -75,12 +69,6 @@ System: Dict[str, MongoDBConnection] = {
         mongo_uri=MONGODB_HOST,
         user="old_img_eraser",
         password="old_img_eraser",
-        db_name=MONGODB_DB_NAME
-    ),
-    "printer": MongoDBConnection(
-        mongo_uri=MONGODB_HOST,
-        user="printer",
-        password="printer",
         db_name=MONGODB_DB_NAME
     ),
 }
@@ -338,9 +326,8 @@ class GalleryResponse(BaseModel):
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Create a new gallery. Optionally, specify images, a pin, and an expiration time (which must be in the future)."
 )
-async def api_gallery_create(gallery: Optional[GalleryRequest] = None) -> GalleryResponse:
-    # system photo_booth
-    db = System["photo_booth"]
+async def api_gallery_create(gallery: Optional[GalleryRequest] = None, session: Session = Depends(auth)) -> GalleryResponse:
+    db = session.mongodb_connection
 
     if gallery is None:
         gallery = GalleryRequest()
@@ -486,8 +473,8 @@ async def api_gallery_change_pin(gallery_id: str, pin: Optional[GalleryPinReques
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Set a pin for a gallery that does not already have one. This endpoint is used when a gallery’s pin needs to be initialized."
 )
-async def api_gallery_set_pin(gallery_id: str, pin: GalleryPinRequest) -> GalleryResponse:
-    db = System["photo_booth"]
+async def api_gallery_set_pin(gallery_id: str, pin: GalleryPinRequest, session: Session = Depends(auth)) -> GalleryResponse:
+    db = session.mongodb_connection
 
     g = Gallery.db_find(db, gallery_id)
     if g is None:
@@ -525,8 +512,8 @@ class ResponseImage(BaseModel):
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Add a new image (provided as a base64 encoded string) to the specified gallery. The gallery must exist and be unexpired."
 )
-async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> ResponseImage:
-    db = System["photo_booth"]
+async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest, session: Session = Depends(auth)) -> ResponseImage:
+    db = session.mongodb_connection
 
     g = Gallery.db_find(db, gallery_id)
     if g is None:
@@ -560,9 +547,9 @@ async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> 
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Retrieve a QR code URL that links to the specified gallery."
 )
-async def api_gallery_qr(gallery_id: str) -> StreamingResponse:
+async def api_gallery_qr(gallery_id: str, session: Session = Depends(auth)) -> StreamingResponse:
     # find gallery
-    db = System["photo_booth"]
+    db = session.mongodb_connection
 
     g = Gallery.db_find(db, gallery_id)
     if g is None:
@@ -812,8 +799,8 @@ class BackgroundListResponse(BaseModel):
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Retrieve a list of all background images available in the database."
 )
-async def api_background_list() -> BackgroundListResponse:
-    db = System["img_viewer"]
+async def api_background_list(session: Session = Depends(auth)) -> BackgroundListResponse:
+    db = session.mongodb_connection
 
     backgrounds = Background.db_find_all(db)
     return_backgrounds: List[BackgroundResponse] = []
@@ -831,8 +818,8 @@ async def api_background_list() -> BackgroundListResponse:
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Retrieve a background image by its ID and return it as a streaming PNG response."
 )
-async def api_background_get(background_id: str) -> StreamingResponse:
-    db = System["img_viewer"]
+async def api_background_get(background_id: str, session: Session = Depends(auth)) -> StreamingResponse:
+    db = session.mongodb_connection
 
     img = Background.db_find(db, background_id)
     if img is None:
@@ -890,8 +877,8 @@ Replacer = IMGReplacer()
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Process an image by replacing its background using an AI model. Requires the target image ID and a background image ID. Optionally refine the foreground."
 )
-async def api_image_process(image: ImageProcessRequest) -> ImageProcessResponse:
-    db = System["photo_booth"]
+async def api_image_process(image: ImageProcessRequest, session: Session = Depends(auth)) -> ImageProcessResponse:
+    db = session.mongodb_connection
 
     # get the image
     img = IMG.db_find(db, image.image_id)
@@ -944,8 +931,8 @@ class PrintResponse(BaseModel):
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Print an image by its ID. The image must be in the database."
 )
-async def api_print_image(print_req: PrintRequest) -> PrintResponse:
-    db = System["photo_booth"]
+async def api_print_image(print_req: PrintRequest, session: Session = Depends(auth)) -> PrintResponse:
+    db = session.mongodb_connection
 
     img = IMG.db_find(db, print_req.image_id)
     if img is None:
@@ -966,8 +953,8 @@ async def api_print_image(print_req: PrintRequest) -> PrintResponse:
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Retrieve a list of all print jobs in the printer queue."
 )
-async def api_print_list() -> List[PrintResponse]:
-    db = System["printer"]
+async def api_print_list(session: Session = Depends(auth)) -> List[PrintResponse]:
+    db = session.mongodb_connection
 
     items = PrinterQueueItem.db_find_all(db)
     return_items: List[PrintResponse] = []
@@ -982,8 +969,8 @@ async def api_print_list() -> List[PrintResponse]:
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Remove a print job from the printer queue by its ID."
 )
-async def api_print_remove(print_id: str) -> OK:
-    db = System["printer"]
+async def api_print_remove(print_id: str, session: Session = Depends(auth)) -> OK:
+    db = session.mongodb_connection
 
     item = PrinterQueueItem.db_find(db, print_id)
     if item is None:
