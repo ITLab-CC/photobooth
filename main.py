@@ -681,6 +681,12 @@ async def api_gallery_remove_image(gallery_id: str, image_id: str, session: Sess
 
     g.db_remove_image(db, image_id)
 
+    # check if there is a print job for this image
+    try:
+        PrinterQueueItem.db_delete_by_img_id(db, image_id)
+    except Exception as e:
+        print(f"Error deleting print job: {e}")
+
     return GalleryResponse(
         gallery_id=g._id,
         creation_time=g.creation_time,
@@ -705,6 +711,13 @@ async def api_gallery_delete(gallery_id: str, session: Session = Depends(auth)) 
 
     # delete all images
     IMG.db_delete_by_gallery(db, gallery_id)
+
+    # delete all print jobs
+    for img_id in g.images:
+        try:
+            PrinterQueueItem.db_delete_by_img_id(db, img_id)
+        except Exception as e:
+            print(f"Error deleting print job: {e}")
 
     g.db_delete(db)
 
@@ -846,6 +859,12 @@ async def api_background_delete(background_id: str, session: Session = Depends(a
         raise HTTPException(status_code=404, detail="Background image not found")
     
     img.db_delete(db)
+
+    # remove the background img from print jobs
+    try:
+        PrinterQueueItem.db_delete_by_img_id(db, background_id)
+    except Exception as e:
+        print(f"Error deleting print job: {e}")
 
     return OK(ok=True)
 
