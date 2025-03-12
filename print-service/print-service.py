@@ -4,10 +4,15 @@ import io
 import win32print
 import win32ui
 from PIL import Image, ImageWin
+from dotenv import load_dotenv
+import os
 
-BASE_URL = "http://172.30.62.251:8000"
-USERNAME = "boss"
-PASSWORD = "admin"
+# Load environment variables from .env file
+load_dotenv()
+
+BASE_URL = os.getenv("BASE_URL")
+USERNAME = os.getenv("USERNAME")
+PASSWORD = os.getenv("PASSWORD")
 
 def get_token():
     while True:
@@ -16,6 +21,7 @@ def get_token():
             response.raise_for_status()
             return response.json()['token']
         except Exception as e:
+            time.sleep(10)
             print(f"Error: {e}")
 
 def print_image_from_bytes(img_bytes):
@@ -53,16 +59,15 @@ def make_request_with_retry(url, method="get", headers=None, json=None):
         elif method.lower() == "delete":
             res = requests.delete(url, headers=headers)
         
-        # Check if the status code is 429 (Too Many Requests)
         if res.status_code == 429:
             print("Rate limit exceeded, retrying after 1 second...")
             time.sleep(1)
-            continue  # Retry the request after 1 second
+            continue
 
         if res.status_code == 401:
             raise Exception("Not authenticated")
 
-        res.raise_for_status()  # Raise an exception for any other errors (like 4xx, 5xx)
+        res.raise_for_status()
         return res
 
 def main():
@@ -71,12 +76,9 @@ def main():
 
     while True:
         try:
-            # Use the helper function to handle retries
             res = make_request_with_retry(f"{BASE_URL}/api/v1/print", headers=headers)
-            
             prints = res.json()
             if not prints:
-                # print("No prints available.")
                 time.sleep(1)
                 continue
 
@@ -84,15 +86,11 @@ def main():
             img_id = oldest_print["img_id"]
             print_id = oldest_print["id"]
 
-            # Get the image with retry
             img_res = make_request_with_retry(f"{BASE_URL}/api/v1/image/{img_id}", headers=headers)
-            
             print_image_from_bytes(img_res.content)
             print(f"Printed image: {img_id}")
 
-            # Now make a request to DELETE /api/v1/print/{print_id} with retry
             del_res = make_request_with_retry(f"{BASE_URL}/api/v1/print/{print_id}", method="delete", headers=headers)
-            
             print(f"Deleted print: {img_id}")
 
         except Exception as e:
