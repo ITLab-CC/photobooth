@@ -186,7 +186,7 @@ class IMG:
         collection.insert_one(data)
     
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "photo_booth"])
+    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "photo_booth", "printer"])
     def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['IMG']:
         """
         Find the IMG object in the database by _id.

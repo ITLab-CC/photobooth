@@ -9,3 +9,4 @@ uvicorn[standard]
 fastapi-limiter
 bcrypt
 redis
+qrcode

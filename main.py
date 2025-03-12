@@ -16,10 +16,12 @@ from starlette.datastructures import Headers
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
+import qrcode
 
 from background import Background
 from gallery import Gallery
 from img import IMG
+from printer import PrinterQueueItem
 from process_img import IMGReplacer
 from setup import setup
 from db_connection import MongoDBConnection
@@ -28,7 +30,7 @@ from session import Session, SessionManager
 # ---------------------------
 # Redis Connection
 # ---------------------------
-REDIS_URL = "redis://127.0.0.1:6379"
+REDIS_URL = "redis://localhost:6379"
 
 
 # ---------------------------
@@ -37,6 +39,11 @@ REDIS_URL = "redis://127.0.0.1:6379"
 # TODO: Replace with .env variables!!!
 MONGODB_HOST = "localhost:27017"
 MONGODB_DB_NAME = "photo_booth"
+
+# ---------------------------
+# URL
+# ---------------------------
+URL="http://localhost:8000"
 
 # Setup the DB with all collections, roles and users
 setup() # TODO: Remove this in production!!!
@@ -67,7 +74,13 @@ System: Dict[str, MongoDBConnection] = {
         user="old_img_eraser",
         password="old_img_eraser",
         db_name=MONGODB_DB_NAME
-    )
+    ),
+    "printer": MongoDBConnection(
+        mongo_uri=MONGODB_HOST,
+        user="printer",
+        password="printer",
+        db_name=MONGODB_DB_NAME
+    ),
 }
 
 
@@ -130,7 +143,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     # TODO: Replace with .env variables!!!
-    allow_origins=["http://localhost:5173"],  # Allowed Origins from the frontend
+    allow_origins=[URL],  # Allowed Origins from the frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -218,6 +231,7 @@ async def api_auth_status(session: Session = Depends(auth)) -> AuthResponse:
 # Logout model
 class OK(BaseModel):
     ok: bool
+
 @app.get(
     "/api/v1/auth/logout",
     response_model=OK,
@@ -515,6 +529,29 @@ async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> 
         raise HTTPException(status_code=500, detail=str(e))
 
     return ResponseImage(image_id=img._id, gallery=img.gallery)
+
+# get qr-code url to gallery
+@app.get(
+    "/api/v1/gallery/{gallery_id}/qr",
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a QR code URL that links to the specified gallery."
+)
+async def api_gallery_qr(gallery_id: str) -> StreamingResponse:
+    # find gallery
+    db = System["photo_booth"]
+
+    g = Gallery.db_find(db, gallery_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    img_url = f"{URL}/gallery/?id={gallery_id}"
+    qr_img = qrcode.make(img_url)
+
+    img_bytes_io = io.BytesIO()
+    qr_img.save(img_bytes_io, format="PNG")
+    img_bytes_io.seek(0)
+
+    return StreamingResponse(content=img_bytes_io, media_type="image/png")
 
 class GalleryImageListResponse(BaseModel):
     images: List[ResponseImage]
@@ -842,6 +879,107 @@ async def api_image_process(image: ImageProcessRequest) -> ImageProcessResponse:
 
     # retrun new img id
     return ImageProcessResponse(image_id=processed_img_for_db._id, gallery=processed_img_for_db.gallery)
+
+
+# ---------------------------
+# Print Endpoints
+# ---------------------------
+# Print models
+class PrintRequest(BaseModel):
+    image_id: str
+
+class PrintResponse(BaseModel):
+    id: str
+    number: int
+    img_id: str
+    created_at: datetime
+
+
+@app.post(
+    "/api/v1/print",
+    response_model=PrintResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Print an image by its ID. The image must be in the database."
+)
+async def api_print_image(print_req: PrintRequest) -> PrintResponse:
+    db = System["photo_booth"]
+
+    img = IMG.db_find(db, print_req.image_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    # create a printer queue item
+    item = PrinterQueueItem(
+        img_id=img._id,
+        number=PrinterQueueItem.get_next_number(db)
+    )
+    item.db_save(db)
+
+    return PrintResponse(id=item._id, number=item.number, created_at=item.created_at, img_id=item.img_id)
+
+@app.get(
+    "/api/v1/print",
+    response_model=List[PrintResponse],
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a list of all print jobs in the printer queue."
+)
+async def api_print_list() -> List[PrintResponse]:
+    db = System["printer"]
+
+    items = PrinterQueueItem.db_find_all(db)
+    return_items: List[PrintResponse] = []
+    for item in items:
+        return_items.append(PrintResponse(id=item._id, number=item.number, created_at=item.created_at, img_id=item.img_id))
+
+    return return_items
+
+@app.delete(
+    "/api/v1/print/{print_id}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Remove a print job from the printer queue by its ID."
+)
+async def api_print_remove(print_id: str) -> OK:
+    db = System["printer"]
+
+    item = PrinterQueueItem.db_find(db, print_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Print job not found")
+
+    item.db_delete(db)
+
+    return OK(ok=True)
+
+# clear all print jobs
+@app.delete(
+    "/api/v1/print",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Clear all print jobs from the printer queue."
+)
+async def api_print_clear(session: Session = Depends(auth)) -> OK:
+    db = session.mongodb_connection
+
+    PrinterQueueItem.clear_queue(db)
+
+    return OK(ok=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
