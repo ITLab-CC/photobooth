@@ -16,6 +16,7 @@ from starlette.datastructures import Headers
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
+import qrcode
 
 from background import Background
 from gallery import Gallery
@@ -38,6 +39,11 @@ REDIS_URL = "redis://localhost:6379"
 # TODO: Replace with .env variables!!!
 MONGODB_HOST = "localhost:27017"
 MONGODB_DB_NAME = "photo_booth"
+
+# ---------------------------
+# URL
+# ---------------------------
+URL="http://localhost:8000"
 
 # Setup the DB with all collections, roles and users
 setup() # TODO: Remove this in production!!!
@@ -137,7 +143,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     # TODO: Replace with .env variables!!!
-    allow_origins=["http://localhost:5173"],  # Allowed Origins from the frontend
+    allow_origins=[URL],  # Allowed Origins from the frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -523,6 +529,29 @@ async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest) -> 
         raise HTTPException(status_code=500, detail=str(e))
 
     return ResponseImage(image_id=img._id, gallery=img.gallery)
+
+# get qr-code url to gallery
+@app.get(
+    "/api/v1/gallery/{gallery_id}/qr",
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a QR code URL that links to the specified gallery."
+)
+async def api_gallery_qr(gallery_id: str) -> StreamingResponse:
+    # find gallery
+    db = System["photo_booth"]
+
+    g = Gallery.db_find(db, gallery_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    img_url = f"{URL}/gallery/?id={gallery_id}"
+    qr_img = qrcode.make(img_url)
+
+    img_bytes_io = io.BytesIO()
+    qr_img.save(img_bytes_io, format="PNG")
+    img_bytes_io.seek(0)
+
+    return StreamingResponse(content=img_bytes_io, media_type="image/png")
 
 class GalleryImageListResponse(BaseModel):
     images: List[ResponseImage]
