@@ -1,3 +1,4 @@
 requests
 pillow
 pywin32
+dotenv

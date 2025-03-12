@@ -7,12 +7,16 @@ from PIL import Image, ImageWin
 from dotenv import load_dotenv
 import os
 
-# Load environment variables from .env file
-load_dotenv()
+# Get the full path of the .env file in the same directory as the script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(script_dir, ".env")
 
-BASE_URL = os.getenv("BASE_URL")
-USERNAME = os.getenv("USERNAME")
-PASSWORD = os.getenv("PASSWORD")
+# Load environment variables from the specified .env file
+load_dotenv(env_path)
+
+BASE_URL = os.getenv("PHOTO_BOOTH_BASE_URL")
+USERNAME = os.getenv("PHOTO_BOOTH_USERNAME")
+PASSWORD = os.getenv("PHOTO_BOOTH_PASSWORD")
 
 def get_token():
     while True:
