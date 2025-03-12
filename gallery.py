@@ -195,7 +195,7 @@ class Gallery:
 
 
     @classmethod
-    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer", "old_img_eraser"])
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer"])
     def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['Gallery']:
         """
         Find a Gallery object in the database by _id.
@@ -261,7 +261,7 @@ class Gallery:
         collection.delete_one({"_id": self._id})
 
     @classmethod
-    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer"])
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "old_img_eraser"])
     def db_find_all(cls, db_c: MongoDBConnection) -> List['Gallery']:
         """
         Retrieve all Gallery objects from the database.

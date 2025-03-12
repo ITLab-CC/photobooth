@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 import io
@@ -17,6 +18,7 @@ import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 import qrcode
+import uvicorn
 
 from background import Background
 from gallery import Gallery
@@ -88,6 +90,28 @@ System: Dict[str, MongoDBConnection] = {
 # Values
 # ---------------------------
 GALLERY_EXPIRATION = timedelta(days=7)
+
+
+# ---------------------------
+# Old img eraser
+# ---------------------------
+async def old_img_eraser() -> None:
+    while True:
+        try:
+            # check every minute if there are galleries that are expired
+            await asyncio.sleep(5)  # adjusted to 60 seconds as per comment
+            db = System["old_img_eraser"]
+            galleries = Gallery.db_find_all(db)
+
+            for g in galleries:
+                if g.expiration_time.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+                    # delete all images
+                    IMG.db_delete_by_gallery(db, g._id)
+                    # delete gallery
+                    g.db_delete(db)
+                    print(f"Deleted gallery {g._id}")
+        except Exception as e:
+            print(f"Error in old_img_eraser: {e}")
 
 
 # ---------------------------
@@ -1002,7 +1026,15 @@ async def serve_react_app(full_path: str) -> FileResponse:
 # ---------------------------
 # Main
 # ---------------------------
+async def main() -> None:
+    # Configure the server (this does not call asyncio.run() internally)
+    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    server = uvicorn.Server(config)
+    # Run the server and the old_img_eraser concurrently.
+    await asyncio.gather(
+        server.serve(),
+        old_img_eraser()
+    )
+
 if __name__ == "__main__":
-    import uvicorn
-    print("Starting server...")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    asyncio.run(main())
