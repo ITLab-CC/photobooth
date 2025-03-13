@@ -16,7 +16,7 @@ from printer import PrinterQueueItem
 
 
 def generate_password(length=32):
-    chars = string.ascii_letters + string.digits + "!#$%&'*+,-./:;<=>?@[\\]^_`|~"
+    chars = string.ascii_letters + string.digits + "!#$%&'*+,-./:;<=>?@^_`|~"
     return ''.join(secrets.choice(chars) for _ in range(length))
 
 
