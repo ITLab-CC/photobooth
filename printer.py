@@ -107,7 +107,7 @@ class PrinterQueueItem:
         collection.delete_one({"_id": self._id})
     
     @classmethod
-    @mongodb_permissions(collection=PRINTER_QUEUE_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss"])
+    @mongodb_permissions(collection=PRINTER_QUEUE_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "img_viewer"])
     def db_delete_by_img_id(cls, db_c: MongoDBConnection, img_id: str) -> None:
         collection: Collection = db_c.db[cls.COLLECTION_NAME]
         collection.delete_many({"img_id": img_id})

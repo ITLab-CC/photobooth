@@ -719,6 +719,39 @@ async def api_gallery_delete(gallery_id: str, session: Session = Depends(auth(["
     return OK(ok=True)
 
 
+# remove gallery with pin and all img in it
+@app.delete(
+    "/api/v1/gallery/{gallery_id}/pin/{pin}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Remove a gallery and all of its associated images using a valid pin."
+)
+async def api_gallery_delete_with_pin(gallery_id: str, pin: str) -> OK:
+    db = System["img_viewer"]
+
+    g = Gallery.db_find(db, gallery_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    
+    # validate pin
+    if not g.validate_pin(pin):
+        raise HTTPException(status_code=403, detail="Invalid pin")
+
+    # delete all images
+    IMG.db_delete_by_gallery(db, gallery_id)
+
+    # delete all print jobs
+    for img_id in g.images:
+        try:
+            PrinterQueueItem.db_delete_by_img_id(db, img_id)
+        except Exception as e:
+            print(f"Error deleting print job: {e}")
+    
+    g.db_delete(db)
+
+    return OK(ok=True)
+
+
 # ---------------------------
 # Image Endpoints
 # ---------------------------

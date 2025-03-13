@@ -228,7 +228,7 @@ class IMG:
         return [cls._db_load(doc) for doc in docs]
     
     @classmethod
-    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser"])
+    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser", "img_viewer"])
     def db_delete_by_gallery(cls, db_c: MongoDBConnection, gallery_id: str) -> None:
         """
         Delete all IMG objects belonging to a specific gallery from the database.
