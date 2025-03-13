@@ -6,6 +6,8 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGODB_ADMIN_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_ADMIN_PASSWORD}
+    ports:
+      - "27017:27017"
     volumes:
       - ./data/mongodb:/data/db
     networks:
@@ -15,30 +17,13 @@ services:
     image: redis:latest
     container_name: redis
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - ./data/redis:/data
     networks:
       - default
-
-  backend:
-    build: .
-    container_name: backend
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
-    depends_on:
-      - mongodb
-      - redis
-    env_file:
-      - .env
-    networks:
-      - default
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
 
 networks:
   default:

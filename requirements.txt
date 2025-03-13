@@ -11,3 +11,4 @@ bcrypt
 redis
 qrcode
 types-qrcode
+dotenv

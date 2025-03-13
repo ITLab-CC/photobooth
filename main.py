@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+import time
 import io
 from math import ceil
 import os
@@ -13,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.datastructures import Headers
-from dotenv import load_dotenv
 
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
@@ -30,7 +30,6 @@ from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
 
-load_dotenv()
 check_dotenv()
 # ---------------------------
 # Redis Connection
@@ -50,27 +49,33 @@ MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME") # type: ignore
 URL: str = os.getenv("BASE_URL") # type: ignore
 
 # Create alle System Users
-# TODO: Replace with .env variables!!!
-System: Dict[str, MongoDBConnection] = {
-    "login_manager": MongoDBConnection(
-        mongo_uri=MONGODB_HOST,
-        user=os.getenv("LOGIN_MANAGER"), # type: ignore
-        password=os.getenv("LOGIN_MANAGER_PASSWORD"), # type: ignore
-        db_name=MONGODB_DB_NAME
-    ),
-    "img_viewer": MongoDBConnection(
-        mongo_uri=MONGODB_HOST,
-        user=os.getenv("IMG_VIEWER"), # type: ignore
-        password=os.getenv("IMG_VIEWER_PASSWORD"), # type: ignore
-        db_name=MONGODB_DB_NAME
-    ),
-    "old_img_eraser": MongoDBConnection(
-        mongo_uri=MONGODB_HOST,
-        user=os.getenv("OLD_IMG_ERASER"), # type: ignore
-        password=os.getenv("OLD_IMG_ERASER_PASSWORD"), # type: ignore
-        db_name=MONGODB_DB_NAME
-    ),
-}
+System: Dict[str, MongoDBConnection] = {}
+while True:
+    try:
+        System: Dict[str, MongoDBConnection] = {
+            "login_manager": MongoDBConnection(
+                mongo_uri=MONGODB_HOST,
+                user=os.getenv("LOGIN_MANAGER"), # type: ignore
+                password=os.getenv("LOGIN_MANAGER_PASSWORD"), # type: ignore
+                db_name=MONGODB_DB_NAME
+            ),
+            "img_viewer": MongoDBConnection(
+                mongo_uri=MONGODB_HOST,
+                user=os.getenv("IMG_VIEWER"), # type: ignore
+                password=os.getenv("IMG_VIEWER_PASSWORD"), # type: ignore
+                db_name=MONGODB_DB_NAME
+            ),
+            "old_img_eraser": MongoDBConnection(
+                mongo_uri=MONGODB_HOST,
+                user=os.getenv("OLD_IMG_ERASER"), # type: ignore
+                password=os.getenv("OLD_IMG_ERASER_PASSWORD"), # type: ignore
+                db_name=MONGODB_DB_NAME
+            ),
+        }
+        break
+    except Exception as e:
+        print(f"Error connecting to MongoDB: {e}. Retrying in 5 seconds.")
+        time.sleep(5)
 
 
 # ---------------------------
@@ -154,7 +159,6 @@ app = FastAPI(
 # ---------------------------
 app.add_middleware(
     CORSMiddleware,
-    # TODO: Replace with .env variables!!!
     allow_origins=[URL],  # Allowed Origins from the frontend
     allow_credentials=True,
     allow_methods=["*"],

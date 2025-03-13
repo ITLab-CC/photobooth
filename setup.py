@@ -16,7 +16,7 @@ from printer import PrinterQueueItem
 
 
 def generate_password(length=32):
-    chars = string.ascii_letters + string.digits + "!#$%&'*+,-./:;<=>?@^_`|~"
+    chars = string.ascii_letters + string.digits + "!#%&*+,-./:;<=>?@^_|~"
     return ''.join(secrets.choice(chars) for _ in range(length))
 
 
@@ -149,12 +149,29 @@ def create_default_env():
     img_viewer_password = generate_password()
     old_img_eraser_password = generate_password()
 
-    with open('.env', 'w') as env_file:
+    db_admin_password = generate_password()
+
+    with open('.env-dev', 'w') as env_file:
         env_file.write('BASE_URL="http://localhost:8000"\n')
         env_file.write('REDIS_URL="redis://localhost:6379"\n')
         env_file.write('MONGODB_URL="localhost:27017"\n')
         env_file.write('MONGODB_ADMIN_USER="root"\n')
-        env_file.write('MONGODB_ADMIN_PASSWORD="example"\n')
+        env_file.write(f'MONGODB_ADMIN_PASSWORD="{db_admin_password}"\n')
+        env_file.write('MONGODB_DB_NAME="photo_booth"\n')
+        env_file.write('LOGIN_MANAGER="login_manager"\n')
+        env_file.write(f'LOGIN_MANAGER_PASSWORD="{login_manager_password}"\n')
+        env_file.write('IMG_VIEWER="img_viewer"\n')
+        env_file.write(f'IMG_VIEWER_PASSWORD="{img_viewer_password}"\n')
+        env_file.write('OLD_IMG_ERASER="old_img_eraser"\n')
+        env_file.write(f'OLD_IMG_ERASER_PASSWORD="{old_img_eraser_password}"\n')
+        env_file.write(f'GALLERY_EXPIRATION_SECONDS="{60 * 60 * 24 * 7}"\n')  # 1 week
+    
+    with  open('.env', 'w') as env_file:
+        env_file.write('BASE_URL="http://localhost:8000"\n')
+        env_file.write('REDIS_URL="redis://redis:6379"\n')
+        env_file.write('MONGODB_URL="mongodb:27017"\n')
+        env_file.write('MONGODB_ADMIN_USER="root"\n')
+        env_file.write(f'MONGODB_ADMIN_PASSWORD="{db_admin_password}"\n')
         env_file.write('MONGODB_DB_NAME="photo_booth"\n')
         env_file.write('LOGIN_MANAGER="login_manager"\n')
         env_file.write(f'LOGIN_MANAGER_PASSWORD="{login_manager_password}"\n')
@@ -193,27 +210,39 @@ def post_create_default_env(base_url: str, user: str = "printer", password: Opti
         env_file.write(f'PHOTO_BOOTH_PASSWORD="{printer_password}"\n')
 
 def main():
-    # Use argparse to choose the mode (setup, create-admin, create-photo-booth, create-printer)
+    # Argument parser
     parser = argparse.ArgumentParser(description="Setup script for MongoDB users and roles.")
+
+    # Optional argument for skipping .env creation
+    parser.add_argument("--skip-env", action="store_true", help="Skip the .env file creation.")
+
+    # Mutually exclusive group for main actions
     group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--create-env", action="store_true", help="Create a default .env file.")
     group.add_argument("--setup", action="store_true", help="Clean everything and setup everything.")
     group.add_argument("--create-admin", action="store_true", help="Create an admin account (boss).")
     group.add_argument("--create-photo-booth", action="store_true", help="Create a photo_booth account.")
     group.add_argument("--create-printer", action="store_true", help="Create a printer account.")
+
+    # Parse arguments
     args = parser.parse_args()
 
-    # First, check if a .env file exists. If not, create a default one and ask the user to review it.
-    if not os.path.exists(".env"):
-        print("No .env file found. Creating default .env file...")
-        create_default_env()
-        print("Default .env file created.")
-        input("Please review the .env file (and print-service/.env if needed), then press Enter to continue...")
+    if not args.skip_env:
+        # First, check if a .env file exists. If not, create a default one and ask the user to review it.
+        if not os.path.exists(".env") or os.path.exists(".env-dev") or args.create_env:
+            print("No .env file found. Creating default .env file...")
+            create_default_env()
+            print("Default .env file created.")
+            if args.create_env:
+                exit(0)
 
-    # Load environment variables from the .env file
-    load_dotenv()
+            input("Please review the .env file (and print-service/.env if needed), then press Enter to continue...")
 
-    # check if .env has all the necessary values
-    check_dotenv(True)
+        # Load environment variables from the .env file
+        load_dotenv()
+
+        # check if .env has all the necessary values
+        check_dotenv(True)
 
     # Retrieve configuration values
     db_url = os.getenv("MONGODB_URL", "localhost:27017")
