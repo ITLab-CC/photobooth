@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, List, Set, Tuple, Union, Callable
 
 from pymongo import MongoClient
 from pymongo.database import Database
+import urllib.parse
 
 class MongoDBPermissions(enum.Enum):
     # Read and Write Actions
@@ -184,6 +185,10 @@ class MongoDBConnection:
                     db_name: str,
                     admin: bool = False
                 ) -> None:
+        # escape username and password
+        user = urllib.parse.quote_plus(user)
+        password = urllib.parse.quote_plus(password)
+
         self.mongo_uri = mongo_uri
         self.user = user
         self.password = password

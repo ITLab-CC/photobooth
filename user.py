@@ -112,6 +112,9 @@ class User:
                 validationAction=schema["validationAction"]
             )
 
+            #create db.collection.createIndex({ "username": 1 }, { unique: true })
+            db_connection.db[cls.COLLECTION_NAME].create_index([("username", 1)], unique=True)
+
     @classmethod
     @mongodb_permissions(collection=USERS_COLLECTION, actions=[MongoDBPermissions.DROP_COLLECTION], roles=["boss"])
     def db_drop_collection(cls, db_connection: MongoDBConnection) -> None:

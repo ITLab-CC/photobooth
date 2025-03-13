@@ -252,7 +252,7 @@ class Gallery:
         collection = db_c.db[self.COLLECTION_NAME]
         collection.update_one({"_id": self._id}, {"$set": {"images": self.images}})
 
-    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser"])
+    @mongodb_permissions(collection=GALLERY_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss", "old_img_eraser", "img_viewer"])
     def db_delete(self, db_c: MongoDBConnection) -> None:
         """
         Delete the Gallery object from the database.
