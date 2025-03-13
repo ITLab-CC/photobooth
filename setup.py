@@ -15,12 +15,12 @@ from session import SessionManager
 from printer import PrinterQueueItem
 
 
-def generate_password(length=32):
+def generate_password(length: int = 32) -> str:
     chars = string.ascii_letters + string.digits + "!#%&*+,-./:;<=>?@^_|~"
     return ''.join(secrets.choice(chars) for _ in range(length))
 
 
-def connect_db(db_url, db_root, db_pw, db_name):
+def connect_db(db_url: str, db_root: str, db_pw: str, db_name: str) -> MongoDBConnection:
     return MongoDBConnection(
         mongo_uri=db_url,
         user=db_root,
@@ -30,7 +30,7 @@ def connect_db(db_url, db_root, db_pw, db_name):
     )
 
 
-def create_user_account(admin_db: MongoDBConnection, username: str, password: Optional[str], roles: list[str], show_pw=False) -> None:
+def create_user_account(admin_db: MongoDBConnection, username: str, password: Optional[str], roles: list[str], show_pw: bool = False) -> None:
     password_new: str = ""
     if not password:
         password_new = generate_password()
@@ -63,7 +63,7 @@ def create_user_account(admin_db: MongoDBConnection, username: str, password: Op
     print("--------------------------------------")
 
 
-def setup(db_url, db_root, db_pw, db_name) -> None:
+def setup(db_url: str, db_root: str, db_pw: str, db_name: str) -> None:
     # Get account settings from environment (or use defaults if missing)
     LOGIN_MANAGER = os.getenv("LOGIN_MANAGER", "login_manager")
     LOGIN_MANAGER_PASSWORD = os.getenv("LOGIN_MANAGER_PASSWORD", generate_password())
@@ -100,7 +100,7 @@ def setup(db_url, db_root, db_pw, db_name) -> None:
     admin_db.close()
 
 
-def create_admin(db_url, db_root, db_pw, db_name, username=None, password=None, generate_pw=False) -> None:
+def create_admin(db_url: str, db_root: str, db_pw: str, db_name: str, username: Optional[str] = None, password: Optional[str] = None, generate_pw: bool = False) -> None:
     # Connect to the database
     admin_db = connect_db(db_url, db_root, db_pw, db_name)
 
@@ -113,7 +113,7 @@ def create_admin(db_url, db_root, db_pw, db_name, username=None, password=None, 
     create_user_account(admin_db, username, password, ["boss"])
 
 
-def create_photo_booth(db_url, db_root, db_pw, db_name, username="photo_booth", password=None, generate_pw=False) -> None:
+def create_photo_booth(db_url: str, db_root: str, db_pw: str, db_name: str, username: str = "photo_booth", password: Optional[str] = None, generate_pw: bool = False) -> None:
     # Connect to the database
     admin_db = connect_db(db_url, db_root, db_pw, db_name)
 
@@ -126,7 +126,7 @@ def create_photo_booth(db_url, db_root, db_pw, db_name, username="photo_booth", 
     create_user_account(admin_db, username, password, ["photo_booth"])
 
 
-def create_printer(db_url, db_root, db_pw, db_name, username="printer", password=None, generate_pw=False, show_pw=False) -> None:
+def create_printer(db_url: str, db_root: str, db_pw: str, db_name: str, username: str = "printer", password: Optional[str] = None, generate_pw: bool = False, show_pw: bool = False) -> None:
     # Connect to the database
     admin_db = connect_db(db_url, db_root, db_pw, db_name)
 
@@ -139,7 +139,7 @@ def create_printer(db_url, db_root, db_pw, db_name, username="printer", password
     create_user_account(admin_db, username, password, ["printer"], show_pw=show_pw)
 
 
-def create_default_env():
+def create_default_env() -> None:
     """
     Creates a default .env file with the necessary configuration values
     and also creates a default .env for the print service.
@@ -181,7 +181,7 @@ def create_default_env():
         env_file.write(f'OLD_IMG_ERASER_PASSWORD="{old_img_eraser_password}"\n')
         env_file.write(f'GALLERY_EXPIRATION_SECONDS="{60 * 60 * 24 * 7}"\n')  # 1 week
 
-def check_dotenv(setup=False):
+def check_dotenv(setup: bool = False) -> None:
     if setup:
         required_keys = ["BASE_URL", "REDIS_URL", "MONGODB_URL", "MONGODB_ADMIN_USER", "MONGODB_ADMIN_PASSWORD",
                         "MONGODB_DB_NAME"]
@@ -196,7 +196,7 @@ def check_dotenv(setup=False):
         print("Please add the missing keys to the .env file or delete the file and run the script again.")
         exit(1)
 
-def post_create_default_env(base_url: str, user: str = "printer", password: Optional[str] = None):
+def post_create_default_env(base_url: str, user: str = "printer", password: Optional[str] = None) -> None:
     # Create default print-service .env file
     if not os.path.exists("print-service"):
         os.makedirs("print-service")
@@ -209,7 +209,7 @@ def post_create_default_env(base_url: str, user: str = "printer", password: Opti
         env_file.write(f'PHOTO_BOOTH="{user}"\n')
         env_file.write(f'PHOTO_BOOTH_PASSWORD="{printer_password}"\n')
 
-def main():
+def main() -> None:
     # Argument parser
     parser = argparse.ArgumentParser(description="Setup script for MongoDB users and roles.")
 

@@ -5,7 +5,7 @@ import time
 import io
 from math import ceil
 import os
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -52,7 +52,7 @@ URL: str = os.getenv("BASE_URL") # type: ignore
 System: Dict[str, MongoDBConnection] = {}
 while True:
     try:
-        System: Dict[str, MongoDBConnection] = {
+        System = {
             "login_manager": MongoDBConnection(
                 mongo_uri=MONGODB_HOST,
                 user=os.getenv("LOGIN_MANAGER"), # type: ignore
@@ -174,7 +174,7 @@ security = HTTPBearer()
 SM = SessionManager()
 
 # get session from token
-def auth(required_roles: Optional[List[str]] = None):
+def auth(required_roles: Optional[List[str]] = None) -> Callable[[HTTPAuthorizationCredentials], Awaitable[Session]]:
     async def new_auth(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Session:
         token = credentials.credentials
         session = await SM.get_session(token)
