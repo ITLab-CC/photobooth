@@ -158,3 +158,9 @@ clean: stop
 	@if [ -f "print-service/.env" ]; then \
 		sudo rm print-service/.env; \
 	fi
+	@if [ -d ".venv" ]; then \
+		rm -rf .venv; \
+	fi
+	@if [ -d "frontend/dist" ]; then \
+		rm -rf frontend/dist; \
+	fi
