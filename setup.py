@@ -16,7 +16,7 @@ from printer import PrinterQueueItem
 
 
 def generate_password(length: int = 32) -> str:
-    chars = string.ascii_letters + string.digits + "!#%&*+,-./:;<=>?@^_|~"
+    chars = string.ascii_letters + string.digits + "!*+,-./_~"
     return ''.join(secrets.choice(chars) for _ in range(length))
 
 
@@ -30,7 +30,7 @@ def connect_db(db_url: str, db_root: str, db_pw: str, db_name: str) -> MongoDBCo
     )
 
 
-def create_user_account(admin_db: MongoDBConnection, username: str, password: Optional[str], roles: list[str], show_pw: bool = False) -> None:
+def create_user_account(admin_db: MongoDBConnection, username: str, password: Optional[str], roles: list[str], show_pw: bool = False, override: bool = False) -> None:
     password_new: str = ""
     if not password:
         password_new = generate_password()
@@ -38,9 +38,14 @@ def create_user_account(admin_db: MongoDBConnection, username: str, password: Op
         password_new = password
 
     # check if the user already exists
-    if User.db_find_by_username(admin_db, username):
-        print(f"ERROR: User {username} already exists.")
-        exit(1)
+    user_found = User.db_find_by_username(admin_db, username)
+    if user_found:
+        if not override:
+            print(f"ERROR: User {username} already exists.")
+            exit(1)
+        # delete the user
+        user_found.db_delete(admin_db)
+        print(f"User {username} already exists. Deleting the user and creating a new one.")
 
     admin_db.create_user(username, password_new, roles)
     password_hash, password_salt = SessionManager.hash_password(password_new)
@@ -100,7 +105,7 @@ def setup(db_url: str, db_root: str, db_pw: str, db_name: str) -> None:
     admin_db.close()
 
 
-def create_admin(db_url: str, db_root: str, db_pw: str, db_name: str, username: Optional[str] = None, password: Optional[str] = None, generate_pw: bool = False) -> None:
+def create_admin(db_url: str, db_root: str, db_pw: str, db_name: str, username: Optional[str] = None, password: Optional[str] = None, generate_pw: bool = False, show_pw: bool = False) -> None:
     # Connect to the database
     admin_db = connect_db(db_url, db_root, db_pw, db_name)
 
@@ -110,10 +115,10 @@ def create_admin(db_url: str, db_root: str, db_pw: str, db_name: str, username: 
         password = input("Enter the password for the admin account (default: random): ") or None
 
     # Create the various user accounts
-    create_user_account(admin_db, username, password, ["boss"])
+    create_user_account(admin_db, username, password, ["boss"], show_pw=show_pw)
 
 
-def create_photo_booth(db_url: str, db_root: str, db_pw: str, db_name: str, username: str = "photo_booth", password: Optional[str] = None, generate_pw: bool = False) -> None:
+def create_photo_booth(db_url: str, db_root: str, db_pw: str, db_name: str, username: str = "photo_booth", password: Optional[str] = None, generate_pw: bool = False, show_pw: bool = False) -> None:
     # Connect to the database
     admin_db = connect_db(db_url, db_root, db_pw, db_name)
 
@@ -123,7 +128,7 @@ def create_photo_booth(db_url: str, db_root: str, db_pw: str, db_name: str, user
         password = input("Enter the password for the photo_booth account (default: random): ") or None
 
     # Create the various user accounts
-    create_user_account(admin_db, username, password, ["photo_booth"])
+    create_user_account(admin_db, username, password, ["photo_booth"], override=True, show_pw=show_pw)
 
 
 def create_printer(db_url: str, db_root: str, db_pw: str, db_name: str, username: str = "printer", password: Optional[str] = None, generate_pw: bool = False, show_pw: bool = False) -> None:
@@ -136,7 +141,7 @@ def create_printer(db_url: str, db_root: str, db_pw: str, db_name: str, username
         password = input("Enter the password for the printer account (default: random): ") or None
 
     # Create the various user accounts
-    create_user_account(admin_db, username, password, ["printer"], show_pw=show_pw)
+    create_user_account(admin_db, username, password, ["printer"], show_pw=show_pw, override=True)
 
 
 def create_default_env() -> None:
@@ -152,34 +157,34 @@ def create_default_env() -> None:
     db_admin_password = generate_password()
 
     with open('.env-dev', 'w') as env_file:
-        env_file.write('BASE_URL="http://localhost:8000"\n')
-        env_file.write('REDIS_URL="redis://localhost:6379"\n')
-        env_file.write('MONGODB_URL="localhost:27017"\n')
-        env_file.write('MONGODB_ADMIN_USER="root"\n')
-        env_file.write(f'MONGODB_ADMIN_PASSWORD="{db_admin_password}"\n')
-        env_file.write('MONGODB_DB_NAME="photo_booth"\n')
-        env_file.write('LOGIN_MANAGER="login_manager"\n')
-        env_file.write(f'LOGIN_MANAGER_PASSWORD="{login_manager_password}"\n')
-        env_file.write('IMG_VIEWER="img_viewer"\n')
-        env_file.write(f'IMG_VIEWER_PASSWORD="{img_viewer_password}"\n')
-        env_file.write('OLD_IMG_ERASER="old_img_eraser"\n')
-        env_file.write(f'OLD_IMG_ERASER_PASSWORD="{old_img_eraser_password}"\n')
-        env_file.write(f'GALLERY_EXPIRATION_SECONDS="{60 * 60 * 24 * 7}"\n')  # 1 week
+        env_file.write('BASE_URL=http://localhost:8000\n')
+        env_file.write('REDIS_URL=redis://localhost:6379\n')
+        env_file.write('MONGODB_URL=localhost:27017\n')
+        env_file.write('MONGODB_ADMIN_USER=root\n')
+        env_file.write(f'MONGODB_ADMIN_PASSWORD={db_admin_password}\n')
+        env_file.write('MONGODB_DB_NAME=photo_booth\n')
+        env_file.write('LOGIN_MANAGER=login_manager\n')
+        env_file.write(f'LOGIN_MANAGER_PASSWORD={login_manager_password}\n')
+        env_file.write('IMG_VIEWER=img_viewer\n')
+        env_file.write(f'IMG_VIEWER_PASSWORD={img_viewer_password}\n')
+        env_file.write('OLD_IMG_ERASER=old_img_eraser\n')
+        env_file.write(f'OLD_IMG_ERASER_PASSWORD={old_img_eraser_password}\n')
+        env_file.write(f'GALLERY_EXPIRATION_SECONDS={60 * 60 * 24 * 7}\n')  # 1 week
     
     with  open('.env', 'w') as env_file:
-        env_file.write('BASE_URL="http://localhost:8000"\n')
-        env_file.write('REDIS_URL="redis://redis:6379"\n')
-        env_file.write('MONGODB_URL="mongodb:27017"\n')
-        env_file.write('MONGODB_ADMIN_USER="root"\n')
-        env_file.write(f'MONGODB_ADMIN_PASSWORD="{db_admin_password}"\n')
-        env_file.write('MONGODB_DB_NAME="photo_booth"\n')
-        env_file.write('LOGIN_MANAGER="login_manager"\n')
-        env_file.write(f'LOGIN_MANAGER_PASSWORD="{login_manager_password}"\n')
-        env_file.write('IMG_VIEWER="img_viewer"\n')
-        env_file.write(f'IMG_VIEWER_PASSWORD="{img_viewer_password}"\n')
-        env_file.write('OLD_IMG_ERASER="old_img_eraser"\n')
-        env_file.write(f'OLD_IMG_ERASER_PASSWORD="{old_img_eraser_password}"\n')
-        env_file.write(f'GALLERY_EXPIRATION_SECONDS="{60 * 60 * 24 * 7}"\n')  # 1 week
+        env_file.write('BASE_URL=http://localhost:8000\n')
+        env_file.write('REDIS_URL=redis://redis:6379\n')
+        env_file.write('MONGODB_URL=mongodb:27017\n')
+        env_file.write('MONGODB_ADMIN_USER=root\n')
+        env_file.write(f'MONGODB_ADMIN_PASSWORD={db_admin_password}\n')
+        env_file.write('MONGODB_DB_NAME=photo_booth\n')
+        env_file.write('LOGIN_MANAGER=login_manager\n')
+        env_file.write(f'LOGIN_MANAGER_PASSWORD={login_manager_password}\n')
+        env_file.write('IMG_VIEWER=img_viewer\n')
+        env_file.write(f'IMG_VIEWER_PASSWORD={img_viewer_password}\n')
+        env_file.write('OLD_IMG_ERASER=old_img_eraser\n')
+        env_file.write(f'OLD_IMG_ERASER_PASSWORD={old_img_eraser_password}\n')
+        env_file.write(f'GALLERY_EXPIRATION_SECONDS={60 * 60 * 24 * 7}\n')  # 1 week
 
 def check_dotenv(setup: bool = False) -> None:
     if setup:
@@ -229,7 +234,7 @@ def main() -> None:
 
     if not args.skip_env:
         # First, check if a .env file exists. If not, create a default one and ask the user to review it.
-        if not os.path.exists(".env") or os.path.exists(".env-dev") or args.create_env:
+        if not os.path.exists(".env") or not os.path.exists(".env-dev") or args.create_env:
             print("No .env file found. Creating default .env file...")
             create_default_env()
             print("Default .env file created.")
@@ -257,7 +262,7 @@ def main() -> None:
         create_admin(db_url, db_root, db_pw, db_name, "boss", None, True)
         create_photo_booth(db_url, db_root, db_pw, db_name, "photo_booth", None, True)
         printer_pw = generate_password()
-        create_printer(db_url, db_root, db_pw, db_name, "printer", printer_pw, False, True)
+        create_printer(db_url, db_root, db_pw, db_name, "printer", printer_pw, True, True)
 
         # Create the default .env file for the print service
         post_create_default_env(base_url, "printer", printer_pw)

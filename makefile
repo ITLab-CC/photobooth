@@ -4,11 +4,14 @@ help: check-not-root
 	@echo "Usage: make [option]"
 	@echo ""
 	@echo "Options:"
-	@echo "  run              Run all services in docker"
-	@echo "  run-dev          Run all services for development"
-	@echo "  stop             Stop all services"
-	@echo "  clean			  Remove all generated files, including .env, logs, data, and .venv"
-	@echo "  help             Show this help message"
+	@echo "  run                Run all services in docker"
+	@echo "  run-dev            Run all services for development"
+	@echo "  stop               Stop all services"
+	@echo "  clean			    Remove all generated files, including .env, logs, data, and .venv"
+	@echo "  create-admin	    Create an admin user"
+	@echo "  reset-photo-booth  Reset the photo booth password"
+	@echo "  reset-printer	    Reset the printer password"
+	@echo "  help               Show this help message"
 
 check-not-root:
 	@if [ "$$(id -u)" = "0" ]; then \
@@ -60,6 +63,8 @@ generate-env-files: check-not-root
 		echo "Generating .env file..."; \
 		bash -c "source .venv/bin/activate && python3 setup.py --create-env"; \
 	fi
+	@[ -f .env-dev ] || touch .env-dev
+	@[ -f print-service/.env ] || touch print-service/.env
 
 DATA_EXISTS=$(shell test -d data && echo yes || echo no)
 CURRENT_FOLDER=$(shell pwd)
@@ -71,7 +76,12 @@ run: check-not-root install build generate-env-files check-docker-rights stop
 	@if [ "$(DATA_EXISTS)" = "no" ]; then \
 		echo "Running setup script..."; \
 		docker build -t my-python-setup -f dockerfile-setup . && \
-		docker run --rm -v "$(CURRENT_FOLDER)/.env:/app/.env" --network photo_booth_network my-python-setup; \
+		docker run --rm \
+		-v "$(CURRENT_FOLDER)/.env:/app/.env" \
+		-v "$(CURRENT_FOLDER)/.env-dev:/app/.env-dev" \
+		-v "$(CURRENT_FOLDER)/print-service/.env:/app/print-service/.env" \
+		--network photo_booth_network \
+		my-python-setup; \
 	fi
 	@screen -dmS backend bash -c "docker logs -f backend 2>&1 | tee logs/backend.log"
 
@@ -96,6 +106,30 @@ run-dev: check-not-root install build generate-env-files check-docker-rights sto
 	@echo "The logs are available in the logs/ directory."
 	@echo "------------------------------------------------------"
 
+create-admin:
+	@if [ -z "$$(docker ps -q -f name=backend)" ]; then \
+		bash -c "source .venv/bin/activate && set -a && source .env-dev && set +a && python3 setup.py --create-admin"; \
+	else \
+		docker build -t my-python-setup -f dockerfile-setup . && \
+		docker run --rm -it --env-file .env --network photo_booth_network my-python-setup python setup.py --create-admin --skip-env; \
+	fi
+
+reset-photo-booth:
+	@if [ -z "$$(docker ps -q -f name=backend)" ]; then \
+		bash -c "source .venv/bin/activate && set -a && source .env-dev && set +a && python3 setup.py --create-photo-booth"; \
+	else \
+		docker build -t my-python-setup -f dockerfile-setup . && \
+		docker run --rm -it --env-file .env --network photo_booth_network my-python-setup python setup.py --create-photo-booth --skip-env; \
+	fi
+
+reset-printer:
+	@if [ -z "$$(docker ps -q -f name=backend)" ]; then \
+		bash -c "source .venv/bin/activate && set -a && source .env-dev && set +a && python3 setup.py --create-printer"; \
+	else \
+		docker build -t my-python-setup -f dockerfile-setup . && \
+		docker run --rm -it --env-file .env --network photo_booth_network my-python-setup python setup.py --create-printer --skip-env; \
+	fi
+
 stop: check-not-root check-docker-rights stop-dev
 	@docker compose down
 
@@ -116,17 +150,11 @@ clean: stop
 		sudo rm -rf data; \
 	fi
 	@if [ -f ".env" ]; then \
-		rm .env; \
+		sudo rm .env; \
 	fi
 	@if [ -f ".env-dev" ]; then \
-		rm .env-dev; \
+		sudo rm .env-dev; \
 	fi
 	@if [ -f "print-service/.env" ]; then \
-		rm print-service/.env; \
-	fi
-	@if [ -d ".venv" ]; then \
-		rm -rf .venv; \
-	fi
-	@if [ -d "frontend/dist" ]; then \
-		rm -rf frontend/dist; \
+		sudo rm print-service/.env; \
 	fi
