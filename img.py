@@ -17,6 +17,7 @@ IMG_COLLECTION = "images"
 @dataclass
 class IMG:
     img: Image.Image
+    type: str = "orginal" # orginal, new-background, with-frame
     gallery: Optional[str] = None
     _id: str = field(default_factory=lambda: f"IMG-{uuid.uuid4()}")
 
@@ -36,6 +37,7 @@ class IMG:
         return {
             "_id": self._id,  # MongoDB uses _id as the primary key.
             "img": self.img,  # Convert to binary data before saving.
+            "type": self.type,
             "gallery": self.gallery
         }
 
@@ -47,6 +49,7 @@ class IMG:
         return json.dumps({
             "id": self._id,
             "gallery": self.gallery,
+            "type": self.type,
             "img": {
                 "size": self.img.size,
                 "mode": self.img.mode
@@ -74,7 +77,7 @@ class IMG:
             "validator": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": ["_id", "img", "gallery"],
+                    "required": ["_id", "img", "type", "gallery"],
                     "properties": {
                         "_id": {
                             "bsonType": "string",
@@ -83,6 +86,10 @@ class IMG:
                         "img": {
                             "bsonType": "binData",
                             "description": "Image data stored as binary"
+                        },
+                        "type": {
+                            "bsonType": "string",
+                            "description": "Type of image"
                         },
                         "gallery": {
                             "bsonType": ["string", "null"],
@@ -168,8 +175,13 @@ class IMG:
 
         image = cls._bytes_to_image(img_data)
         
+        type_data = data.get("type")
+        if type_data is None:
+            type_data = "original"
+
         return cls(
             img=image,
+            type = type_data,
             gallery=data.get("gallery"),
             _id=str(data.get("_id"))
         )
@@ -183,6 +195,8 @@ class IMG:
         collection: Collection = db_c.db[self.COLLECTION_NAME]
         data = self.to_dict()
         data["img"] = self._image_to_bytes(self.img)
+        data["type"] = self.type
+        data["gallery"] = self.gallery
         collection.insert_one(data)
     
     @classmethod
@@ -206,6 +220,8 @@ class IMG:
         collection: Collection = db_c.db[self.COLLECTION_NAME]
         data = self.to_dict()
         data["img"] = self._image_to_bytes(self.img)
+        data["type"] = self.type
+        data["gallery"] = self.gallery
         collection.update_one({"_id": self._id}, {"$set": data})
     
     @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss"])

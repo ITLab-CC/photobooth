@@ -516,6 +516,7 @@ class GalleryImageRequest(BaseModel):
 
 class ResponseImage(BaseModel):
     image_id: str
+    type: str
     gallery: str
 
 @app.post(
@@ -551,7 +552,7 @@ async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest, ses
         img.db_delete(System["old_img_eraser"])
         raise HTTPException(status_code=500, detail=str(e))
 
-    return ResponseImage(image_id=img._id, gallery=img.gallery)
+    return ResponseImage(image_id=img._id, type=img.type, gallery=img.gallery)
 
 # get qr-code url to gallery
 @app.get(
@@ -603,7 +604,7 @@ async def api_gallery_get_images(gallery_id: str, session: Session = Depends(aut
     for img_id in images:
         img = IMG.db_find(db, img_id)
         if img is not None:
-            return_images.append(ResponseImage(image_id=img._id, gallery=img.gallery))
+            return_images.append(ResponseImage(image_id=img._id, type=img.type, gallery=img.gallery))
 
     return GalleryImageListResponse(images=return_images)
 
@@ -637,7 +638,7 @@ async def api_gallery_get_images_with_pin(gallery_id: str, pin: str) -> GalleryI
     for img_id in images:
         img = IMG.db_find(db, img_id)
         if img is not None:
-            return_images.append(ResponseImage(image_id=img._id, gallery=img.gallery))
+            return_images.append(ResponseImage(image_id=img._id, type=img.type, gallery=img.gallery))
 
     return GalleryImageListResponse(images=return_images)
 
@@ -821,6 +822,7 @@ async def api_gallery_delete_with_pin(gallery_id: str, pin: str) -> OK:
 # Image models
 class ImageResponse(BaseModel):
     image_id: str
+    type: str
     gallery: Optional[str]
 
 class ImageListResponse(BaseModel):
@@ -840,6 +842,7 @@ async def api_image_list(session: Session = Depends(auth(["boss"]))) -> ImageLis
     for img in images:
         return_images.append(ImageResponse(
             image_id=img._id,
+            type=img.type,
             gallery=img.gallery
         ))
 
@@ -970,6 +973,7 @@ class ImageProcessRequest(BaseModel):
 
 class ImageProcessResponse(BaseModel):
     image_id: str
+    type: str
     gallery: Optional[str]
 
 # Load AI model for image processing
@@ -1001,7 +1005,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         raise HTTPException(status_code=500, detail="Error processing image: " + str(e))
     
     # save the processed image
-    processed_img_for_db = IMG(img=processed_img, gallery=img.gallery)
+    processed_img_for_db = IMG(img=processed_img, type="new-background", gallery=img.gallery)
     processed_img_for_db.db_save(db)
 
     # add the processed image to the gallery
@@ -1012,7 +1016,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     g.db_add_image(db, processed_img_for_db._id)
 
     # retrun new img id
-    return ImageProcessResponse(image_id=processed_img_for_db._id, gallery=processed_img_for_db.gallery)
+    return ImageProcessResponse(image_id=processed_img_for_db._id, type=processed_img_for_db.type, gallery=processed_img_for_db.gallery)
 
 
 # ---------------------------
