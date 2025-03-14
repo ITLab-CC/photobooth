@@ -579,14 +579,42 @@ async def api_gallery_qr(gallery_id: str, session: Session = Depends(auth(["boss
 class GalleryImageListResponse(BaseModel):
     images: List[ResponseImage]
 
-# get all images of a gallery
+# get all images of a gallery without pin
+@app.get(
+    "/api/v1/gallery/{gallery_id}/images",
+    response_model=GalleryImageListResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve all images from a gallery without requiring a pin. The gallery must not be expired."
+)
+async def api_gallery_get_images(gallery_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> GalleryImageListResponse:
+    db = session.mongodb_connection
+
+    g = Gallery.db_find(db, gallery_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    # Ensure expiration time is timezone-aware before comparing
+    exp_time = g.expiration_time if g.expiration_time.tzinfo else g.expiration_time.replace(tzinfo=timezone.utc)
+    if exp_time < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Gallery has already expired")
+
+    images = g.images
+    return_images: List[ResponseImage] = []
+    for img_id in images:
+        img = IMG.db_find(db, img_id)
+        if img is not None:
+            return_images.append(ResponseImage(image_id=img._id, gallery=img.gallery))
+
+    return GalleryImageListResponse(images=return_images)
+
+# get all images of a gallery with pin
 @app.get(
     "/api/v1/gallery/{gallery_id}/images/pin/{pin}",
     response_model=GalleryImageListResponse,
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Retrieve all images from a gallery using a valid gallery pin. The gallery must have a pin and not be expired."
 )
-async def api_gallery_get_images(gallery_id: str, pin: str) -> GalleryImageListResponse:
+async def api_gallery_get_images_with_pin(gallery_id: str, pin: str) -> GalleryImageListResponse:
     db = System["img_viewer"]
 
     g = Gallery.db_find(db, gallery_id)
@@ -636,6 +664,37 @@ async def api_gallery_get_image_with_pin(gallery_id: str, image_id: str, pin: st
 
     if not g.validate_pin(pin):
         raise HTTPException(status_code=403, detail="Invalid pin")
+
+    img = IMG.db_find(db, image_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if img.gallery != gallery_id:
+        raise HTTPException(status_code=400, detail="Image does not belong to this gallery")
+
+    img_bytes_io = io.BytesIO()
+    img.img.save(img_bytes_io, format="PNG")
+    img_bytes_io.seek(0)
+
+    return StreamingResponse(content=img_bytes_io, media_type="image/png")
+
+# get image without pin (photo booth)
+@app.get(
+    "/api/v1/gallery/{gallery_id}/image/{image_id}",
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a specific image from a gallery without requiring a pin. Verifies that the image belongs to the specified gallery."
+)
+async def api_gallery_get_image(gallery_id: str, image_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:
+    db = session.mongodb_connection
+
+    g = Gallery.db_find(db, gallery_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    # Ensure expiration time is timezone-aware before comparing
+    exp_time = g.expiration_time if g.expiration_time.tzinfo else g.expiration_time.replace(tzinfo=timezone.utc)
+    if exp_time < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Gallery has already expired")
 
     img = IMG.db_find(db, image_id)
     if img is None:
@@ -792,7 +851,7 @@ async def api_image_list(session: Session = Depends(auth(["boss"]))) -> ImageLis
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Retrieve a specific image by ID. Returns the image as a streaming PNG response."
 )
-async def api_image_get(image_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:
+async def api_image_get(image_id: str, session: Session = Depends(auth(["boss", "printer"]))) -> StreamingResponse:
     db = session.mongodb_connection
 
     img = IMG.db_find(db, image_id)
