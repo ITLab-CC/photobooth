@@ -178,7 +178,7 @@ class FRAME:
         try:
             image_bytes = base64.b64decode(base64_str)
             image_file = io.BytesIO(image_bytes)
-            pil_image = Image.open(image_file).convert("RGB")
+            pil_image = Image.open(image_file).convert("RGBA")
         except Exception:
             raise ValueError("Invalid base64 string; cannot convert to image.")
         
@@ -225,7 +225,19 @@ class FRAME:
         collection: Collection = db_c.db[self.COLLECTION_NAME]
         data = self.to_dict()
         data["frame"] = self._image_to_bytes(self.frame)
+        data["background_scale"] = float(data["background_scale"])
+        data["background_offset"] = list(data["background_offset"])
+        
+        # Handle background_crop as either an int or an array
+        if isinstance(data["background_crop"], (tuple, list)):
+            data["background_crop"] = list(data["background_crop"])
+        else:
+            data["background_crop"] = int(data["background_crop"])
+        
+        data["qr_position"] = list(data["qr_position"])
+        data["qr_scale"] = float(data["qr_scale"])
         collection.insert_one(data)
+
     
     @classmethod
     @mongodb_permissions(collection=FRAME_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth"])

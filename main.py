@@ -1137,7 +1137,13 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
     # replace background
     try:
-        img_with_new_background = Replacer.replace_background(img_no_background, background_img.img, image.refine_foreground)
+        img_with_new_background = Replacer.replace_background(
+            img_no_background,
+            background_img.img,
+            image.refine_foreground,
+            margin_ratio=0.9,
+            apply_alpha_threshold=True
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
     

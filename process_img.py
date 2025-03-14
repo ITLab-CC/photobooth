@@ -86,7 +86,7 @@ class IMGReplacer:
             raise RuntimeError("Model is not loaded. Please call _load_model() first.")
 
         # Convert to RGB to ensure consistent input
-        img_rgb: Image.Image = img.convert("RGB")
+        img_rgb: Image.Image = img.convert("RGBA")
         
         # Perform inference (background removal)
         foreground: Image.Image = self.model.inference(img_rgb, refine_foreground=refine_foreground)

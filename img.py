@@ -148,7 +148,7 @@ class IMG:
         try:
             image_bytes = base64.b64decode(base64_str)
             image_file = io.BytesIO(image_bytes)
-            pil_image = Image.open(image_file).convert("RGB")
+            pil_image = Image.open(image_file).convert("RGBA")
         except Exception:
             raise ValueError("Invalid base64 string; cannot convert to image.")
         
