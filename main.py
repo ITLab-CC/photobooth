@@ -5,7 +5,7 @@ import time
 import io
 from math import ceil
 import os
-from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Union
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -24,6 +24,7 @@ import uvicorn
 from background import Background
 from gallery import Gallery
 from img import IMG
+from frame import FRAME
 from printer import PrinterQueueItem
 from process_img import IMGReplacer
 from setup import check_dotenv, setup
@@ -962,6 +963,101 @@ async def api_background_delete(background_id: str, session: Session = Depends(a
 
     return OK(ok=True)
 
+
+# ---------------------------
+# Frame Endpoints
+# ---------------------------
+# Frame models
+class FrameRequest(BaseModel):
+    image_base64: str
+    background_scale: float = 1.0
+    background_offset: Tuple[int, int] = (0, 0)
+    background_crop: Tuple[int, int, int, int] = (0, 0, 0, 0)
+
+class FrameResponse(BaseModel):
+    frame_id: str
+
+@app.post(
+    "/api/v1/frame",
+    response_model=FrameResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Upload a new frame image. The image is provided as a base64 encoded string and saved to the database."
+)
+async def api_frame_add(frame_img: FrameRequest, session: Session = Depends(auth(["boss"]))) -> FrameResponse:
+    db = session.mongodb_connection
+
+    try:
+        img = FRAME.from_base64(frame_img.image_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    img.background_scale = frame_img.background_scale
+    img.background_offset = frame_img.background_offset
+    img.background_crop = frame_img.background_crop
+    img.db_save(db)
+
+    return FrameResponse(frame_id=img._id)
+
+class FrameListResponse(BaseModel):
+    frames: List[FrameResponse]
+
+# get all frames
+@app.get(
+    "/api/v1/frames",
+    response_model=FrameListResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a list of all frame images available in the database."
+)
+async def api_frame_list(session: Session = Depends(auth(["boss", "photo_booth"]))) -> FrameListResponse:
+    db = session.mongodb_connection
+
+    frames = FRAME.db_find_all(db)
+    return_frames: List[FrameResponse] = []
+    for img in frames:
+        return_frames.append(FrameResponse(
+            frame_id=img._id
+        ))
+
+    return FrameListResponse(frames=return_frames)
+
+# get frame
+@app.get(
+    "/api/v1/frame/{frame_id}",
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve a frame image by its ID and return it as a streaming PNG response."
+)
+async def api_frame_get(frame_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:
+    db = session.mongodb_connection
+
+    img = FRAME.db_find(db, frame_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image not found")
+    
+    img_bytes_io = io.BytesIO()
+    img.frame.save(img_bytes_io, format="PNG")
+    img_bytes_io.seek(0)
+
+    return StreamingResponse(content=img_bytes_io, media_type="image/png")
+
+# delete frame
+@app.delete(
+    "/api/v1/frame/{frame_id}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Delete a frame image specified by its ID."
+)
+async def api_frame_delete(frame_id: str, session: Session = Depends(auth(["boss"]))) -> OK:
+    db = session.mongodb_connection
+
+    img = FRAME.db_find(db, frame_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image not found")
+    
+    img.db_delete(db)
+
+    return OK(ok=True)
+
+
 # ---------------------------
 # Img processing Endpoints
 # ---------------------------
@@ -969,12 +1065,13 @@ async def api_background_delete(background_id: str, session: Session = Depends(a
 class ImageProcessRequest(BaseModel):
     image_id: str
     image_background_id: str
+    img_frame_id: str
     refine_foreground: bool = False
 
 class ImageProcessResponse(BaseModel):
-    image_id: str
-    type: str
-    gallery: Optional[str]
+    img_no_background: ImageResponse
+    img_new_background: ImageResponse
+    img_with_frame: ImageResponse
 
 # Load AI model for image processing
 Replacer = IMGReplacer()
@@ -993,30 +1090,72 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     if img is None:
         raise HTTPException(status_code=404, detail="Image not found")
     
+    # add the processed image to the gallery
+    g = Gallery.db_find(db, img.gallery)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
     # get the background image
     background_img = Background.db_find(db, image.image_background_id)
     if background_img is None:
         raise HTTPException(status_code=404, detail="Background image not found")
 
-    # process the image
-    try:
-        processed_img = Replacer.replace_background(img.img, background_img.img, image.refine_foreground)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error processing image: " + str(e))
-    
-    # save the processed image
-    processed_img_for_db = IMG(img=processed_img, type="new-background", gallery=img.gallery)
-    processed_img_for_db.db_save(db)
+    # get the frame
+    frame_img = FRAME.db_find(db, image.img_frame_id)
+    if frame_img is None:
+        raise HTTPException(status_code=404, detail="Frame image not found")
 
-    # add the processed image to the gallery
-    g = Gallery.db_find(db, img.gallery)
-    if g is None:
-        raise HTTPException(status_code=404, detail="Gallery not found")
+    # remove background
+    try:
+        img_no_background = Replacer.remove_background(img.img)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
+
+    # replace background
+    try:
+        img_with_new_background = Replacer.replace_background(img_no_background, background_img.img, image.refine_foreground)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
     
-    g.db_add_image(db, processed_img_for_db._id)
+    # Add a Frame to the image
+    try:
+        img_with_frame = Replacer.add_frame(img_with_new_background, frame_img.frame)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error adding frame to image: " + str(e))
+
+    # save img_no_background
+    img_no_background_for_db = IMG(img=img_no_background, type="no-background", gallery=img.gallery)
+    img_no_background_for_db.db_save(db)
+    g.db_add_image(db, img_no_background_for_db._id)
+
+    # save img_with_new_background
+    img_with_new_background_for_db = IMG(img=img_with_new_background, type="new-background", gallery=img.gallery)
+    img_with_new_background_for_db.db_save(db)
+    g.db_add_image(db, img_with_new_background_for_db._id)
+
+    # save the processed image
+    img_with_frame_for_db = IMG(img=img_with_frame, type="with-frame", gallery=img.gallery)
+    img_with_frame_for_db.db_save(db)
+    g.db_add_image(db, img_with_frame_for_db._id)
 
     # retrun new img id
-    return ImageProcessResponse(image_id=processed_img_for_db._id, type=processed_img_for_db.type, gallery=processed_img_for_db.gallery)
+    return ImageProcessResponse(
+        img_no_background = ImageResponse(
+            image_id=img_no_background_for_db._id,
+            type=img_no_background_for_db.type,
+            gallery=img_no_background_for_db.gallery
+            ),
+        img_new_background = ImageResponse(
+            image_id=img_with_new_background_for_db._id,
+            type=img_with_new_background_for_db.type,
+            gallery=img_with_new_background_for_db.gallery
+            ),
+        img_with_frame = ImageResponse(
+            image_id=img_with_frame_for_db._id,
+            type=img_with_frame_for_db.type,
+            gallery=img_with_frame_for_db.gallery
+            )
+    )
 
 
 # ---------------------------

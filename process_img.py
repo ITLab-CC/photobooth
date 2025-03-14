@@ -49,15 +49,14 @@ class IMGReplacer:
         foreground: Image.Image = self.model.inference(img_rgb, refine_foreground=refine_foreground)
         return foreground
 
-    def replace_background(self, img: Image.Image, new_background: Image.Image, refine_foreground: bool = False) -> Image.Image:
+    def replace_background(self, foreground: Image.Image, new_background: Image.Image, refine_foreground: bool = False) -> Image.Image:
         """
         Replace the background of a given PIL Image with a new background.
 
-        :param img: Input PIL image from which to remove background.
+        :param foreground: Input PIL image from which to replace the background.
         :param new_background: New background PIL image.
         :return: Final composite image with new background.
         """
-        foreground = self.remove_background(img, refine_foreground)
 
         # Convert both to RGBA
         fg_rgba: Image.Image = foreground.convert("RGBA")
@@ -172,11 +171,14 @@ def main() -> None:
     replacer = IMGReplacer()
 
     # 1) Remove background from the input image
-    new_background = replacer.replace_background(input_img, background_img, refine_foreground=False)
+    no_background = replacer.remove_background(input_img, refine_foreground=False)
+
+    # 2) Remove background from the input image
+    new_background = replacer.replace_background(no_background, background_img, refine_foreground=False)
 
     img_with_frame = replacer.add_frame(new_background, Image.open(frame_path), scale=1.0, offset=(100, 100), crop = (0, 0, 0, 0))
 
-    # 2) Save the final composite image
+    # 3) Save the final composite image
     img_with_frame.save(output_final_path)
     print(f"Final composite image saved to: {output_final_path}")
 

@@ -11,6 +11,7 @@ import printer
 from user import User
 from img import IMG
 from background import Background
+from frame import FRAME
 from gallery import Gallery
 from session import SessionManager
 from printer import PrinterQueueItem
@@ -91,6 +92,7 @@ def setup(db_url: str, db_root: str, db_pw: str, db_name: str) -> None:
     Gallery.db_drop_collection(admin_db)
     IMG.db_drop_collection(admin_db)
     Background.db_drop_collection(admin_db)
+    FRAME.db_drop_collection(admin_db)
     PrinterQueueItem.db_drop_collection(admin_db)
 
     # Create collections
@@ -98,10 +100,11 @@ def setup(db_url: str, db_root: str, db_pw: str, db_name: str) -> None:
     Gallery.db_create_collection(admin_db)
     IMG.db_create_collection(admin_db)
     Background.db_create_collection(admin_db)
+    FRAME.db_create_collection(admin_db)
     PrinterQueueItem.db_create_collection(admin_db)
 
     # Create roles based on the given models
-    admin_db.create_roles([User, Gallery, IMG, Background, PrinterQueueItem])
+    admin_db.create_roles([User, Gallery, IMG, Background, FRAME, PrinterQueueItem])
 
     # Create additional users (using the DB layer’s user creation, without ORM password hashing)
     admin_db.create_user(LOGIN_MANAGER, LOGIN_MANAGER_PASSWORD, ["login_manager"])
