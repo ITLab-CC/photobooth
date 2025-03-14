@@ -325,7 +325,7 @@ def main() -> None:
 
     frame_with_qr = replacer.add_qr_code(
         img=frame_img,
-        qr_code=qr_img,
+        qr_code=qr_img, # type: ignore
         position=(1300, 2150),
         scale=0.6
     )

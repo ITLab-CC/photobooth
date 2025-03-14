@@ -1122,7 +1122,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     try:
         frame_with_qr = Replacer.add_qr_code(
             frame_img.frame,
-            qr_img,
+            qr_img, # type: ignore
             frame_img.qr_position,
             frame_img.qr_scale
             )
