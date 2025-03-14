@@ -609,6 +609,25 @@ async def api_gallery_get_images(gallery_id: str, session: Session = Depends(aut
 
     return GalleryImageListResponse(images=return_images)
 
+# check if gallery exists with pin
+class GalleryCheckResponse(BaseModel):
+    exists: bool
+
+@app.get(
+    "/api/v1/gallery/{gallery_id}",
+    response_model=GalleryCheckResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Check if a gallery exists and if this gallery has a pin set."
+)
+async def api_gallery_check(gallery_id: str) -> GalleryCheckResponse:
+    db = System["img_viewer"]
+
+    g = Gallery.db_find(db, gallery_id)
+    if g is None:
+        return GalleryCheckResponse(exists=False)
+    
+    return GalleryCheckResponse(exists=True if g.pin_hash is not None else False)
+
 # get all images of a gallery with pin
 @app.get(
     "/api/v1/gallery/{gallery_id}/images/pin/{pin}",
