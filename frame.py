@@ -20,6 +20,8 @@ class FRAME:
     background_scale: float = 1.0
     background_offset: tuple = (0, 0)
     background_crop: Union[int, Tuple[int, int, int, int]] = 0
+    qr_position: Tuple[int, int] = (0, 0)
+    qr_scale: float = 1.0
     _id: str = field(default_factory=lambda: f"FRAME-{uuid.uuid4()}")
 
     # Collection name for MongoDB
@@ -40,7 +42,9 @@ class FRAME:
             "frame": self.frame,  # Convert to binary data before saving.
             "background_scale": self.background_scale,
             "background_offset": self.background_offset,
-            "background_crop": self.background_crop
+            "background_crop": self.background_crop,
+            "qr_position": self.qr_position,
+            "qr_scale": self.qr_scale
         }
 
     def __str__(self) -> str:
@@ -56,7 +60,9 @@ class FRAME:
             },
             "background_scale": self.background_scale,
             "background_offset": self.background_offset,
-            "background_crop": self.background_crop
+            "background_crop": self.background_crop,
+            "qr_position": self.qr_position,
+            "qr_scale": self.qr_scale
         }, indent=4)
     
     def __repr__(self) -> str:
@@ -80,7 +86,7 @@ class FRAME:
             "validator": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": ["_id", "frame", "background_scale", "background_offset", "background_crop"],
+                    "required": ["_id", "frame", "background_scale", "background_offset", "background_crop", "qr_position", "qr_scale"],
                     "properties": {
                         "_id": {
                             "bsonType": "string",
@@ -107,6 +113,17 @@ class FRAME:
                             "items": {
                                 "bsonType": "int"
                             }
+                        },
+                        "qr_position": {
+                            "bsonType": "array",
+                            "description": "Coordinates (x, y) for the QR code position",
+                            "items": {
+                                "bsonType": "int"
+                            }
+                        },
+                        "qr_scale": {
+                            "bsonType": "double",
+                            "description": "Scaling factor for the QR code"
                         }
                     }
                 }
@@ -193,7 +210,9 @@ class FRAME:
             _id=str(data.get("_id")),
             background_scale=data.get("background_scale", 1.0),
             background_offset=data.get("background_offset", (0, 0)),
-            background_crop=data.get("background_crop", 0)
+            background_crop=data.get("background_crop", 0),
+            qr_position=data.get("qr_position", (0, 0)),
+            qr_scale=data.get("qr_scale", 1.0)
         )
 
 

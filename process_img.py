@@ -1,5 +1,8 @@
 import sys
 from PIL import Image
+from PIL import Image
+from PIL.Image import Image as PilImage
+
 
 import torch
 from ben2 import BEN_Base  # type: ignore
@@ -240,6 +243,50 @@ class IMGReplacer:
         combined = Image.alpha_composite(canvas, frame_image)
         return combined
 
+    def add_qr_code(
+            self,
+            img: Image.Image,
+            qr_code: PilImage, # type: ignore
+            position: Tuple[int, int],
+            scale: float = 1.0
+        ) -> Image.Image:
+        """
+        Overlays a QR code onto an image at the specified position.
+
+        Args:
+            img (Image.Image): The background image.
+            qr_code (Image.Image): The QR code image to overlay.
+            position (Tuple[int, int]): The (x, y) coordinates where the QR code will be placed.
+            scale (float, optional): Scale factor to resize the QR code. Defaults to 1.0.
+
+        Returns:
+            Image.Image: The resulting image with the QR code overlay.
+        """
+        # Ensure QR code is in RGBA mode to preserve transparency.
+        if qr_code.mode != "RGBA":
+            qr_code = qr_code.convert("RGBA")
+
+        # Scale the QR code if a scale factor other than 1.0 is provided.
+        if scale != 1.0:
+            new_size = (round(qr_code.width * scale), round(qr_code.height * scale))
+            try:
+                resample_method = Image.Resampling.LANCZOS
+            except AttributeError:
+                # Fallback
+                resample_method = Image.ANTIALIAS # type: ignore
+
+            qr_code = qr_code.resize(new_size, resample_method)
+
+        # Create a mask for transparency if available.
+        mask = qr_code.split()[3] if qr_code.mode == "RGBA" else None
+
+        # Paste the QR code onto the image using the mask.
+        img.paste(qr_code, position, mask)
+        return img
+
+
+        
+
 
 def main() -> None:
     # Example paths (adjust as needed!)
@@ -271,11 +318,23 @@ def main() -> None:
     )
     new_background.save(output_no_frame_path)
 
-    # 4) Optional: Overlay the frame
+    # 4) Add a QR code
+    import qrcode
+    img_url = f"https://google.com"
+    qr_img = qrcode.make(img_url) # type: ignore
+
+    frame_with_qr = replacer.add_qr_code(
+        img=frame_img,
+        qr_code=qr_img,
+        position=(1300, 2150),
+        scale=0.6
+    )
+
+    # 5) Optional: Overlay the frame
     #    If you need additional scaling or offset, adjust the scale and offset parameters.
     final_img = replacer.add_frame(
         background_image=new_background,
-        frame_image=frame_img,
+        frame_image=frame_with_qr,
         scale=0.75,
         offset=(-200, 0),
         crop=(0, 0, 0, 0)

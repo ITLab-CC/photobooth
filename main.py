@@ -973,6 +973,9 @@ class FrameRequest(BaseModel):
     background_scale: float = 1.0
     background_offset: Tuple[int, int] = (0, 0)
     background_crop: Tuple[int, int, int, int] = (0, 0, 0, 0)
+    qr_position: Tuple[int, int] = (0, 0)
+    qr_scale: float = 1.0
+
 
 class FrameResponse(BaseModel):
     frame_id: str
@@ -994,6 +997,8 @@ async def api_frame_add(frame_img: FrameRequest, session: Session = Depends(auth
     img.background_scale = frame_img.background_scale
     img.background_offset = frame_img.background_offset
     img.background_crop = frame_img.background_crop
+    img.qr_position = frame_img.qr_position
+    img.qr_scale = frame_img.qr_scale
     img.db_save(db)
 
     return FrameResponse(frame_id=img._id)
@@ -1105,6 +1110,25 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     if frame_img is None:
         raise HTTPException(status_code=404, detail="Frame image not found")
 
+    # generate qr code
+    try:
+        gallery_id = g.id
+        img_url = f"{URL}/gallery/?id={gallery_id}"
+        qr_img = qrcode.make(img_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error generating QR code: " + str(e))
+
+    # add qr code to the frame
+    try:
+        frame_with_qr = Replacer.add_qr_code(
+            frame_img.frame,
+            qr_img,
+            frame_img.qr_position,
+            frame_img.qr_scale
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error adding QR code to frame: " + str(e))
+
     # remove background
     try:
         img_no_background = Replacer.remove_background(img.img)
@@ -1121,7 +1145,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     try:
         img_with_frame = Replacer.add_frame(
             img_with_new_background,
-            frame_img.frame,
+            frame_with_qr,
             frame_img.background_scale,
             frame_img.background_offset,
             frame_img.background_crop
