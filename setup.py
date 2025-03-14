@@ -2,6 +2,7 @@ import argparse
 import os
 import secrets
 import string
+import time
 from typing import Optional
 
 from dotenv import load_dotenv, dotenv_values
@@ -21,13 +22,18 @@ def generate_password(length: int = 32) -> str:
 
 
 def connect_db(db_url: str, db_root: str, db_pw: str, db_name: str) -> MongoDBConnection:
-    return MongoDBConnection(
-        mongo_uri=db_url,
-        user=db_root,
-        password=db_pw,
-        db_name=db_name,
-        admin=True
-    )
+    while True:
+        try:
+            return MongoDBConnection(
+                mongo_uri=db_url,
+                user=db_root,
+                password=db_pw,
+                db_name=db_name,
+                admin=True
+            )
+        except Exception as e:
+            print(f"Error connecting to the database: {e}")
+            time.sleep(5)
 
 
 def create_user_account(admin_db: MongoDBConnection, username: str, password: Optional[str], roles: list[str], show_pw: bool = False, override: bool = False) -> None:
