@@ -3,23 +3,32 @@ from PIL import Image
 
 import torch
 from ben2 import BEN_Base  # type: ignore
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, cast
 
 
-def get_bbox_with_alpha_threshold(img: Image.Image, alpha_threshold=128):
+def get_bbox_with_alpha_threshold(img: Image.Image, alpha_threshold: int = 128) -> Optional[Tuple[int, int, int, int]]:
     """
     Returns a bounding box for pixels with an alpha value >= alpha_threshold
     (ignores semi-transparent edges).
+
+    Parameters:
+        img (Image.Image): The input image.
+        alpha_threshold (int): The threshold for the alpha channel (default: 128).
+
+    Returns:
+        Optional[Tuple[int, int, int, int]]: The bounding box as (left, top, right, bottom),
+                                             or None if no pixel meets the threshold.
     """
     rgba = img.convert("RGBA")
-    pix = rgba.load()
-
+    
     min_x, min_y = rgba.width, rgba.height
     max_x, max_y = 0, 0
 
     for y in range(rgba.height):
         for x in range(rgba.width):
-            _, _, _, a = pix[x, y]
+            # Explicitly cast the result to a 4-tuple to satisfy the type checker
+            pixel = cast(Tuple[int, int, int, int], rgba.getpixel((x, y)))
+            r, g, b, a = pixel
             if a >= alpha_threshold:
                 if x < min_x:
                     min_x = x
@@ -31,7 +40,10 @@ def get_bbox_with_alpha_threshold(img: Image.Image, alpha_threshold=128):
                     max_y = y
 
     if max_x < min_x or max_y < min_y:
-        return None  # No pixels found
+        return None  # No pixels found meeting the alpha threshold
+
+    # The bounding box is defined as (left, top, right, bottom),
+    # where right and bottom are one pixel past the last included pixel.
     return (min_x, min_y, max_x + 1, max_y + 1)
 
 
@@ -132,7 +144,8 @@ class IMGReplacer:
         try:
             resample_method = Image.Resampling.LANCZOS
         except AttributeError:
-            resample_method = Image.ANTIALIAS  # Fallback
+            # Fallback
+            resample_method = Image.ANTIALIAS # type: ignore
 
         fg_rgba_scaled = fg_rgba.resize((new_fg_width, new_fg_height), resample_method)
 
@@ -191,7 +204,8 @@ class IMGReplacer:
         try:
             resample_method = Image.Resampling.LANCZOS
         except AttributeError:
-            resample_method = Image.ANTIALIAS
+            # Fallback
+            resample_method = Image.ANTIALIAS # type: ignore
 
         # 1) Scale the background
         new_bg_width = int(bg_width * scale)
