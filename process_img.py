@@ -2,17 +2,44 @@ import sys
 from PIL import Image
 
 import torch
-from PIL import Image
-from ben2 import BEN_Base # type: ignore
+from ben2 import BEN_Base  # type: ignore
 from typing import Optional, Tuple, Union
+
+
+def get_bbox_with_alpha_threshold(img: Image.Image, alpha_threshold=128):
+    """
+    Gibt eine Bounding Box nur für Pixel zurück,
+    deren Alpha >= alpha_threshold ist (um halbtransparente Ränder zu ignorieren).
+    """
+    rgba = img.convert("RGBA")
+    pix = rgba.load()
+
+    min_x, min_y = rgba.width, rgba.height
+    max_x, max_y = 0, 0
+
+    for y in range(rgba.height):
+        for x in range(rgba.width):
+            _, _, _, a = pix[x, y]
+            if a >= alpha_threshold:
+                if x < min_x:
+                    min_x = x
+                if x > max_x:
+                    max_x = x
+                if y < min_y:
+                    min_y = y
+                if y > max_y:
+                    max_y = y
+
+    if max_x < min_x or max_y < min_y:
+        return None  # Keine Pixel gefunden
+    return (min_x, min_y, max_x + 1, max_y + 1)
+
 
 class IMGReplacer:
     def __init__(self) -> None:
         """
         Initialize the IMGReplacer.
         Loads the BEN2 model onto the available device (GPU if available).
-
-        :param refine_foreground: Whether to use refined matting for higher-quality results (slower inference).
         """
         self.device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model: Optional[BEN_Base] = None
@@ -37,6 +64,7 @@ class IMGReplacer:
         Remove the background from a given PIL Image and return a foreground image (RGBA) with transparency.
 
         :param img: Input PIL image from which to remove background.
+        :param refine_foreground: Whether to use refined matting for higher-quality results (slower inference).
         :return: Foreground PIL Image with alpha channel.
         """
         if self.model is None:
@@ -49,38 +77,98 @@ class IMGReplacer:
         foreground: Image.Image = self.model.inference(img_rgb, refine_foreground=refine_foreground)
         return foreground
 
-    def replace_background(self, img: Image.Image, new_background: Image.Image, refine_foreground: bool = False) -> Image.Image:
+    def replace_background(
+        self,
+        img: Image.Image,
+        new_background: Image.Image,
+        refine_foreground: bool = False,
+        margin_ratio: float = 0.9,
+        apply_alpha_threshold: bool = True
+    ) -> Image.Image:
         """
-        Replace the background of a given PIL Image with a new background.
+        Ersetzt den Hintergrund des Eingabebilds durch einen neuen Hintergrund.
+        Skaliert das Motiv so, dass es maximal (margin_ratio * 100%) 
+        des neuen Hintergrunds ausfüllt, ohne verzerrt zu werden (Contain-Ansatz).
 
-        :param img: Input PIL image from which to remove background.
-        :param new_background: New background PIL image.
-        :return: Final composite image with new background.
+        :param img: Vordergrundbild (wird freigestellt).
+        :param new_background: Neuer Hintergrund.
+        :param refine_foreground: Wenn True, nutzt BEN2 "Refined Matting" (langsamer, aber genauer).
+        :param margin_ratio: z.B. 0.9 => 90% der maximal möglichen Größe (automatischer Rand).
+        :param apply_alpha_threshold: Wenn True, wird get_bbox_with_alpha_threshold benutzt,
+                                      um halbtransparente Pixel an den Rändern zu ignorieren.
+        :return: Composited Image (RGBA).
         """
+        # 1) Freistellen
         foreground = self.remove_background(img, refine_foreground)
+        fg_rgba = foreground.convert("RGBA")
+        bg_rgba = new_background.convert("RGBA")
+        frame_w, frame_h = bg_rgba.size
 
-        # Convert both to RGBA
-        fg_rgba: Image.Image = foreground.convert("RGBA")
-        bg_rgba: Image.Image = new_background.convert("RGBA")
+        # 2) Bounding Box ermitteln (ggf. mit Alpha-Threshold)
+        if apply_alpha_threshold:
+            bbox = get_bbox_with_alpha_threshold(fg_rgba, alpha_threshold=128)
+        else:
+            bbox = fg_rgba.getbbox()
 
-        # Resize the foreground image by adding empty spaces, so the foreground is in the center of the background
-        if fg_rgba.size != bg_rgba.size:
-            new_size = bg_rgba.size
-            fg_rgba_resized = Image.new("RGBA", new_size, (0, 0, 0, 0))
-            offset = ((new_size[0] - fg_rgba.size[0]) // 2, (new_size[1] - fg_rgba.size[1]) // 2)
-            fg_rgba_resized.paste(fg_rgba, offset)
-            fg_rgba = fg_rgba_resized
+        if not bbox:
+            # Falls nichts erkannt, gib einfach den Hintergrund zurück
+            return bg_rgba
 
-        # Composite using the alpha channel
-        bg_rgba.paste(fg_rgba, (0, 0), fg_rgba)
+        left, top, right, bottom = bbox
+        subj_width = right - left
+        subj_height = bottom - top
+
+        # 3) Contain-Ansatz: Wie stark müssten wir skalieren, 
+        #    damit das Motiv exakt ins Frame passt (ohne Rand)?
+        contain_scale = min(frame_w / subj_width, frame_h / subj_height)
+
+        # 4) margin_ratio => Sicherheitsabstand. 
+        #    Motiv füllt nur margin_ratio * contain_scale aus.
+        #    Falls du NIE über Originalgröße skalieren willst, 
+        #    begrenze: final_scale = min(contain_scale * margin_ratio, 1.0)
+        final_scale = contain_scale * margin_ratio
+
+        # 5) Gesamtes Bild skalieren
+        new_fg_width = int(fg_rgba.width * final_scale)
+        new_fg_height = int(fg_rgba.height * final_scale)
+
+        try:
+            resample_method = Image.Resampling.LANCZOS
+        except AttributeError:
+            resample_method = Image.ANTIALIAS  # Fallback
+
+        fg_rgba_scaled = fg_rgba.resize((new_fg_width, new_fg_height), resample_method)
+
+        # 6) Mittelpunkt des skalierten Motivs bestimmen
+        scaled_bbox = fg_rgba_scaled.getbbox()
+        if scaled_bbox:
+            left_s, top_s, right_s, bottom_s = scaled_bbox
+            subj_center_x = (left_s + right_s) // 2
+            subj_center_y = (top_s + bottom_s) // 2
+        else:
+            subj_center_x = new_fg_width // 2
+            subj_center_y = new_fg_height // 2
+
+        # 7) Motiv im Frame zentrieren
+        offset_x = (frame_w // 2) - subj_center_x
+        offset_y = (frame_h // 2) - subj_center_y
+
+        # 8) Neues RGBA in Größe des Hintergrunds
+        new_fg = Image.new("RGBA", (frame_w, frame_h), (0, 0, 0, 0))
+        new_fg.paste(fg_rgba_scaled, (offset_x, offset_y), fg_rgba_scaled)
+
+        # 9) Motiv in den Hintergrund einfügen
+        bg_rgba.paste(new_fg, (0, 0), new_fg)
         return bg_rgba
-    
-    def add_frame(self,
-                background_image: Image.Image,
-                frame_image: Image.Image,
-                scale: float = 1.0,
-                offset: Tuple[int, int] = (0, 0),
-                crop: Union[int, Tuple[int, int, int, int]] = 0) -> Image.Image:
+
+    def add_frame(
+        self,
+        background_image: Image.Image,
+        frame_image: Image.Image,
+        scale: float = 1.0,
+        offset: Tuple[int, int] = (0, 0),
+        crop: Union[int, Tuple[int, int, int, int]] = 0
+    ) -> Image.Image:
         """
         Overlays a PNG frame (with a transparent background) on a scaled, optionally cropped background image,
         which is then placed at specified coordinates on a canvas matching the frame's dimensions.
@@ -88,97 +176,102 @@ class IMGReplacer:
         Parameters:
             background_image (Image.Image): The background image.
             frame_image (Image.Image): The PNG frame image.
-            output_path (Optional[str]): If provided, the combined image is saved to this path.
             scale (float): Scaling factor for the background image 
                         (e.g., 0.5 for 50% size, 2.0 for 200%). Defaults to 1.0.
             offset (Tuple[int, int]): (x, y) coordinates specifying where to place the processed background
                                     on the final canvas (top-left corner). Defaults to (0, 0).
             crop (Union[int, Tuple[int, int, int, int]]): If an int, crops that many pixels from all four sides of the scaled background.
-                                                        If a tuple, it should be (crop_top, crop_right, crop_left, crop_bottom)
-                                                        specifying the number of pixels to crop from the top, right, left, and bottom sides respectively.
+                                                        If a tuple, it should be (crop_top, crop_right, crop_left, crop_bottom).
                                                         Defaults to 0 (no cropping).
         
         Returns:
             Image.Image: The resulting image with the frame overlay.
         """
-        # Open the frame image and convert to RGBA for transparency support
         frame_width, frame_height = frame_image.size
-
-        # Open the background image and convert to RGBA
         background = background_image.convert("RGBA")
         
-        # Scale the background image by the provided factor
         bg_width, bg_height = background.size
-        new_bg_width = int(bg_width * scale)
-        new_bg_height = int(bg_height * scale)
-        
         try:
             resample_method = Image.Resampling.LANCZOS
         except AttributeError:
-            # Fallback for older Pillow versions
-            resample_method = Image.ANTIALIAS # type: ignore
+            resample_method = Image.ANTIALIAS
 
+        # 1) Hintergrund skalieren
+        new_bg_width = int(bg_width * scale)
+        new_bg_height = int(bg_height * scale)
         scaled_background = background.resize((new_bg_width, new_bg_height), resample_method)
-        
-        # Apply cropping if requested
+
+        # 2) Crop anwenden
         if crop:
-            # If crop is an int, apply equally to all sides
             if isinstance(crop, int):
                 crop = (crop, crop, crop, crop)
-            elif not (isinstance(crop, (tuple, list)) and len(crop) == 4):
-                raise ValueError("crop must be an int or a tuple/list of four integers: (crop_top, crop_right, crop_left, crop_bottom)")
+            if len(crop) != 4:
+                raise ValueError("crop must be int or a tuple of four ints (top, right, left, bottom)")
             
             crop_top, crop_right, crop_left, crop_bottom = crop
-            
-            # Calculate new crop boundaries for the scaled background
             new_left = crop_left
             new_top = crop_top
             new_right = scaled_background.width - crop_right
             new_bottom = scaled_background.height - crop_bottom
-            
-            # Validate boundaries
-            if new_left < 0 or new_top < 0 or new_right > scaled_background.width or new_bottom > scaled_background.height or new_left >= new_right or new_top >= new_bottom:
-                raise ValueError("Crop values are out of bounds for the scaled background image.")
+
+            if new_left < 0 or new_top < 0 or new_right > scaled_background.width or new_bottom > scaled_background.height:
+                raise ValueError("Crop values are out of bounds.")
             
             scaled_background = scaled_background.crop((new_left, new_top, new_right, new_bottom))
-        
-        # Create a new transparent canvas with the same dimensions as the frame
+
+        # 3) Leere Leinwand in Frame-Größe
         canvas = Image.new("RGBA", (frame_width, frame_height), (0, 0, 0, 0))
-        
-        # Paste the processed background onto the canvas at the specified offset.
-        # The mask ensures that any transparency in the background image is preserved.
+
+        # 4) Hintergrund auf Leinwand
         canvas.paste(scaled_background, offset, scaled_background)
-        
-        # Composite the frame over the background canvas
+
+        # 5) Frame drüberlegen
         combined = Image.alpha_composite(canvas, frame_image)
-        
         return combined
 
 
-
-
 def main() -> None:
-    # Define file paths
-    input_image_path = "./image.png"           # Original image from which you want to remove background
-    new_background_path = "./new_background.png"  # The new background you want to add
-    output_final_path = "./final_image.png"     # Where you will store the final composite
-    frame_path = "./frame.png"                  # Optional: frame to add around the final
+    # Beispiel-Pfade (anpassen!)
+    input_image_path = "./image.png"            # Originalbild (wird freigestellt)
+    new_background_path = "./new_background.png"
+    frame_path = "./frame.png"
+    output_final_path = "./final_image.png"
+    output_no_frame_path = "./final_image_no_frame.png"
 
-    # Read images
+    # 1) Bilder laden
     input_img = Image.open(input_image_path)
     background_img = Image.open(new_background_path)
+    frame_img = Image.open(frame_path)
 
-    # Create an instance of IMGReplacer (assuming the class is in the same file or imported)
+    # 2) Replacer instanziieren
     replacer = IMGReplacer()
 
-    # 1) Remove background from the input image
-    new_background = replacer.replace_background(input_img, background_img, refine_foreground=False)
+    # 3) Freistellen & dynamisch skalieren
+    #    margin_ratio=0.9 => 90% des maximal möglichen Füllens (Contain) 
+    #    Du kannst auch z.B. 1.0, 1.1, 0.8 ausprobieren
+    new_background = replacer.replace_background(
+        img=input_img,
+        new_background=background_img,
+        refine_foreground=False,
+        margin_ratio=0.9,
+        apply_alpha_threshold=True
+    )
+    new_background.save(output_no_frame_path)
 
-    img_with_frame = replacer.add_frame(new_background, Image.open(frame_path), scale=1.0, offset=(100, 100), crop = (0, 0, 0, 0))
+    # 4) Optional: Frame drüberlegen
+    #    Falls du hier noch extra Skalierung oder Offset brauchst, 
+    #    passe scale / offset an.
+    final_img = replacer.add_frame(
+        background_image=new_background,
+        frame_image=frame_img,
+        scale=0.75,
+        offset=(-200, 0),
+        crop=(0, 0, 0, 0)
+    )
+    final_img.save(output_final_path)
 
-    # 2) Save the final composite image
-    img_with_frame.save(output_final_path)
-    print(f"Final composite image saved to: {output_final_path}")
+    print(f"Ergebnis ohne Frame: {output_no_frame_path}")
+    print(f"Ergebnis mit Frame:  {output_final_path}")
 
 
 if __name__ == "__main__":
