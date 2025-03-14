@@ -1119,7 +1119,13 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     
     # Add a Frame to the image
     try:
-        img_with_frame = Replacer.add_frame(img_with_new_background, frame_img.frame)
+        img_with_frame = Replacer.add_frame(
+            img_with_new_background,
+            frame_img.frame,
+            frame_img.background_scale,
+            frame_img.background_offset,
+            frame_img.background_crop
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error adding frame to image: " + str(e))
 
