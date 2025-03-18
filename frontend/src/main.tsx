@@ -1,12 +1,17 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
-import { CssBaseline } from "@mui/material";
-import "./index.css";
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css'; 
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+console.log("Starte App");
+
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Kein Element mit id 'root' gefunden.");
+}
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <CssBaseline />
     <App />
   </React.StrictMode>
 );

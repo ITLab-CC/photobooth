@@ -1,19 +1,16 @@
-// App.tsx
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import PhotoBoxPage from "./pages/PhotoBoxPage";
 import AdminPage from "./pages/AdminPage";
-import SessionDetailPage from "./pages/SessionDetailPage";
-import PhotoboothPage from "./pages/PhotoboothPage";
+import DetailPage from "./pages/DetailPage";
 
-const App: React.FC = () => {
+export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<PhotoboothPage />} />
+        <Route path="/" element={<PhotoBoxPage />} />
         <Route path="/admin" element={<AdminPage />} />
-        <Route path="/session/:galleryId" element={<SessionDetailPage />} />
+        <Route path="/gallery" element={<DetailPage />} />
       </Routes>
     </BrowserRouter>
   );
-};
-
-export default App;
+}

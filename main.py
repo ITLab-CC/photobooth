@@ -665,7 +665,7 @@ async def api_gallery_get_images_with_pin(gallery_id: str, pin: str) -> GalleryI
 # get image with pin
 @app.get(
     "/api/v1/gallery/{gallery_id}/image/{image_id}/pin/{pin}",
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=50, seconds=1))],
     description="Retrieve a specific image from a gallery using a valid pin. Verifies that the image belongs to the specified gallery."
 )
 async def api_gallery_get_image_with_pin(gallery_id: str, image_id: str, pin: str) -> StreamingResponse:
@@ -702,7 +702,7 @@ async def api_gallery_get_image_with_pin(gallery_id: str, image_id: str, pin: st
 # get image without pin (photo booth)
 @app.get(
     "/api/v1/gallery/{gallery_id}/image/{image_id}",
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=50, seconds=1))],
     description="Retrieve a specific image from a gallery without requiring a pin. Verifies that the image belongs to the specified gallery."
 )
 async def api_gallery_get_image(gallery_id: str, image_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:
@@ -871,10 +871,10 @@ async def api_image_list(session: Session = Depends(auth(["boss"]))) -> ImageLis
 # get image
 @app.get(
     "/api/v1/image/{image_id}",
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=100, seconds=1))],
     description="Retrieve a specific image by ID. Returns the image as a streaming PNG response."
 )
-async def api_image_get(image_id: str, session: Session = Depends(auth(["boss", "printer"]))) -> StreamingResponse:
+async def api_image_get(image_id: str, session: Session = Depends(auth(["boss", "photo_booth", "printer"]))) -> StreamingResponse:
     db = session.mongodb_connection
 
     img = IMG.db_find(db, image_id)
@@ -942,7 +942,7 @@ async def api_background_list(session: Session = Depends(auth(["boss", "photo_bo
 @app.get(
     "/api/v1/background/{background_id}",
     response_model=BackgroundResponse,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=100, seconds=1))],
     description="Retrieve a background image by its ID and return it as a streaming PNG response."
 )
 async def api_background_get(background_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:
@@ -1103,7 +1103,7 @@ Replacer = IMGReplacer()
 @app.post(
     "/api/v1/image/process",
     response_model=ImageProcessResponse,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=5, seconds=1))],
     description="Process an image by replacing its background using an AI model. Requires the target image ID and a background image ID. Optionally refine the foreground."
 )
 async def api_image_process(image: ImageProcessRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> ImageProcessResponse:
