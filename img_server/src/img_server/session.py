@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 import uuid
 import json
 import bcrypt
@@ -26,8 +26,10 @@ class Status(Enum):
 @dataclass
 class Session:
     user_id: str
+    user_name: str
     user_roles: List[str]
     expiration_date: datetime
+    creation_date: datetime = field(default_factory=datetime.now)
     _id: str = field(default_factory=lambda: f"SESSION-{uuid.uuid4()}")
 
     @property
@@ -48,20 +50,25 @@ def serialize_session(session: Session) -> str:
     data = asdict(session)
     # Convert datetime objects to ISO format strings
     data["expiration_date"] = session.expiration_date.isoformat()
+    data["creation_date"] = session.creation_date.isoformat()  # New conversion added here
     return json.dumps(data)
+
 
 
 def deserialize_session(json_str: str) -> Session:
     """Recreate a Session object from its JSON string representation."""
     data = json.loads(json_str)
     data["expiration_date"] = datetime.fromisoformat(data["expiration_date"])
-    # For simplicity the logout callback is set to a no-op.
+    data["creation_date"] = datetime.fromisoformat(data["creation_date"])
     return Session(
         user_id=data["user_id"],
+        user_name=data["user_name"],
         user_roles=data["user_roles"],
         expiration_date=data["expiration_date"],
+        creation_date=data["creation_date"],
         _id=data["_id"],
     )
+
 
 
 class SessionManager:
@@ -85,7 +92,7 @@ class SessionManager:
         hashed = bcrypt.hashpw(password.encode(), salt.encode()).decode()
         return hashed, salt
 
-    async def login(self, db_connection, username: str, password: str) -> Session:
+    async def login(self, db_connection, username: str, password: str) -> Tuple[Session, User]:
         """Authenticate the user and create a session stored in Redis."""
         # Retrieve user data (replace with your real DB query).
         user = User.db_find_by_username(db_connection, username)
@@ -104,6 +111,7 @@ class SessionManager:
         # Create a new session.
         session = Session(
             user_id=user._id,
+            user_name=user.username,
             user_roles=user.roles,
             expiration_date=datetime.now() + timedelta(seconds=SESSION_DURATION_SECONDS)
         )
@@ -111,7 +119,7 @@ class SessionManager:
             await self.redis.set(
                 SESSION_PREFIX + session._id, serialize_session(session), ex=SESSION_DURATION_SECONDS
             )
-        return session
+        return session, user
 
     async def logout(self, session_id: str) -> None:
         """Remove the session from Redis."""
@@ -129,9 +137,9 @@ class SessionManager:
             return deserialize_session(json_str)
         return None
 
-    async def get_sessions(self) -> dict:
+    async def get_sessions(self) -> Dict[str, Session]:
         """Retrieve all sessions stored in Redis."""
-        sessions = {}
+        sessions: Dict[str, Session] = {}
         keys = await self.redis.keys(SESSION_PREFIX + "*")
         for key in keys:
             json_str = await self.redis.get(key)
