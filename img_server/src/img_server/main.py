@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from math import ceil
+import os
 from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
@@ -244,7 +245,20 @@ async def api_auth_session_logout(token: str, session: Session = Depends(auth(["
 
 
 
+# ---------------------------
+# Webpage
+# ---------------------------
+app.mount("/assets", StaticFiles(directory="../frontend/dist/assets"), name="assets")
 
+# Catch-all route: For any path, serve the index.html so React can handle routing.
+@app.get(
+    "/{full_path:path}",
+    response_class=HTMLResponse,
+    description="Catch-all route that serves the React application’s index.html for any unspecified path."
+)
+async def serve_react_app(full_path: str) -> FileResponse:
+    index_path = os.path.join("../frontend/dist", "index.html")
+    return FileResponse(index_path)
 
 
 # ---------------------------
