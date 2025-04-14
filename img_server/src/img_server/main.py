@@ -18,8 +18,9 @@ import redis.asyncio as redis
 from starlette.datastructures import Headers
 import uvicorn
 
-from db_connection import MongoDBConnection
-from session import Session, SessionManager
+from img_server.db_connection import MongoDBConnection
+from img_server.session import Session, SessionManager
+from img_server.user import User
 
 URL: str = "http://localhost:8000"
 REDIS_URL: str = "redis://localhost:6379"
@@ -31,6 +32,13 @@ System: MongoDBConnection = MongoDBConnection(
                 db_name="photo_booth",
                 admin=True
             )
+
+
+# ---------------------------
+# Setup db
+# ---------------------------
+# This will create the database and the collections if they do not exist
+User.db_create_collection(System)
 
 
 # ---------------------------
