@@ -140,6 +140,7 @@ class AuthRequest(BaseModel):
     password: str
 
 class AuthUser(BaseModel):
+    id: str
     username: str
     roles: list[str]
     last_login: Optional[datetime]
@@ -173,6 +174,7 @@ async def api_auth_login(auth: AuthRequest) -> AuthResponse:
         creation_date=session.creation_date,
         expiration_date=session.expiration_date,
         user=AuthUser(
+            id=user._id,
             username=user.username,
             last_login=user.last_login,
             roles=user.roles
@@ -193,6 +195,7 @@ async def api_auth_status(session: Session = Depends(auth())) -> AuthResponse:
         creation_date=session.creation_date,
         expiration_date=session.expiration_date,
         user=AuthUser(
+            id=session.user._id,
             username=session.user.username,
             roles=session.user.roles,
             last_login=session.user.last_login
@@ -232,6 +235,7 @@ async def api_auth_session(session: Session = Depends(auth(["boss"]))) -> AuthSe
             creation_date=s.creation_date,
             expiration_date=s.expiration_date,
             user=AuthUser(
+                id=session.user._id,
                 username=s.user.username,
                 roles=s.user.roles,
                 last_login=s.user.last_login
