@@ -6,7 +6,7 @@ authors = [
     {name = "JulianKropp",email = "62835694+JulianKropp@users.noreply.github.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.11,<4.0"
+requires-python = ">=3.10,<4.0"
 dependencies = [
     "mypy (>=1.15.0,<2.0.0)",
     "bcrypt (>=4.3.0,<5.0.0)",
