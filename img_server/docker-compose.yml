@@ -25,6 +25,17 @@ services:
     ports:
       - "6379:6379"
 
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    networks:
+      - default
+
   # minio:
   #   image: minio/minio
   #   container_name: minio
