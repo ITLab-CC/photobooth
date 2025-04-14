@@ -11,7 +11,7 @@ import bcrypt
 import redis.asyncio as redis
 
 from img_server.db_connection import MongoDBConnection
-from img_server.user import User
+from img_server.user import User, datetime_from_str, datetime_to_str
 
 SESSION_DURATION_SECONDS = 60 * 60 * 24  # 24 hours
 SESSION_PREFIX = "session:"
@@ -25,49 +25,56 @@ class Status(Enum):
 
 @dataclass
 class Session:
-    user_id: str
-    user_name: str
-    user_roles: List[str]
+    user: User
     expiration_date: datetime
     creation_date: datetime = field(default_factory=datetime.now)
     _id: str = field(default_factory=lambda: f"SESSION-{uuid.uuid4()}")
 
-    @property
-    async def status(self) -> Status:
-        # check if the session is still in redis
-        if await SessionManager().exists(self._id):
-            return Status.ACTIVE
-        return Status.INACTIVE
+    def to_dict(self) -> dict:
+        """Convert the Session object into a dictionary for JSON serialization."""
+        return {
+            "_id": self._id,
+            "creation_date": datetime_to_str(self.creation_date),
+            "expiration_date": datetime_to_str(self.expiration_date),
+            "user": self.user.to_dict()
+        }
+
+    def to_json(self) -> str:
+        """Serialize the Session object to a JSON string."""
+        return json.dumps(self.to_dict(), indent=4)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Session":
+        """
+        Create a Session object from a dictionary.
+        This method converts ISO-formatted datetime strings back to datetime objects 
+        and rebuilds the nested User object.
+        """
+        # Rebuild the User instance from its dictionary representation.
+        user_data = data.get("user")
+        user = User.from_dict(user_data)
+        
+        # Convert string dates back to datetime objects.
+        creation_date = datetime_from_str(data.get("creation_date"))
+        expiration_date = datetime_from_str(data.get("expiration_date"))
+        
+        return cls(
+            user=user,
+            creation_date=creation_date,
+            expiration_date=expiration_date,
+            _id=data["_id"]
+        )
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "Session":
+        """Deserialize the JSON string and return a Session object."""
+        data = json.loads(json_str)
+        return cls.from_dict(data)
 
 
     async def logout(self) -> None:
         """Log out the session by removing it from the session manager."""
         await SessionManager().logout(self._id)
-
-
-def serialize_session(session: Session) -> str:
-    """Convert the session into a JSON string for storage."""
-    data = asdict(session)
-    # Convert datetime objects to ISO format strings
-    data["expiration_date"] = session.expiration_date.isoformat()
-    data["creation_date"] = session.creation_date.isoformat()  # New conversion added here
-    return json.dumps(data)
-
-
-
-def deserialize_session(json_str: str) -> Session:
-    """Recreate a Session object from its JSON string representation."""
-    data = json.loads(json_str)
-    data["expiration_date"] = datetime.fromisoformat(data["expiration_date"])
-    data["creation_date"] = datetime.fromisoformat(data["creation_date"])
-    return Session(
-        user_id=data["user_id"],
-        user_name=data["user_name"],
-        user_roles=data["user_roles"],
-        expiration_date=data["expiration_date"],
-        creation_date=data["creation_date"],
-        _id=data["_id"],
-    )
 
 
 
@@ -84,7 +91,7 @@ class SessionManager:
         self.redis = redis.from_url(redis_url, decode_responses=True)
         self.lock = asyncio.Lock()
 
-    async def login(self, db_connection, username: str, password: str) -> Tuple[Session, User]:
+    async def login(self, db_connection: MongoDBConnection, username: str, password: str) -> Tuple[Session, User]:
         """Authenticate the user and create a session stored in Redis."""
         # Retrieve user data (replace with your real DB query).
         user = User.db_find_by_username(db_connection, username)
@@ -102,14 +109,12 @@ class SessionManager:
 
         # Create a new session.
         session = Session(
-            user_id=user._id,
-            user_name=user.username,
-            user_roles=user.roles,
+            user=user,
             expiration_date=datetime.now() + timedelta(seconds=SESSION_DURATION_SECONDS)
         )
         async with self.lock:
             await self.redis.set(
-                SESSION_PREFIX + session._id, serialize_session(session), ex=SESSION_DURATION_SECONDS
+                SESSION_PREFIX + session._id, session.to_json(), ex=SESSION_DURATION_SECONDS
             )
         return session, user
 
@@ -126,7 +131,7 @@ class SessionManager:
         """Retrieve a session by its ID from Redis."""
         json_str = await self.redis.get(SESSION_PREFIX + session_id)
         if json_str:
-            return deserialize_session(json_str)
+            return Session.from_json(json_str)
         return None
 
     async def get_sessions(self) -> Dict[str, Session]:
@@ -136,9 +141,24 @@ class SessionManager:
         for key in keys:
             json_str = await self.redis.get(key)
             if json_str:
-                session = deserialize_session(json_str)
+                session = Session.from_json(json_str)
                 sessions[session._id] = session
         return sessions
+
+    async def refresh_user_in_all_sessions_by_user_id(self, db_connection: MongoDBConnection, user_id: str) -> None:
+        """
+        Refresh the user information in all sessions for a specific user ID.
+        This will update the redis entry for each session with the latest user data.
+        """
+        # get all sessions
+        sessions = await self.get_sessions()
+        for session in sessions.values():
+            if session.user.db_refresh():
+                async with self.lock:
+                    #overwrite redis entry
+                    await self.redis.set(
+                        SESSION_PREFIX + session._id, session.to_json(), ex=SESSION_DURATION_SECONDS
+                    )
 
 
 # --- Test the Simplified Session Manager ---

@@ -9,6 +9,13 @@ import bcrypt
 
 from img_server.db_connection import MongoDBConnection, mongodb_get_user_permissions
 
+# Helper functions to convert datetime objects to/from strings.
+def datetime_to_str(dt: Optional[datetime]) -> Optional[str]:
+    return dt.isoformat() if dt else None
+
+def datetime_from_str(dt_str: Optional[str]) -> Optional[datetime]:
+    return datetime.fromisoformat(dt_str) if dt_str else None
+
 # Define a module-level constant for the collection name.
 USERS_COLLECTION = "users"
 
@@ -35,9 +42,26 @@ class User:
             "username": self.username,
             "password_hash": self.password_hash,
             "password_salt": self.password_salt,
-            "last_login": self.last_login,
+            "last_login": self.last_login.isoformat() if self.last_login else None,
             "roles": self.roles
         }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "User":
+        """Rebuild a User object from a dictionary.
+        Note: expects that any datetime fields have been encoded as ISO strings.
+        """
+        last_login = data.get("last_login")
+        if last_login:
+            last_login = datetime.fromisoformat(last_login)
+        return cls(
+            username=data["username"],
+            password_hash=data["password_hash"],
+            password_salt=data["password_salt"],
+            last_login=last_login,
+            roles=data.get("roles", []),
+            _id=data["_id"]
+        )
 
     def __str__(self) -> str:
         """Return a JSON representation of the object."""
@@ -60,6 +84,39 @@ class User:
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+    def to_json(self) -> str:
+        """
+        Return a JSON string representation of the User object.
+
+        This method converts the User instance into a dictionary using to_dict(),
+        formats the datetime field into a string (if present), and renames the key
+        for the user id to 'id' for consistency. The resulting dictionary is then
+        dumped into a JSON string.
+        """
+        data = self.to_dict()
+        # Convert last_login datetime to string (if not None)
+        if data["last_login"]:
+            data["last_login"] = data["last_login"].strftime("%Y-%m-%d %H:%M:%S")
+        # Rename the key from "_id" to "id" for the JSON representation
+        data["id"] = data.pop("_id")
+        return json.dumps(data, indent=4)
+
+    @classmethod
+    def load_from_json(cls, json_str: str) -> "User":
+        """
+        Create a User instance from a JSON string.
+
+        This method parses the JSON string to a dictionary, converts the 'last_login'
+        field from a string back to a datetime object (if it exists), and changes the
+        'id' key back to '_id' for compatibility with the User initializer.
+        """
+        data = json.loads(json_str)
+        if data.get("last_login"):
+            data["last_login"] = datetime.strptime(data["last_login"], "%Y-%m-%d %H:%M:%S")
+        if "id" in data:
+            data["_id"] = data.pop("id")
+        return cls(**data)
 
     @classmethod
     def db_create_collection(cls, db_connection: MongoDBConnection) -> None:
@@ -89,8 +146,8 @@ class User:
                             "description": "must be a string and is required"
                         },
                         "last_login": {
-                            "bsonType": ["date", "null"],
-                            "description": "must be a date and is required"
+                            "bsonType": ["string", "null"],
+                            "description": "must be a string as ISO date or null"
                         },
                         "roles": {
                             "bsonType": "array",
@@ -124,7 +181,7 @@ class User:
         db_connection.db.drop_collection(cls.COLLECTION_NAME)
 
     @classmethod
-    def new(db_connection: MongoDBConnection, username: str, password: str, roles: List[str] = None) -> "User":
+    def new(cls, db_connection: MongoDBConnection, username: str, password: str, roles: List[str] = None) -> "User":
         """
         Create a new user in the database.
         """
@@ -183,6 +240,29 @@ class User:
         if data:
             return cls._db_load(data)
         return None
+
+    def db_refresh(self, db_connection: MongoDBConnection) -> None:
+        """
+        Refresh the current User instance with the latest data from the database.
+
+        This method retrieves the document from MongoDB using the user's _id and
+        updates the instance's attributes accordingly.
+        """
+        collection = db_connection.db[self.COLLECTION_NAME]
+        # Look up the user document in the database by _id.
+        data = collection.find_one({"_id": self._id})
+        if data:
+            # Use the _db_load helper to create a temporary instance with new data.
+            refreshed_user = self.__class__._db_load(data)
+            # Update the current instance's attributes with the refreshed data.
+            self.username = refreshed_user.username
+            self.password_hash = refreshed_user.password_hash
+            self.password_salt = refreshed_user.password_salt
+            self.last_login = refreshed_user.last_login
+            self.roles = refreshed_user.roles
+        else:
+            raise ValueError(f"User with id {self._id} not found in the database.")
+
 
     def db_update(self, db_connection: MongoDBConnection) -> None:
         """

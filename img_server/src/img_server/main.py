@@ -39,6 +39,14 @@ System: MongoDBConnection = MongoDBConnection(
 # ---------------------------
 # This will create the database and the collections if they do not exist
 User.db_create_collection(System)
+# check if admin user exists
+if not User.db_find_by_username(System, "admin"):
+    User.new(
+        db_connection=System,
+        username="admin",
+        password="admin",
+        roles=["boss"]
+    )
 
 
 # ---------------------------
@@ -117,7 +125,7 @@ def auth(required_roles: Optional[List[str]] = None) -> Callable[[HTTPAuthorizat
         
         # Check if user has at least one of the required roles
         if required_roles is not None:
-            if not any(role in session.user_roles for role in required_roles):
+            if not any(role in session.user.roles for role in required_roles):
                 raise HTTPException(status_code=403, detail="Permission denied")
         return session
     return new_auth
@@ -134,7 +142,7 @@ class AuthRequest(BaseModel):
 class AuthUser(BaseModel):
     username: str
     roles: list[str]
-    last_login: Optional[datetime] = None
+    last_login: Optional[datetime]
 
 class AuthResponse(BaseModel):
     token: str
@@ -153,7 +161,12 @@ async def api_auth_login(auth: AuthRequest) -> AuthResponse:
     try:
         session, user = await SM.login(System, auth.username, auth.password)
     except Exception as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        if str(e) == "User not found":
+            raise HTTPException(status_code=404, detail="Username or password are wrong")
+        elif str(e) == "Incorrect password":
+            raise HTTPException(status_code=403, detail="Username or password are wrong")
+        else:
+            raise e
     
     return AuthResponse(
         token=session._id,
@@ -180,8 +193,9 @@ async def api_auth_status(session: Session = Depends(auth())) -> AuthResponse:
         creation_date=session.creation_date,
         expiration_date=session.expiration_date,
         user=AuthUser(
-            username=session.user_name,
-            roles=session.user_roles,
+            username=session.user.username,
+            roles=session.user.roles,
+            last_login=session.user.last_login
         )
     )
 
@@ -218,8 +232,9 @@ async def api_auth_session(session: Session = Depends(auth(["boss"]))) -> AuthSe
             creation_date=s.creation_date,
             expiration_date=s.expiration_date,
             user=AuthUser(
-                username=s.user_name,
-                roles=s.user_roles,
+                username=s.user.username,
+                roles=s.user.roles,
+                last_login=s.user.last_login
             )
         ))
 
