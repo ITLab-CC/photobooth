@@ -10,8 +10,8 @@ import bcrypt
 # Async Redis client (install using: pip install redis)
 import redis.asyncio as redis
 
-from db_connection import MongoDBConnection
-from user import User, create_new_user
+from img_server.db_connection import MongoDBConnection
+from img_server.user import User
 
 SESSION_DURATION_SECONDS = 60 * 60 * 24  # 24 hours
 SESSION_PREFIX = "session:"
@@ -84,14 +84,6 @@ class SessionManager:
         self.redis = redis.from_url(redis_url, decode_responses=True)
         self.lock = asyncio.Lock()
 
-    @staticmethod
-    def hash_password(password: str, salt: Optional[str] = None) -> Tuple[str, str]:
-        """Hash the given password using bcrypt. Generates a new salt if needed."""
-        if salt is None:
-            salt = bcrypt.gensalt().decode()
-        hashed = bcrypt.hashpw(password.encode(), salt.encode()).decode()
-        return hashed, salt
-
     async def login(self, db_connection, username: str, password: str) -> Tuple[Session, User]:
         """Authenticate the user and create a session stored in Redis."""
         # Retrieve user data (replace with your real DB query).
@@ -100,7 +92,7 @@ class SessionManager:
             raise ValueError("User not found")
 
         # Verify password. (In production, password_hash and salt should be set properly.)
-        hashed, _ = self.hash_password(password, user.password_salt)
+        hashed, _ = User.hash_password(password, user.password_salt)
         if hashed != user.password_hash:
             raise ValueError("Incorrect password")
 
@@ -168,7 +160,7 @@ async def test_session_manager() -> None:
     # create user admin if not exists
     User.db_create_collection(db_connection)
     if not User.db_find_by_username(db_connection, MONGODB_ADMIN_USER):
-        create_new_user(
+        User.new(
             db_connection=db_connection,
             username=MONGODB_ADMIN_USER,
             password=MONGODB_ADMIN_PASSWORD,

@@ -7,7 +7,7 @@ from typing import Optional, List, Tuple
 
 import bcrypt
 
-from db_connection import MongoDBConnection, mongodb_get_user_permissions
+from img_server.db_connection import MongoDBConnection, mongodb_get_user_permissions
 
 # Define a module-level constant for the collection name.
 USERS_COLLECTION = "users"
@@ -123,6 +123,35 @@ class User:
         """
         db_connection.db.drop_collection(cls.COLLECTION_NAME)
 
+    @classmethod
+    def new(db_connection: MongoDBConnection, username: str, password: str, roles: List[str] = None) -> "User":
+        """
+        Create a new user in the database.
+        """
+
+        if roles is None:
+            roles = []
+
+        # Check if the username already exists
+        existing_user = User.db_find_by_username(db_connection, username)
+        if existing_user:
+            raise ValueError(f"Username '{username}' already exists.")
+
+        # Hash the password and generate a salt
+        password_hash, password_salt = User.hash_password(password)
+
+        # Create a new user instance
+        new_user = User(
+            username=username,
+            password_hash=password_hash,
+            password_salt=password_salt,
+            roles=roles
+        )
+
+        # Save the new user to the database
+        new_user.db_save(db_connection)
+        return new_user
+
     def db_save(self, db_connection: MongoDBConnection) -> None:
         """
         Save the user object to MongoDB.
@@ -203,39 +232,6 @@ class User:
         hashed = bcrypt.hashpw(password.encode(), salt.encode()).decode()
         return hashed, salt
 
-def create_new_user(
-    db_connection: MongoDBConnection,
-    username: str,
-    password: str,
-    roles: List[str] = None
-) -> User:
-    """
-    Create a new user in the database.
-    """
-
-    if roles is None:
-        roles = []
-
-    # Check if the username already exists
-    existing_user = User.db_find_by_username(db_connection, username)
-    if existing_user:
-        raise ValueError(f"Username '{username}' already exists.")
-
-    # Hash the password and generate a salt
-    password_hash, password_salt = User.hash_password(password)
-
-    # Create a new user instance
-    new_user = User(
-        username=username,
-        password_hash=password_hash,
-        password_salt=password_salt,
-        roles=roles
-    )
-
-    # Save the new user to the database
-    new_user.db_save(db_connection)
-    return new_user
-        
 
 def main() -> None:
     MONGODB_URI = "localhost:27017"
@@ -255,7 +251,7 @@ def main() -> None:
     User.db_create_collection(admin_db)
 
     # Create a new user
-    new_user = create_new_user(
+    new_user = User.new(
         db_connection=admin_db,
         username="testuser",
         password="password123",
