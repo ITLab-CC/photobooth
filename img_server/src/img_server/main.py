@@ -1,8 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
+import fnmatch
 from math import ceil
 import os
+import re
 from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
@@ -21,6 +23,7 @@ import uvicorn
 from img_server.db_connection import MongoDBConnection
 from img_server.session import Session, SessionManager
 from img_server.user import User
+from img_server.role import Role, Endpoint, Method
 
 URL: str = "http://localhost:8000"
 REDIS_URL: str = "redis://localhost:6379"
@@ -38,6 +41,41 @@ System: MongoDBConnection = MongoDBConnection(
 # Setup db
 # ---------------------------
 # This will create the database and the collections if they do not exist
+Role.db_create_collection(System)
+# Create default roles
+if not Role.db_find_by_rolename(System, "boss"):
+    Role.new(
+        db_connection=System,
+        rolename="boss",
+        api_endpoints=[
+            Endpoint(
+                method=Method.ANY,
+                path_filter="/*"
+            )
+        ]
+    )
+    Role.new(
+        db_connection=System,
+        rolename="user",
+        api_endpoints=[
+            Endpoint(
+                method=Method.GET,
+                path_filter="/api/v1/auth/*"
+            ),
+            Endpoint(
+                method=Method.POST,
+                path_filter="/api/v1/auth/*"
+            ),
+            Endpoint(
+                method=Method.PUT,
+                path_filter="/api/v1/auth/*"
+            ),
+            Endpoint(
+                method=Method.DELETE,
+                path_filter="/api/v1/auth/*"
+            )
+        ]
+    )
 User.db_create_collection(System)
 # check if admin user exists
 if not User.db_find_by_username(System, "admin"):
@@ -46,6 +84,13 @@ if not User.db_find_by_username(System, "admin"):
         username="admin",
         password="admin",
         roles=["boss"]
+    )
+
+    User.new(
+        db_connection=System,
+        username="user",
+        password="user",
+        roles=["user"]
     )
 
 
@@ -115,19 +160,74 @@ security = HTTPBearer()
 # Session Manager for getting the user session
 SM = SessionManager()
 
+def check_role(role: Role, request: Endpoint) -> bool:
+    """
+    Check if the given role grants access to the specified endpoint.
+    It converts the role's endpoint patterns into regexes; any '*' is replaced with '.*'.
+    """
+    for endpoint in role.api_endpoints:
+        # check if the request method is the same
+        if endpoint.method != Method.ANY and endpoint.method != request.method:
+            continue
+
+        # Escape special regex characters, then replace the escaped wildcard with regex equivalent.
+        regex_pattern = '^' + re.escape(endpoint.path_filter).replace(r'\*', '.*') + '$'
+        if re.match(regex_pattern, request.path_filter):
+            return True
+    return False
+
+def get_user_from_session(session: Session) -> User:
+    # get user
+    user_id = session.user_id
+    user = User.db_find_by_id(System, user_id)
+    if user is None:
+        raise HTTPException(status_code=403, detail="Invalid authentication token")
+    return user
+
 # get session from token
-def auth(required_roles: Optional[List[str]] = None) -> Callable[[HTTPAuthorizationCredentials], Awaitable[Session]]:
-    async def new_auth(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Session:
+def auth(required_roles: Optional[List[str]] = None) -> Callable[[Request, HTTPAuthorizationCredentials], Awaitable[object]]:
+    """
+    Authentication dependency that returns a session if access is granted.
+    It first checks if the user has one of the required roles directly.
+    If not, it checks the request path against the API endpoint patterns defined in each role.
+    
+    The API endpoint is printed/formatted (e.g., GET-/endpoint) as indicated in the docstring.
+    """
+    async def new_auth(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)) -> object:
         token = credentials.credentials
         session = await SM.get_session(token)
         if session is None:
             raise HTTPException(status_code=403, detail="Invalid authentication token")
+
+        # get user
+        user = get_user_from_session(session)
         
-        # Check if user has at least one of the required roles
+        user_roles = user.roles  # List of role names (e.g., ["admin", "user"])
+        
+        # If specific required roles are provided, check if the user has at least one of them.
         if required_roles is not None:
-            if not any(role in session.user.roles for role in required_roles):
-                raise HTTPException(status_code=403, detail="Permission denied")
-        return session
+            if any(role in user_roles for role in required_roles):
+                return session
+
+        # current request method and path
+        new_request = Endpoint(
+            method=Method(request.method),
+            path_filter=request.url.path
+        )
+
+        # Fetch all roles from the database.
+        roles_db = Role.db_find_all(System)
+        # Build a list of Role objects corresponding to the user's roles.
+        roles_list = [role_obj for role_name, role_obj in roles_db.items() if role_name in user_roles]
+
+        # Check if any of the user's roles permit access to the requested endpoint.
+        for role_obj in roles_list:
+            if check_role(role_obj, new_request):
+                return session
+
+        # If no matching role endpoint pattern is found, deny access.
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
     return new_auth
 
 
@@ -190,15 +290,19 @@ async def api_auth_login(auth: AuthRequest) -> AuthResponse:
 )
 async def api_auth_status(session: Session = Depends(auth())) -> AuthResponse:
     """Check the current authentication session status."""
+
+    # get user
+    user = get_user_from_session(session)
+
     return AuthResponse(
         token=session._id,
         creation_date=session.creation_date,
         expiration_date=session.expiration_date,
         user=AuthUser(
-            id=session.user._id,
-            username=session.user.username,
-            roles=session.user.roles,
-            last_login=session.user.last_login
+            id=user._id,
+            username=user.username,
+            roles=user.roles,
+            last_login=user.last_login
         )
     )
 
@@ -230,15 +334,19 @@ async def api_auth_session(session: Session = Depends(auth(["boss"]))) -> AuthSe
     sessions = await SM.get_sessions()
     return_sessions: List[AuthResponse] = []
     for s in sessions.values():
+
+        # get user
+        user = get_user_from_session(s)
+
         return_sessions.append(AuthResponse(
             token=s._id,
             creation_date=s.creation_date,
             expiration_date=s.expiration_date,
             user=AuthUser(
-                id=s.user._id,
-                username=s.user.username,
-                roles=s.user.roles,
-                last_login=s.user.last_login
+                id=user._id,
+                username=user.username,
+                roles=user.roles,
+                last_login=user.last_login
             )
         ))
 

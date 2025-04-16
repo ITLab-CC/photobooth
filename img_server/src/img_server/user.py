@@ -8,6 +8,7 @@ from typing import Optional, List, Tuple
 import bcrypt
 
 from img_server.db_connection import MongoDBConnection, mongodb_get_user_permissions
+from img_server.role import Role
 
 # Helper functions to convert datetime objects to/from strings.
 def datetime_to_str(dt: Optional[datetime]) -> Optional[str]:
@@ -85,39 +86,6 @@ class User:
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def to_json(self) -> str:
-        """
-        Return a JSON string representation of the User object.
-
-        This method converts the User instance into a dictionary using to_dict(),
-        formats the datetime field into a string (if present), and renames the key
-        for the user id to 'id' for consistency. The resulting dictionary is then
-        dumped into a JSON string.
-        """
-        data = self.to_dict()
-        # Convert last_login datetime to string (if not None)
-        if data["last_login"]:
-            data["last_login"] = data["last_login"].strftime("%Y-%m-%d %H:%M:%S")
-        # Rename the key from "_id" to "id" for the JSON representation
-        data["id"] = data.pop("_id")
-        return json.dumps(data, indent=4)
-
-    @classmethod
-    def load_from_json(cls, json_str: str) -> "User":
-        """
-        Create a User instance from a JSON string.
-
-        This method parses the JSON string to a dictionary, converts the 'last_login'
-        field from a string back to a datetime object (if it exists), and changes the
-        'id' key back to '_id' for compatibility with the User initializer.
-        """
-        data = json.loads(json_str)
-        if data.get("last_login"):
-            data["last_login"] = datetime.strptime(data["last_login"], "%Y-%m-%d %H:%M:%S")
-        if "id" in data:
-            data["_id"] = data.pop("id")
-        return cls(**data)
-
     @classmethod
     def db_create_collection(cls, db_connection: MongoDBConnection) -> None:
         """
@@ -193,6 +161,12 @@ class User:
         existing_user = User.db_find_by_username(db_connection, username)
         if existing_user:
             raise ValueError(f"Username '{username}' already exists.")
+        
+        # check if role exists
+        db_roles = Role.db_find_all(db_connection)
+        for role in roles:
+            if role not in [r for r in db_roles]:
+                raise ValueError(f"Role '{role}' does not exist.")
 
         # Hash the password and generate a salt
         password_hash, password_salt = User.hash_password(password)

@@ -25,7 +25,7 @@ class Status(Enum):
 
 @dataclass
 class Session:
-    user: User
+    user_id: str
     expiration_date: datetime
     creation_date: datetime = field(default_factory=datetime.now)
     _id: str = field(default_factory=lambda: f"SESSION-{uuid.uuid4()}")
@@ -59,7 +59,7 @@ class Session:
         expiration_date = datetime_from_str(data.get("expiration_date"))
         
         return cls(
-            user=user,
+            user_id=user._id,
             creation_date=creation_date,
             expiration_date=expiration_date,
             _id=data["_id"]
@@ -144,21 +144,6 @@ class SessionManager:
                 session = Session.from_json(json_str)
                 sessions[session._id] = session
         return sessions
-
-    async def refresh_user_in_all_sessions_by_user_id(self, db_connection: MongoDBConnection, user_id: str) -> None:
-        """
-        Refresh the user information in all sessions for a specific user ID.
-        This will update the redis entry for each session with the latest user data.
-        """
-        # get all sessions
-        sessions = await self.get_sessions()
-        for session in sessions.values():
-            if session.user.db_refresh():
-                async with self.lock:
-                    #overwrite redis entry
-                    await self.redis.set(
-                        SESSION_PREFIX + session._id, session.to_json(), ex=SESSION_DURATION_SECONDS
-                    )
 
 
 # --- Test the Simplified Session Manager ---
