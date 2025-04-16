@@ -424,7 +424,7 @@ async def api_roles(session: Session = Depends(auth([BOSE_ROLE]))) -> List[RoleR
         return_roles.append(RoleResponse(
             id=r._id,
             rolename=r.rolename,
-            endpoints=[EndpointResponse(method=e.method.value, path_filter=e.path_filter) for e in r.api_endpoints]
+            endpoints=[EndpointResponse(method=MethodResponse(e.method.value), path_filter=e.path_filter) for e in r.api_endpoints]
         ))
     return return_roles
 
@@ -443,7 +443,7 @@ async def api_role(role_id: str, session: Session = Depends(auth([BOSE_ROLE]))) 
     return RoleResponse(
         id=role._id,
         rolename=role.rolename,
-        endpoints=[EndpointResponse(method=e.method.value, path_filter=e.path_filter) for e in role.api_endpoints]
+        endpoints=[EndpointResponse(method=MethodResponse(e.method.value), path_filter=e.path_filter) for e in role.api_endpoints]
     )
 
 @app.post(
@@ -454,6 +454,12 @@ async def api_role(role_id: str, session: Session = Depends(auth([BOSE_ROLE]))) 
 )
 async def api_create_role(role: RoleCreateRequest, session: Session = Depends(auth([BOSE_ROLE]))) -> RoleResponse:
     """Create a new role with specified endpoints."""
+    # check if path_filter is valid. It should not contain any regex special characters
+    if role.endpoints is not None:
+        for e in role.endpoints:
+            if re.search(r"[*\\]", e.path_filter):
+                raise HTTPException(status_code=400, detail="Invalid path filter. Only '*' is allowed.")
+
     # Convert the incoming endpoints to Endpoint objects
     endpoints = [Endpoint(method=Method(e.method), path_filter=e.path_filter) for e in role.endpoints] if role.endpoints else []
 
@@ -472,7 +478,7 @@ async def api_create_role(role: RoleCreateRequest, session: Session = Depends(au
     return RoleResponse(
         id=new_role._id,
         rolename=new_role.rolename,
-        endpoints=[EndpointResponse(method=e.method.value, path_filter=e.path_filter) for e in new_role.api_endpoints]
+        endpoints=[EndpointResponse(method=MethodResponse(e.method.value), path_filter=e.path_filter) for e in new_role.api_endpoints]
     )
 
 @app.delete(
@@ -525,11 +531,38 @@ async def api_update_role(role_id: str, role: RolePutRequest, session: Session =
     return RoleResponse(
         id=existing_role._id,
         rolename=existing_role.rolename,
-        endpoints=[EndpointResponse(method=e.method.value, path_filter=e.path_filter) for e in existing_role.api_endpoints]
+        endpoints=[EndpointResponse(method=MethodResponse(e.method.value), path_filter=e.path_filter) for e in existing_role.api_endpoints]
     )
 
 
 
+# ---------------------------
+# User Endpoints
+# ---------------------------
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    roles: List[str]
+    last_login: Optional[datetime]
+
+@app.get(
+    "/api/v1/users",
+    response_model=List[UserResponse],
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="List all users in the system."
+)
+async def api_users(session: Session = Depends(auth([BOSE_ROLE]))) -> List[UserResponse]:
+    """List all users in the system."""
+    users = User.db_find_all(System)
+    return_users: List[UserResponse] = []
+    for u in users.values():
+        return_users.append(UserResponse(
+            id=u._id,
+            username=u.username,
+            roles=u.roles,
+            last_login=u.last_login
+        ))
+    return return_users
 
 
 
