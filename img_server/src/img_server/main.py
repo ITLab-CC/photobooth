@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
+from enum import Enum
 import fnmatch
 from math import ceil
 import os
@@ -380,6 +381,154 @@ async def api_auth_session_logout(token: str, session: Session = Depends(auth([B
     
     await s.logout()
     return OK(ok=True)
+
+
+# ---------------------------
+# Role Endpoints
+# ---------------------------
+class MethodResponse(str, Enum):  # Inherit from str and Enum for JSON serialization
+    GET = "GET"
+    POST = "POST"
+    PUT = "PUT"
+    DELETE = "DELETE"
+    ANY = "ANY"
+
+class EndpointResponse(BaseModel):
+    method: MethodResponse
+    path_filter: str
+
+class RoleResponse(BaseModel):
+    id: str
+    rolename: str
+    endpoints: List[EndpointResponse]
+
+class RoleCreateRequest(BaseModel):
+    rolename: str
+    endpoints: Optional[List[EndpointResponse]] = None
+
+class RolePutRequest(BaseModel):
+    rolename: Optional[str] = None
+    endpoints: Optional[List[EndpointResponse]] = None
+
+@app.get(
+    "/api/v1/roles",
+    response_model=List[RoleResponse],
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="List all roles in the system."
+)
+async def api_roles(session: Session = Depends(auth([BOSE_ROLE]))) -> List[RoleResponse]:
+    """List all roles in the system."""
+    roles = Role.db_find_all(System)
+    return_roles: List[RoleResponse] = []
+    for r in roles.values():
+        return_roles.append(RoleResponse(
+            id=r._id,
+            rolename=r.rolename,
+            endpoints=[EndpointResponse(method=e.method.value, path_filter=e.path_filter) for e in r.api_endpoints]
+        ))
+    return return_roles
+
+@app.get(
+    "/api/v1/role/{role_id}",
+    response_model=RoleResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Get a specific role by its ID."
+)
+async def api_role(role_id: str, session: Session = Depends(auth([BOSE_ROLE]))) -> RoleResponse:
+    """Get a specific role by its ID."""
+    role = Role.db_find_by_id(System, role_id)
+    if role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+    
+    return RoleResponse(
+        id=role._id,
+        rolename=role.rolename,
+        endpoints=[EndpointResponse(method=e.method.value, path_filter=e.path_filter) for e in role.api_endpoints]
+    )
+
+@app.post(
+    "/api/v1/role",
+    response_model=RoleResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Create a new role with specified endpoints."
+)
+async def api_create_role(role: RoleCreateRequest, session: Session = Depends(auth([BOSE_ROLE]))) -> RoleResponse:
+    """Create a new role with specified endpoints."""
+    # Convert the incoming endpoints to Endpoint objects
+    endpoints = [Endpoint(method=Method(e.method), path_filter=e.path_filter) for e in role.endpoints] if role.endpoints else []
+
+    # Check if the role already exists
+    existing_role = Role.db_find_by_rolename(System, role.rolename)
+    if existing_role is not None:
+        raise HTTPException(status_code=400, detail="Role already exists")
+
+    # Create the new role
+    new_role = Role.new(
+        db_connection=System,
+        rolename=role.rolename,
+        api_endpoints=endpoints
+    )
+
+    return RoleResponse(
+        id=new_role._id,
+        rolename=new_role.rolename,
+        endpoints=[EndpointResponse(method=e.method.value, path_filter=e.path_filter) for e in new_role.api_endpoints]
+    )
+
+@app.delete(
+    "/api/v1/role/{role_id}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Delete a specific role by its ID."
+)
+async def api_delete_role(role_id: str, session: Session = Depends(auth([BOSE_ROLE]))) -> OK:
+    """Delete a specific role by its ID."""
+    role = Role.db_find_by_id(System, role_id)
+    if role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+    
+    # Check if the role is in use by any user
+    # Remove the role from all users
+    users = User.db_find_all(System)
+    for user in users.values():
+        if role._id in user.roles:
+            user.roles.remove(role._id)
+            user.db_save(System)
+
+    # Delete the role
+    Role.db_delete_by_id(System, role_id)
+
+    return OK(ok=True)
+
+@app.put(
+    "/api/v1/role/{role_id}",
+    response_model=RoleResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Update a specific role by its ID."
+)
+async def api_update_role(role_id: str, role: RolePutRequest, session: Session = Depends(auth([BOSE_ROLE]))) -> RoleResponse:
+    """Update a specific role by its ID."""
+    # Convert the incoming endpoints to Endpoint objects
+    endpoints = [Endpoint(method=Method(e.method), path_filter=e.path_filter) for e in role.endpoints] if role.endpoints else []
+
+    # Find role by ID
+    existing_role = Role.db_find_by_id(System, role_id)
+    if existing_role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+    
+    # Update the role
+    if role.rolename is not None:
+        existing_role.rolename = role.rolename
+    if role.endpoints is not None:
+        existing_role.api_endpoints = endpoints
+    existing_role.db_update(System)
+    return RoleResponse(
+        id=existing_role._id,
+        rolename=existing_role.rolename,
+        endpoints=[EndpointResponse(method=e.method.value, path_filter=e.path_filter) for e in existing_role.api_endpoints]
+    )
+
+
 
 
 

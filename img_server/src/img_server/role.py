@@ -220,6 +220,12 @@ class Role:
         collection.delete_one({"_id": self._id})
 
     @classmethod
+    def db_delete_by_id(cls, db_connection: MongoDBConnection, _id: str) -> None:
+        """Delete a Role object from the database by _id."""
+        collection = db_connection.db[cls.COLLECTION_NAME]
+        collection.delete_one({"_id": _id})
+
+    @classmethod
     def db_find_all(cls, db_connection: MongoDBConnection) -> Dict[str, "Role"]:
         """
         Retrieve all Role objects from the database.
