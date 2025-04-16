@@ -223,12 +223,12 @@ class Role:
     def db_find_all(cls, db_connection: MongoDBConnection) -> Dict[str, "Role"]:
         """
         Retrieve all Role objects from the database.
-        Returns a dictionary with rolename as key and Role instance as value.
+        Returns a dictionary with role id as key and Role instance as value.
         """
         collection = db_connection.db[cls.COLLECTION_NAME]
         docs = collection.find()
         roles_list = [cls._db_load(doc) for doc in docs]
-        roles_dict = {role.rolename: role for role in roles_list}
+        roles_dict = {role.id: role for role in roles_list}
         return roles_dict
 
 

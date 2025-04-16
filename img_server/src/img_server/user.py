@@ -3,7 +3,7 @@ import uuid
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple
 
 import bcrypt
 
@@ -149,13 +149,13 @@ class User:
         db_connection.db.drop_collection(cls.COLLECTION_NAME)
 
     @classmethod
-    def new(cls, db_connection: MongoDBConnection, username: str, password: str, roles: List[str] = None) -> "User":
+    def new(cls, db_connection: MongoDBConnection, username: str, password: str, roles_id: Optional[List[str]] = None) -> "User":
         """
         Create a new user in the database.
         """
 
-        if roles is None:
-            roles = []
+        if roles_id is None:
+            roles_id = []
 
         # Check if the username already exists
         existing_user = User.db_find_by_username(db_connection, username)
@@ -164,9 +164,9 @@ class User:
         
         # check if role exists
         db_roles = Role.db_find_all(db_connection)
-        for role in roles:
-            if role not in [r for r in db_roles]:
-                raise ValueError(f"Role '{role}' does not exist.")
+        for role_id in roles_id:
+            if role_id not in [r for r in db_roles]:
+                raise ValueError(f"Role '{role_id}' does not exist.")
 
         # Hash the password and generate a salt
         password_hash, password_salt = User.hash_password(password)
@@ -176,7 +176,7 @@ class User:
             username=username,
             password_hash=password_hash,
             password_salt=password_salt,
-            roles=roles
+            roles=roles_id
         )
 
         # Save the new user to the database
@@ -254,13 +254,16 @@ class User:
         collection.delete_one({"_id": self._id})
 
     @classmethod
-    def db_find_all(cls, db_connection: MongoDBConnection) -> List['User']:
+    def db_find_all(cls, db_connection: MongoDBConnection) -> Dict[str, 'User']:
         """
         Retrieve all User objects from the database.
+        Retruns a dictionary with user id as key and User instance as value.
         """
         collection = db_connection.db[cls.COLLECTION_NAME]
         docs = collection.find()
-        return [cls._db_load(doc) for doc in docs]
+        user_list = [cls._db_load(doc) for doc in docs]
+        user_dict = {user.id: user for user in user_list}
+        return user_dict
 
     @classmethod
     def _db_load(cls, data: dict) -> 'User':

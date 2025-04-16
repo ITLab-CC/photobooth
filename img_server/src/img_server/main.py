@@ -44,7 +44,7 @@ System: MongoDBConnection = MongoDBConnection(
 Role.db_create_collection(System)
 # Create default roles
 if not Role.db_find_by_rolename(System, "boss"):
-    Role.new(
+    boss_role = Role.new(
         db_connection=System,
         rolename="boss",
         api_endpoints=[
@@ -54,7 +54,7 @@ if not Role.db_find_by_rolename(System, "boss"):
             )
         ]
     )
-    Role.new(
+    user_role = Role.new(
         db_connection=System,
         rolename="user",
         api_endpoints=[
@@ -76,6 +76,15 @@ if not Role.db_find_by_rolename(System, "boss"):
             )
         ]
     )
+
+USER_ROLE = Role.db_find_by_rolename(System, "user")
+if USER_ROLE is None:
+    raise Exception("User role not found. Pls reinitialize the database.")
+
+BOSE_ROLE = Role.db_find_by_rolename(System, "boss")
+if BOSE_ROLE is None:
+    raise Exception("Boss role not found. Pls reinitialize the database.")
+
 User.db_create_collection(System)
 # check if admin user exists
 if not User.db_find_by_username(System, "admin"):
@@ -83,16 +92,15 @@ if not User.db_find_by_username(System, "admin"):
         db_connection=System,
         username="admin",
         password="admin",
-        roles=["boss"]
+        roles_id=[BOSE_ROLE.id]
     )
 
     User.new(
         db_connection=System,
         username="user",
         password="user",
-        roles=["user"]
+        roles_id=[USER_ROLE.id]
     )
-
 
 # ---------------------------
 # FastAPI App Initialization
@@ -185,7 +193,7 @@ def get_user_from_session(session: Session) -> User:
     return user
 
 # get session from token
-def auth(required_roles: Optional[List[str]] = None) -> Callable[[Request, HTTPAuthorizationCredentials], Awaitable[object]]:
+def auth(required_roles: Optional[List[Optional[Role]]] = None) -> Callable[[Request, HTTPAuthorizationCredentials], Awaitable[object]]:
     """
     Authentication dependency that returns a session if access is granted.
     It first checks if the user has one of the required roles directly.
@@ -202,11 +210,17 @@ def auth(required_roles: Optional[List[str]] = None) -> Callable[[Request, HTTPA
         # get user
         user = get_user_from_session(session)
         
-        user_roles = user.roles  # List of role names (e.g., ["admin", "user"])
+        user_role_ids = user.roles
+
+        # Fetch all roles from the database.
+        roles_db = Role.db_find_all(System)
+        user_roles = [user_role for user_role in roles_db.values() if user_role._id in user_role_ids]
+
+        user_roles_names = [role.rolename for role in user_roles]
         
         # If specific required roles are provided, check if the user has at least one of them.
         if required_roles is not None:
-            if any(role in user_roles for role in required_roles):
+            if any(role.rolename in user_roles_names for role in required_roles if role is not None):
                 return session
 
         # current request method and path
@@ -215,10 +229,9 @@ def auth(required_roles: Optional[List[str]] = None) -> Callable[[Request, HTTPA
             path_filter=request.url.path
         )
 
-        # Fetch all roles from the database.
-        roles_db = Role.db_find_all(System)
+
         # Build a list of Role objects corresponding to the user's roles.
-        roles_list = [role_obj for role_name, role_obj in roles_db.items() if role_name in user_roles]
+        roles_list = [role_obj for role_id, role_obj in roles_db.items() if role_id in user_role_ids]
 
         # Check if any of the user's roles permit access to the requested endpoint.
         for role_obj in roles_list:
@@ -330,7 +343,7 @@ class AuthSessionResponse(BaseModel):
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="For administrative users: Retrieve a list of all active sessions with detailed session information."
 )
-async def api_auth_session(session: Session = Depends(auth(["boss"]))) -> AuthSessionResponse:
+async def api_auth_session(session: Session = Depends(auth([BOSE_ROLE]))) -> AuthSessionResponse:
     sessions = await SM.get_sessions()
     return_sessions: List[AuthResponse] = []
     for s in sessions.values():
@@ -359,7 +372,7 @@ async def api_auth_session(session: Session = Depends(auth(["boss"]))) -> AuthSe
     dependencies=[Depends(RateLimiter(times=5, minutes=1))],
     description="For administrators only: Logout a specific session identified by its token."
 )
-async def api_auth_session_logout(token: str, session: Session = Depends(auth(["boss"]))) -> OK:
+async def api_auth_session_logout(token: str, session: Session = Depends(auth([BOSE_ROLE]))) -> OK:
    
     s = await SM.get_session(token)
     if s is None:

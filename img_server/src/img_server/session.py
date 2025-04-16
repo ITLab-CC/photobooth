@@ -36,7 +36,7 @@ class Session:
             "_id": self._id,
             "creation_date": datetime_to_str(self.creation_date),
             "expiration_date": datetime_to_str(self.expiration_date),
-            "user": self.user.to_dict()
+            "user_id": self.user_id
         }
 
     def to_json(self) -> str:
@@ -49,17 +49,13 @@ class Session:
         Create a Session object from a dictionary.
         This method converts ISO-formatted datetime strings back to datetime objects 
         and rebuilds the nested User object.
-        """
-        # Rebuild the User instance from its dictionary representation.
-        user_data = data.get("user")
-        user = User.from_dict(user_data)
-        
+        """        
         # Convert string dates back to datetime objects.
         creation_date = datetime_from_str(data.get("creation_date"))
         expiration_date = datetime_from_str(data.get("expiration_date"))
         
         return cls(
-            user_id=user._id,
+            user_id=data["user_id"],
             creation_date=creation_date,
             expiration_date=expiration_date,
             _id=data["_id"]
@@ -109,7 +105,7 @@ class SessionManager:
 
         # Create a new session.
         session = Session(
-            user=user,
+            user_id=user.id,
             expiration_date=datetime.now() + timedelta(seconds=SESSION_DURATION_SECONDS)
         )
         async with self.lock:
