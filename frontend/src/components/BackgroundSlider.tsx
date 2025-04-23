@@ -19,18 +19,16 @@ interface BackgroundSliderProps {
   onSelect?: (backgroundId: string) => void;
 }
 
-
 const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) => {
   const [backgrounds, setBackgrounds] = useState<BackgroundResponse[]>([]);
-  const paddedBackgrounds = [null, ...backgrounds, null];
-  const [selectedIndex, setSelectedIndex] = useState<number>(1);
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
   useEffect(() => {
     listBackgrounds(token)
       .then((data: BackgroundListResponse) => {
         if (data.backgrounds && data.backgrounds.length > 0) {
           setBackgrounds(data.backgrounds);
-          setSelectedIndex(1);
+          setSelectedIndex(0);
         }
       })
       .catch((err) => {
@@ -39,49 +37,58 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
   }, [token]);
 
   useEffect(() => {
-    if (onSelect && paddedBackgrounds[selectedIndex]) {
-      onSelect(paddedBackgrounds[selectedIndex]!.background_id);
+    if (onSelect && backgrounds[selectedIndex]) {
+      onSelect(backgrounds[selectedIndex].background_id);
     }
-  }, [selectedIndex, paddedBackgrounds, onSelect]);
-
-  const clampIndex = (index: number) =>
-    Math.max(1, Math.min(index, paddedBackgrounds.length - 2));
+  }, [selectedIndex, backgrounds, onSelect]);
 
   const handlePrev = () => {
-    setSelectedIndex((prev) => clampIndex(prev - 1));
+    setSelectedIndex((prev) => Math.max(prev - 1, 0));
   };
 
   const handleNext = () => {
-    setSelectedIndex((prev) => clampIndex(prev + 1));
+    setSelectedIndex((prev) => Math.min(prev + 1, backgrounds.length - 1));
   };
 
   const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => handleNext(),
-    onSwipedRight: () => handlePrev(),
+    onSwipedLeft: handleNext,
+    onSwipedRight: handlePrev,
     trackMouse: true,
   });
 
-  const leftItem = paddedBackgrounds[selectedIndex - 1];
-  const centerItem = paddedBackgrounds[selectedIndex];
-  const rightItem = paddedBackgrounds[selectedIndex + 1];
+  const leftIndex = selectedIndex - 1 >= 0 ? selectedIndex - 1 : null;
+  const centerIndex = selectedIndex;
+  const rightIndex = selectedIndex + 1 < backgrounds.length ? selectedIndex + 1 : null;
+
+  const handleImageClick = (index: number) => {
+    setSelectedIndex(index);
+  };
 
   return (
     <Box {...swipeHandlers} display="flex" alignItems="center" mt={2}>
-      <IconButton onClick={handlePrev} disabled={selectedIndex === 1}>
+      <IconButton onClick={handlePrev} disabled={selectedIndex === 0}>
         <ArrowBackIosIcon />
       </IconButton>
+
       <Box display="flex" gap={1}>
-        <Paper sx={{ width: 150, height: 150, overflow: "hidden" }}>
-          {leftItem ? (
+        {leftIndex !== null && (
+          <Paper
+            sx={{
+              width: 150,
+              height: 150,
+              overflow: "hidden",
+              cursor: "pointer",
+            }}
+            onClick={() => handleImageClick(leftIndex)}
+          >
             <BackgroundImage
               token={token}
-              backgroundId={leftItem.background_id}
+              backgroundId={backgrounds[leftIndex].background_id}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
-          ) : (
-            <Box sx={{ width: "100%", height: "100%" }} />
-          )}
-        </Paper>
+          </Paper>
+        )}
+
         <Paper
           sx={{
             width: 180,
@@ -90,29 +97,42 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
             border: "4px solid #1976d2",
             transition: "transform 0.3s",
             transform: "scale(1.2)",
+            cursor: "pointer",
           }}
+          onClick={() => handleImageClick(centerIndex)}
         >
-          {centerItem && (
+          {backgrounds[centerIndex] && (
             <BackgroundImage
               token={token}
-              backgroundId={centerItem.background_id}
+              backgroundId={backgrounds[centerIndex].background_id}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           )}
         </Paper>
-        <Paper sx={{ width: 150, height: 150, overflow: "hidden" }}>
-          {rightItem ? (
+
+        {rightIndex !== null && (
+          <Paper
+            sx={{
+              width: 150,
+              height: 150,
+              overflow: "hidden",
+              cursor: "pointer",
+            }}
+            onClick={() => handleImageClick(rightIndex)}
+          >
             <BackgroundImage
               token={token}
-              backgroundId={rightItem.background_id}
+              backgroundId={backgrounds[rightIndex].background_id}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
-          ) : (
-            <Box sx={{ width: "100%", height: "100%" }} />
-          )}
-        </Paper>
+          </Paper>
+        )}
       </Box>
-      <IconButton onClick={handleNext} disabled={selectedIndex === paddedBackgrounds.length - 2}>
+
+      <IconButton
+        onClick={handleNext}
+        disabled={selectedIndex === backgrounds.length - 1}
+      >
         <ArrowForwardIosIcon />
       </IconButton>
     </Box>

@@ -13,7 +13,7 @@ const flashAnimation = keyframes`
 
 interface CustomCameraComponentProps {
   galleryId: string;
-  pin: string;
+  pin?: string;
   token: string;
   onImageUpload?: (imageId: string) => void;
 }

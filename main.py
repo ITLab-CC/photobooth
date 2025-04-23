@@ -336,7 +336,7 @@ class GalleryResponse(BaseModel):
 @app.post(
     "/api/v1/gallery",
     response_model=GalleryResponse,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=10, seconds=1))],
     description="Create a new gallery. Optionally, specify images, a pin, and an expiration time (which must be in the future)."
 )
 async def api_gallery_create(gallery: Optional[GalleryRequest] = None, session: Session = Depends(auth(["boss", "photo_booth"]))) -> GalleryResponse:
@@ -523,7 +523,7 @@ class ResponseImage(BaseModel):
 @app.post(
     "/api/v1/gallery/{gallery_id}/image",
     response_model=ResponseImage,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=10, seconds=1))],
     description="Add a new image (provided as a base64 encoded string) to the specified gallery. The gallery must exist and be unexpired."
 )
 async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> ResponseImage:
@@ -665,7 +665,7 @@ async def api_gallery_get_images_with_pin(gallery_id: str, pin: str) -> GalleryI
 # get image with pin
 @app.get(
     "/api/v1/gallery/{gallery_id}/image/{image_id}/pin/{pin}",
-    dependencies=[Depends(RateLimiter(times=50, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=20, seconds=1))],
     description="Retrieve a specific image from a gallery using a valid pin. Verifies that the image belongs to the specified gallery."
 )
 async def api_gallery_get_image_with_pin(gallery_id: str, image_id: str, pin: str) -> StreamingResponse:
@@ -737,7 +737,7 @@ async def api_gallery_get_image(gallery_id: str, image_id: str, session: Session
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
     description="Remove an image from the specified gallery. Ensures that the gallery and image exist, and that the image belongs to the gallery."
 )
-async def api_gallery_remove_image(gallery_id: str, image_id: str, session: Session = Depends(auth(["boss"]))) -> GalleryResponse:
+async def api_gallery_remove_image(gallery_id: str, image_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> GalleryResponse:
     db = session.mongodb_connection
 
     g = Gallery.db_find(db, gallery_id)
@@ -871,7 +871,7 @@ async def api_image_list(session: Session = Depends(auth(["boss"]))) -> ImageLis
 # get image
 @app.get(
     "/api/v1/image/{image_id}",
-    dependencies=[Depends(RateLimiter(times=100, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=20, seconds=1))],
     description="Retrieve a specific image by ID. Returns the image as a streaming PNG response."
 )
 async def api_image_get(image_id: str, session: Session = Depends(auth(["boss", "photo_booth", "printer"]))) -> StreamingResponse:
@@ -942,7 +942,7 @@ async def api_background_list(session: Session = Depends(auth(["boss", "photo_bo
 @app.get(
     "/api/v1/background/{background_id}",
     response_model=BackgroundResponse,
-    dependencies=[Depends(RateLimiter(times=100, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=20, seconds=1))],
     description="Retrieve a background image by its ID and return it as a streaming PNG response."
 )
 async def api_background_get(background_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:

@@ -10,6 +10,8 @@ import {
   Typography,
 } from "@mui/material";
 import BackspaceIcon from "@mui/icons-material/Backspace";
+import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
 
 interface PinModalProps {
   open: boolean;
@@ -76,10 +78,18 @@ const PinModal: React.FC<PinModalProps> = ({ open, onSubmit, onCancel }) => {
             mb: 2,
             textAlign: "center",
             fontSize: "2rem",
-            letterSpacing: "0.5rem",
+            display: "flex",
+            justifyContent: "center",
+            gap: 1,
           }}
         >
-          {pin.padEnd(4, "•")}
+          {[0, 1, 2, 3].map((index) =>
+            index < pin.length ? (
+              <LockIcon key={index} fontSize="inherit" />
+            ) : (
+              <LockOpenIcon key={index} fontSize="inherit" />
+            )
+          )}
         </Box>
         {errorMessage && (
           <Typography variant="body2" color="error" sx={{ textAlign: "center", mb: 1 }}>

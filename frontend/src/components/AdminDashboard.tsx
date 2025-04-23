@@ -11,12 +11,13 @@ import {
   DialogActions,
   IconButton,
   TextField,
-  CircularProgress,
 } from "@mui/material";
+import Pagination from "@mui/material/Pagination";
 import BackspaceIcon from "@mui/icons-material/Backspace";
 import DeleteIcon from "@mui/icons-material/Delete";
 import PushPinIcon from "@mui/icons-material/PushPin";
 import PrintIcon from "@mui/icons-material/Print";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   listGalleries,
   deleteGallery,
@@ -52,6 +53,8 @@ const getAdjustedDate = (dateString: string) => {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
   const [galleries, setGalleries] = useState<GalleryResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 9;
 
   const [pinModalOpen, setPinModalOpen] = useState<boolean>(false);
   const [selectedGallery, setSelectedGallery] = useState<GalleryResponse | null>(null);
@@ -67,19 +70,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
 
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
-  const [countdown, setCountdown] = useState(60);
-  const [loadedImages, setLoadedImages] = useState(0);
-
-  // Berechne die Gesamtzahl der Bilder in allen Galerien
-  const totalImages = galleries.reduce(
-    (acc, gallery) => acc + (gallery.images ? gallery.images.length : 0),
-    0
-  );
+  // Cache, um geladene Bilder zu speichern (Mapping von imageId zu Blob-URL)
+  const imageCache = useRef<{ [key: string]: string }>({});
 
   useEffect(() => {
     if (token) {
       listGalleries(token)
-        .then((res) => setGalleries(res.galleries))
+        .then((res) => {
+          const sortedGalleries = res.galleries.sort(
+            (a, b) =>
+              new Date(b.creation_time).getTime() - new Date(a.creation_time).getTime()
+          );
+          setGalleries(sortedGalleries);
+        })
         .catch(() => setError("Fehler beim Laden der Galerien"));
     }
   }, [token]);
@@ -99,23 +102,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
         .catch(() => setError("Fehler beim Laden der Hintergründe"));
     }
   }, [token]);
-
-  // Starte den Reload-Timer NUR, wenn bereits Galerien (also erwartete Bilder) vorhanden sind
-  // und noch nicht alle Bilder geladen wurden.
-  useEffect(() => {
-    // Falls noch keine Bilder erwartet werden oder bereits alle geladen sind, wird kein Timer gesetzt.
-    if (totalImages === 0 || loadedImages >= totalImages) return;
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          window.location.reload();
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [loadedImages, totalImages]);
 
   const handleDeleteGallery = async (galleryId: string) => {
     if (!token) return;
@@ -213,9 +199,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
   };
 
   const handleThumbnailClick = async (imageId: string) => {
+    // Wenn das Bild bereits im Cache ist, nutze die zwischengespeicherte URL
+    if (imageCache.current[imageId]) {
+      setPreviewImageUrl(imageCache.current[imageId]);
+      return;
+    }
     try {
       const blob = await getImage(token, imageId);
       const url = URL.createObjectURL(blob);
+      // Speichere die URL im Cache
+      imageCache.current[imageId] = url;
       setPreviewImageUrl(url);
     } catch (err) {
       console.error("Fehler beim Laden des Bildes:", err);
@@ -223,9 +216,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
   };
 
   const closePreviewModal = () => {
-    if (previewImageUrl) {
-      URL.revokeObjectURL(previewImageUrl);
-    }
+    // Hier verzichten wir auf URL.revokeObjectURL, um den Cache zu erhalten
     setPreviewImageUrl(null);
   };
 
@@ -240,6 +231,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
         alert("Fehler beim Drucken. Bitte versuche es erneut.");
       });
   };
+
+  // Berechnung der aktuell anzuzeigenden Galerien für die Pagination
+  const displayedGalleries = galleries.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   return (
     <Box sx={{ p: 3, minHeight: "100vh", background: "linear-gradient(135deg, #f6d365, #fda085)" }}>
@@ -268,7 +265,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
       <Grid container spacing={3}>
         <Grid item xs={12} md={8} sx={{ mb: 3 }}>
           <Grid container spacing={3}>
-            {galleries.map((g) => (
+            {displayedGalleries.map((g) => (
               <Grid item xs={12} sm={6} md={4} key={g.gallery_id}>
                 <Paper
                   sx={{
@@ -289,22 +286,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
                     </Typography>
                     {g.images && g.images.length > 0 ? (
                       <Box sx={{ mt: 2 }}>
-                        <Typography variant="body2">Bilder:</Typography>
-                        <Box sx={{ display: "flex", gap: 1, overflowX: "auto", pt: 1 }}>
-                          {g.images.map((imgId) => (
-                            <GalleryThumbnail
-                              key={imgId}
-                              token={token}
-                              imageId={imgId}
-                              onClick={() => handleThumbnailClick(imgId)}
-                              onLoad={() => setLoadedImages((prev) => prev + 1)}
-                            />
-                          ))}
-                        </Box>
+                        <Typography variant="body2">Bild:</Typography>
+                        <GalleryThumbnail
+                          token={token}
+                          imageId={g.images[0]}
+                          onClick={() => handleThumbnailClick(g.images[0])}
+                        />
                       </Box>
                     ) : (
                       <Typography variant="body2" sx={{ mt: 1 }}>
-                        Keine Bilder
+                        Kein Bild
                       </Typography>
                     )}
                   </Box>
@@ -449,6 +440,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
         </Grid>
       </Grid>
 
+      {/* Pagination */}
+      {galleries.length > itemsPerPage && (
+        <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+          <Pagination
+            count={Math.ceil(galleries.length / itemsPerPage)}
+            page={currentPage}
+            onChange={(_event, page) => setCurrentPage(page)}
+            color="primary"
+          />
+        </Box>
+      )}
+
+      {/* PIN ändern Dialog */}
       <Dialog open={pinModalOpen} onClose={() => setPinModalOpen(false)}>
         <DialogTitle sx={{ textAlign: "center" }}>PIN ändern</DialogTitle>
         <DialogContent>
@@ -494,6 +498,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
         </DialogActions>
       </Dialog>
 
+      {/* Bildvorschau Dialog */}
       <Dialog open={!!previewImageUrl} onClose={closePreviewModal} maxWidth="md" fullWidth>
         <DialogTitle sx={{ textAlign: "center" }}>Bildvorschau</DialogTitle>
         <DialogContent sx={{ display: "flex", justifyContent: "center" }}>
@@ -517,6 +522,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
         </DialogActions>
       </Dialog>
 
+      {/* Manuelles Reload-Icon */}
       <Box
         sx={{
           position: "fixed",
@@ -530,25 +536,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
         <Box
           component="img"
           src={itlabImage}
-          alt="Itlab Logo"
+          alt="IT-Lab Logo"
           sx={{
             width: 100,
             opacity: 0.8,
           }}
         />
-        <Box
-          sx={{
-            backgroundColor: "#fff",
-            boxShadow: "0px 4px 10px rgba(0,0,0,0.2)",
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            padding: "8px 16px",
-          }}
-        >
-          <CircularProgress size={24} sx={{ mr: 1 }} />
-          <Typography variant="body2">{countdown}</Typography>
-        </Box>
+        <IconButton onClick={() => window.location.reload()} color="primary" size="large">
+          <RefreshIcon fontSize="inherit" />
+        </IconButton>
       </Box>
     </Box>
   );

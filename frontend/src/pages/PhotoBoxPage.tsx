@@ -8,9 +8,9 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
-  Snackbar,
 } from "@mui/material";
 import { keyframes } from "@mui/system";
+import PrintIcon from "@mui/icons-material/Print";
 import AutoLogin from "../components/AutoLogin";
 import DisclaimerModal from "../components/DisclaimerModal";
 import PinModal from "../components/PinModal";
@@ -18,6 +18,7 @@ import CustomCameraComponent from "../components/CustomCameraComponent";
 import BackgroundSlider from "../components/BackgroundSlider";
 import {
   createGallery,
+  deleteGallery,
   GalleryResponse,
   processImage,
   listFrames,
@@ -46,6 +47,11 @@ const backgroundAnimation = keyframes`
   100% { background: linear-gradient(45deg, #fbc2eb, #ff9a9e); }
 `;
 
+const printerAnimation = keyframes`
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+`;
+
 export default function PhotoBoxPage() {
   const [token, setToken] = useState<string | null>(null);
   const [galleryId, setGalleryId] = useState<string | null>(null);
@@ -58,9 +64,8 @@ export default function PhotoBoxPage() {
   const [processedImageId, setProcessedImageId] = useState<string | null>(null);
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
   const [frameId, setFrameId] = useState<string | null>(null);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [printingModalOpen, setPrintingModalOpen] = useState(false);
 
-  // Galerie erstellen
   useEffect(() => {
     if (token && !galleryId) {
       createGallery(token)
@@ -74,7 +79,6 @@ export default function PhotoBoxPage() {
     }
   }, [token, galleryId]);
 
-  // Frames laden
   useEffect(() => {
     if (token) {
       listFrames(token)
@@ -94,7 +98,6 @@ export default function PhotoBoxPage() {
     setSelectedBackgroundId(bgId);
   };
 
-  // Bild hochladen und verarbeiten
   const handleImageUpload = (imageId: string) => {
     setCapturedImage(imageId);
     setProcessing(true);
@@ -122,17 +125,33 @@ export default function PhotoBoxPage() {
       });
   };
 
-  // Beim Erneut Versuchen: Alle Daten zurücksetzen (nichts wird gespeichert)
-  const handleRetry = () => {
+  const handleRetry = async () => {
+    if (galleryId) {
+      try {
+        console.log("Lösche Galerie:", galleryId);
+        await deleteGallery(token!, galleryId);
+        console.log("Galerie erfolgreich gelöscht");
+      } catch (error) {
+        console.error("Fehler beim Löschen der Galerie:", error);
+      }
+    }
     setCapturedImage(null);
     setProcessedImageId(null);
     setProcessing(false);
     setShowResultModal(false);
     setUserPin("");
+    setGalleryId(null);
+    if (token) {
+      try {
+        const newGalleryResponse = await createGallery(token);
+        console.log("Neue Galerie erstellt:", newGalleryResponse.gallery_id);
+        setGalleryId(newGalleryResponse.gallery_id);
+      } catch (error) {
+        console.error("Fehler beim Erstellen der neuen Galerie:", error);
+      }
+    }
   };
 
-  // Klick auf Fertigstellen: Falls noch keine PIN vorhanden ist, PIN-Eingabe öffnen.
-  // Falls bereits eine PIN existiert, wird diese gesetzt und anschließend gedruckt.
   const handleFinish = () => {
     if (!userPin) {
       setShowPinModal(true);
@@ -143,8 +162,9 @@ export default function PhotoBoxPage() {
         return printImage(token!, processedImageId!);
       })
       .then(() => {
-        setSnackbarOpen(true);
+        setPrintingModalOpen(true);
         setTimeout(() => {
+          setPrintingModalOpen(false);
           window.location.reload();
         }, 3000);
       })
@@ -155,7 +175,6 @@ export default function PhotoBoxPage() {
       });
   };
 
-  // Nach Eingabe der PIN im Modal: PIN speichern, Galerie aktualisieren und dann drucken.
   const handlePinSubmit = (pin: string) => {
     setUserPin(pin);
     setShowPinModal(false);
@@ -164,8 +183,9 @@ export default function PhotoBoxPage() {
         return printImage(token!, processedImageId!);
       })
       .then(() => {
-        setSnackbarOpen(true);
+        setPrintingModalOpen(true);
         setTimeout(() => {
+          setPrintingModalOpen(false);
           window.location.reload();
         }, 3000);
       })
@@ -208,9 +228,27 @@ export default function PhotoBoxPage() {
 
       {token && galleryId && !showDisclaimer && !showResultModal && (
         <>
+          <Box
+            sx={{
+              width: 680,
+              backgroundColor: "white",
+              color: "black",                 
+              borderRadius: 2,
+              p: 2,
+              mb: 2,
+              boxShadow: "2px 2px 6px rgba(0,0,0,0.3)", 
+            }}
+          >
+            <Typography variant="h5" gutterBottom>
+              IT-Lab - Photobooth 
+            </Typography>
+            <Typography variant="body1">
+              Willkommen zur ENTEGA-Fotobox! 📸 Schlüpf in deinen Traumberuf, pose vor der Kamera und nimm dein persönliches Foto direkt mit! 🎓🚀
+            </Typography>
+          </Box>
+
           <CustomCameraComponent
             galleryId={galleryId}
-            pin={userPin}
             token={token}
             onImageUpload={handleImageUpload}
           />
@@ -264,6 +302,15 @@ export default function PhotoBoxPage() {
         }}
       />
 
+      <Dialog open={printingModalOpen} disableEscapeKeyDown maxWidth="xs" fullWidth>
+        <DialogContent sx={{ textAlign: "center", p: 4 }}>
+          <PrintIcon sx={{ fontSize: 80, animation: `${printerAnimation} 2s linear infinite` }} />
+          <Typography variant="h6" sx={{ mt: 2 }}>
+            Bild wird gedruckt
+          </Typography>
+        </DialogContent>
+      </Dialog>
+
       <Box
         component="img"
         src={itlabImage}
@@ -275,14 +322,6 @@ export default function PhotoBoxPage() {
           width: 250,
           opacity: 0.8,
         }}
-      />
-
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
-        message="Hurra, dein Bild befindet sich im Druck!"
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
     </Box>
   );
