@@ -42,7 +42,7 @@
       - DELETE /api/v1/print
 */
 
-const BASE_URL = "https://photo.it-lab.cc"; 
+const BASE_URL = "http://localhost:8085";
 
 async function request<T>(
   method: string,
@@ -79,14 +79,14 @@ export interface AuthRequest {
 
 export interface AuthUser {
   username: string;
-  last_login?: string; 
+  last_login?: string;
   roles: string[];
 }
 
 export interface AuthResponse {
   token: string;
-  creation_date: string;   
-  expiration_date: string; 
+  creation_date: string;
+  expiration_date: string;
   user: AuthUser;
 }
 
@@ -151,7 +151,7 @@ export interface GalleryRequest {
 
 export interface GalleryResponse {
   gallery_id: string;
-  creation_time: string;   // ISO-String
+  creation_time: string; // ISO-String
   expiration_time: string; // ISO-String
   images: string[];
   pin_set: boolean;
@@ -182,11 +182,18 @@ export async function createGallery(
   token: string,
   payload?: GalleryRequest
 ): Promise<GalleryResponse> {
-  return await request<GalleryResponse>("POST", "/api/v1/gallery", token, payload);
+  return await request<GalleryResponse>(
+    "POST",
+    "/api/v1/gallery",
+    token,
+    payload
+  );
 }
 
 // 2.2) GET /api/v1/galleries
-export async function listGalleries(token: string): Promise<GalleryListResponse> {
+export async function listGalleries(
+  token: string
+): Promise<GalleryListResponse> {
   return await request<GalleryListResponse>("GET", "/api/v1/galleries", token);
 }
 
@@ -249,8 +256,8 @@ export async function addGalleryImage(
   base64: string,
   pin?: string // optional, wenn euer Endpoint es zulässt
 ): Promise<GalleryImageResponse> {
-  // Evtl. muss der pin in den Body oder Query-Param? 
-  // Im Code oben sieht man, dass der pin in den Body kommt, 
+  // Evtl. muss der pin in den Body oder Query-Param?
+  // Im Code oben sieht man, dass der pin in den Body kommt,
   // aber es kann je nach Implementierung variieren.
   const body: any = { image_base64: base64 };
   if (pin) {
@@ -266,7 +273,10 @@ export async function addGalleryImage(
 
 // 2.7) GET /api/v1/gallery/{gallery_id}/qr
 // Gibt ein StreamingResponse (PNG) zurück – hier ein Blob
-export async function getGalleryQR(token: string, galleryId: string): Promise<Blob> {
+export async function getGalleryQR(
+  token: string,
+  galleryId: string
+): Promise<Blob> {
   const res = await fetch(`${BASE_URL}/api/v1/gallery/${galleryId}/qr`, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
@@ -284,7 +294,9 @@ export async function getGalleryImagesByPin(
 ): Promise<GalleryImageListResponse> {
   // Hier kein Token nötig, da laut Code "img_viewer" oder Public?
   // Dein Python-Code nutzt "img_viewer", also nur Basic-Call:
-  const res = await fetch(`${BASE_URL}/api/v1/gallery/${galleryId}/images/pin/${pin}`);
+  const res = await fetch(
+    `${BASE_URL}/api/v1/gallery/${galleryId}/images/pin/${pin}`
+  );
   if (!res.ok) {
     throw new Error(`Fehler beim Laden der Galerie-Bilder (PIN)`);
   }
@@ -399,8 +411,14 @@ export async function createBackground(
 }
 
 // 4.2) GET /api/v1/backgrounds
-export async function listBackgrounds(token: string): Promise<BackgroundListResponse> {
-  return await request<BackgroundListResponse>("GET", "/api/v1/backgrounds", token);
+export async function listBackgrounds(
+  token: string
+): Promise<BackgroundListResponse> {
+  return await request<BackgroundListResponse>(
+    "GET",
+    "/api/v1/backgrounds",
+    token
+  );
 }
 
 // 4.3) GET /api/v1/background/{background_id}
@@ -498,7 +516,6 @@ export async function clearPrintQueue(token: string): Promise<{ ok: boolean }> {
   return await request<{ ok: boolean }>("DELETE", "/api/v1/print", token);
 }
 
-
 // =============== 7) Frame ===============
 export interface FrameRequest {
   image_base64: string;
@@ -529,10 +546,7 @@ export async function listFrames(token: string): Promise<FrameListResponse> {
 
 // 7.3) GET /api/v1/frame/{frame_id}
 // Gibt ein PNG-Stream (oder anderes Bildformat) zurück
-export async function getFrame(
-  token: string,
-  frameId: string
-): Promise<Blob> {
+export async function getFrame(token: string, frameId: string): Promise<Blob> {
   const res = await fetch(`${BASE_URL}/api/v1/frame/${frameId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
