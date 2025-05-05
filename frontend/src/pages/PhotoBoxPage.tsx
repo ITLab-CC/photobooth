@@ -13,7 +13,7 @@ import {
 import { keyframes } from "@mui/system";
 import AutoLogin from "../components/AutoLogin";
 import DisclaimerModal from "../components/DisclaimerModal";
-import PrintCountModal from "../components/PrintCountModal";
+import PinModal from "../components/PinModal";
 import CustomCameraComponent from "../components/CustomCameraComponent";
 import BackgroundSlider from "../components/BackgroundSlider";
 import {
@@ -23,6 +23,7 @@ import {
   listFrames,
   getImage,
   printImage,
+  setGalleryPin,
 } from "../api";
 import itlabImage from "../assets/it-lab-banner.svg";
 
@@ -49,8 +50,8 @@ export default function PhotoBoxPage() {
   const [token, setToken] = useState<string | null>(null);
   const [galleryId, setGalleryId] = useState<string | null>(null);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
-  const [showPrintCountModal, setShowPrintCountModal] = useState(false);
-  const [printCount, setPrintCount] = useState(1);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [userPin, setUserPin] = useState("");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState<boolean>(false);
   const [processing, setProcessing] = useState<boolean>(false);
@@ -127,25 +128,41 @@ export default function PhotoBoxPage() {
     setProcessedImageId(null);
     setProcessing(false);
     setShowResultModal(false);
+    setUserPin("");
   };
 
-  // Klick auf Fertigstellen: Öffnet das Modal zur Auswahl der Anzahl der Drucke
+  // Klick auf Fertigstellen: Falls noch keine PIN vorhanden ist, PIN-Eingabe öffnen.
+  // Falls bereits eine PIN existiert, wird diese gesetzt und anschließend gedruckt.
   const handleFinish = () => {
-    setShowPrintCountModal(true);
+    if (!userPin) {
+      setShowPinModal(true);
+      return;
+    }
+    setGalleryPin(token!, galleryId!, userPin)
+      .then(() => {
+        return printImage(token!, processedImageId!);
+      })
+      .then(() => {
+        setSnackbarOpen(true);
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+      })
+      .catch((err) => {
+        console.error("Fehler beim Drucken:", err);
+        alert("Fehler beim Drucken. Bitte versuche es erneut.");
+        window.location.reload();
+      });
   };
 
-  // Nach Auswahl der Anzahl der Drucke: Drucken der ausgewählten Anzahl
-  const handlePrintCountSubmit = (count: number) => {
-    setPrintCount(count);
-    setShowPrintCountModal(false);
-    
-    // Drucken der ausgewählten Anzahl von Bildern
-    const printPromises = [];
-    for (let i = 0; i < count; i++) {
-      printPromises.push(printImage(token!, processedImageId!));
-    }
-    
-    Promise.all(printPromises)
+  // Nach Eingabe der PIN im Modal: PIN speichern, Galerie aktualisieren und dann drucken.
+  const handlePinSubmit = (pin: string) => {
+    setUserPin(pin);
+    setShowPinModal(false);
+    setGalleryPin(token!, galleryId!, pin)
+      .then(() => {
+        return printImage(token!, processedImageId!);
+      })
       .then(() => {
         setSnackbarOpen(true);
         setTimeout(() => {
@@ -193,7 +210,7 @@ export default function PhotoBoxPage() {
         <>
           <CustomCameraComponent
             galleryId={galleryId}
-            pin="" 
+            pin={userPin}
             token={token}
             onImageUpload={handleImageUpload}
           />
@@ -239,11 +256,11 @@ export default function PhotoBoxPage() {
         )}
       </Dialog>
 
-      <PrintCountModal
-        open={showPrintCountModal}
-        onSubmit={handlePrintCountSubmit}
+      <PinModal
+        open={showPinModal}
+        onSubmit={handlePinSubmit}
         onCancel={() => {
-          setShowPrintCountModal(false);
+          setShowPinModal(false);
         }}
       />
 
@@ -264,7 +281,7 @@ export default function PhotoBoxPage() {
         open={snackbarOpen}
         autoHideDuration={3000}
         onClose={() => setSnackbarOpen(false)}
-        message={`Hurra, ${printCount} ${printCount === 1 ? 'Bild befindet' : 'Bilder befinden'} sich im Druck!`}
+        message="Hurra, dein Bild befindet sich im Druck!"
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
     </Box>
