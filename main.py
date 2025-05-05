@@ -1139,6 +1139,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         raise HTTPException(status_code=500, detail="Error generating QR code: " + str(e))
 
     # add qr code to the frame
+    frame_with_qr = frame_img.frame
     if image.qr_code:
         try:
             frame_with_qr = Replacer.add_qr_code(

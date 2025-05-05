@@ -100,6 +100,8 @@ class SessionManager:
                     ) -> Session:
         """Handles user login and session creation."""
         user_data = User.db_find_by_username(db_connection, username)
+        if user_data is None:
+            raise ValueError("User not found")
 
         salt = user_data.password_salt
         hashed, _ = self.hash_password(password, salt)
