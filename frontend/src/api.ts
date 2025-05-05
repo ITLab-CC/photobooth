@@ -458,6 +458,7 @@ export async function processImage(
 // 6.1) POST /api/v1/print
 export interface PrintRequest {
   image_id: string;
+  amount?: number;
 }
 export interface PrintResponse {
   id: string;
@@ -468,9 +469,10 @@ export interface PrintResponse {
 
 export async function printImage(
   token: string,
-  imageId: string
+  imageId: string,
+  amount: number = 1
 ): Promise<PrintResponse> {
-  const body: PrintRequest = { image_id: imageId };
+  const body: PrintRequest = { image_id: imageId, amount };
   return await request<PrintResponse>("POST", "/api/v1/print", token, body);
 }
 

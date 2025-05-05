@@ -13,7 +13,7 @@ import {
 import { keyframes } from "@mui/system";
 import AutoLogin from "../components/AutoLogin";
 import DisclaimerModal from "../components/DisclaimerModal";
-import PinModal from "../components/PinModal";
+import PrintCountModal from "../components/PrintCountModal";
 import CustomCameraComponent from "../components/CustomCameraComponent";
 import BackgroundSlider from "../components/BackgroundSlider";
 import {
@@ -23,7 +23,6 @@ import {
   listFrames,
   getImage,
   printImage,
-  setGalleryPin,
 } from "../api";
 import itlabImage from "../assets/it-lab-banner.svg";
 
@@ -50,8 +49,7 @@ export default function PhotoBoxPage() {
   const [token, setToken] = useState<string | null>(null);
   const [galleryId, setGalleryId] = useState<string | null>(null);
   const [showDisclaimer, setShowDisclaimer] = useState(true);
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [userPin, setUserPin] = useState("");
+  const [showPrintCountModal, setShowPrintCountModal] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState<boolean>(false);
   const [processing, setProcessing] = useState<boolean>(false);
@@ -128,52 +126,30 @@ export default function PhotoBoxPage() {
     setProcessedImageId(null);
     setProcessing(false);
     setShowResultModal(false);
-    setUserPin("");
   };
 
-  // Klick auf Fertigstellen: Falls noch keine PIN vorhanden ist, PIN-Eingabe öffnen.
-  // Falls bereits eine PIN existiert, wird diese gesetzt und anschließend gedruckt.
+  // Klick auf Fertigstellen: Öffnet die Druckauswahl-Modal
   const handleFinish = () => {
-    if (!userPin) {
-      setShowPinModal(true);
-      return;
-    }
-    setGalleryPin(token!, galleryId!, userPin)
-      .then(() => {
-        return printImage(token!, processedImageId!);
-      })
-      .then(() => {
-        setSnackbarOpen(true);
-        setTimeout(() => {
-          window.location.reload();
-        }, 3000);
-      })
-      .catch((err) => {
-        console.error("Fehler beim Drucken:", err);
-        alert("Fehler beim Drucken. Bitte versuche es erneut.");
-        window.location.reload();
-      });
+    setShowPrintCountModal(true);
   };
 
-  // Nach Eingabe der PIN im Modal: PIN speichern, Galerie aktualisieren und dann drucken.
-  const handlePinSubmit = (pin: string) => {
-    setUserPin(pin);
-    setShowPinModal(false);
-    setGalleryPin(token!, galleryId!, pin)
-      .then(() => {
-        return printImage(token!, processedImageId!);
-      })
-      .then(() => {
-        setSnackbarOpen(true);
-        setTimeout(() => {
-          window.location.reload();
-        }, 3000);
-      })
-      .catch((err) => {
-        console.error("Fehler beim Drucken:", err);
-        alert("Fehler beim Drucken. Bitte versuche es erneut.");
+  // Nach Auswahl der Druckanzahl: Einen einzelnen Druckauftrag mit der angegebenen Anzahl senden
+  const handlePrintCountSubmit = async (count: number) => {
+    setShowPrintCountModal(false);
+    setSnackbarOpen(true);
+    
+    try {
+      // Einzelnen Druckauftrag mit der gewünschten Anzahl senden
+      await printImage(token!, processedImageId!, count);
+      
+      setTimeout(() => {
         window.location.reload();
-      });
+      }, 3000);
+    } catch (err) {
+      console.error("Fehler beim Drucken:", err);
+      alert("Fehler beim Drucken. Bitte versuche es erneut.");
+      window.location.reload();
+    }
   };
 
   return (
@@ -210,7 +186,6 @@ export default function PhotoBoxPage() {
         <>
           <CustomCameraComponent
             galleryId={galleryId}
-            pin={userPin}
             token={token}
             onImageUpload={handleImageUpload}
           />
@@ -256,11 +231,11 @@ export default function PhotoBoxPage() {
         )}
       </Dialog>
 
-      <PinModal
-        open={showPinModal}
-        onSubmit={handlePinSubmit}
+      <PrintCountModal
+        open={showPrintCountModal}
+        onSubmit={handlePrintCountSubmit}
         onCancel={() => {
-          setShowPinModal(false);
+          setShowPrintCountModal(false);
         }}
       />
 
@@ -281,7 +256,7 @@ export default function PhotoBoxPage() {
         open={snackbarOpen}
         autoHideDuration={3000}
         onClose={() => setSnackbarOpen(false)}
-        message="Hurra, dein Bild befindet sich im Druck!"
+        message="Hurra, deine Bilder werden gedruckt!"
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
     </Box>
