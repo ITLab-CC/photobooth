@@ -1091,6 +1091,7 @@ class ImageProcessRequest(BaseModel):
     image_background_id: str
     img_frame_id: str
     refine_foreground: bool = False
+    qr_code: bool = False
 
 class ImageProcessResponse(BaseModel):
     img_no_background: ImageResponse
@@ -1138,15 +1139,16 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         raise HTTPException(status_code=500, detail="Error generating QR code: " + str(e))
 
     # add qr code to the frame
-    try:
-        frame_with_qr = Replacer.add_qr_code(
-            frame_img.frame,
-            qr_img, # type: ignore
-            frame_img.qr_position,
-            frame_img.qr_scale
-            )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error adding QR code to frame: " + str(e))
+    if image.qr_code:
+        try:
+            frame_with_qr = Replacer.add_qr_code(
+                frame_img.frame,
+                qr_img, # type: ignore
+                frame_img.qr_position,
+                frame_img.qr_scale
+                )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error adding QR code to frame: " + str(e))
 
     # remove background
     try:
@@ -1219,6 +1221,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 # Print models
 class PrintRequest(BaseModel):
     image_id: str
+    amount: int = 1
 
 class PrintResponse(BaseModel):
     id: str
@@ -1241,11 +1244,12 @@ async def api_print_image(print_req: PrintRequest, session: Session = Depends(au
         raise HTTPException(status_code=404, detail="Image not found")
 
     # create a printer queue item
-    item = PrinterQueueItem(
-        img_id=img._id,
-        number=PrinterQueueItem.get_next_number(db)
-    )
-    item.db_save(db)
+    for _ in range(print_req.amount):
+        item = PrinterQueueItem(
+            img_id=img._id,
+            number=PrinterQueueItem.get_next_number(db)
+        )
+        item.db_save(db)
 
     return PrintResponse(id=item._id, number=item.number, created_at=item.created_at, img_id=item.img_id)
 
@@ -1336,7 +1340,7 @@ async def serve_react_app(full_path: str) -> FileResponse:
 # ---------------------------
 async def main() -> None:
     # Configure the server (this does not call asyncio.run() internally)
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    config = uvicorn.Config(app, host="0.0.0.0", port=8085, log_level="info")
     server = uvicorn.Server(config)
     # Run the server and the old_img_eraser concurrently.
     await asyncio.gather(
