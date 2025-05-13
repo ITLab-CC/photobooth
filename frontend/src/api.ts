@@ -42,7 +42,7 @@
       - DELETE /api/v1/print
 */
 
-const BASE_URL = "http://localhost:8085";
+const BASE_URL = "http://127.0.0.1:8085";
 
 async function request<T>(
   method: string,

@@ -20,11 +20,11 @@ export default function DisclaimerModal({ open, onAccept }: DisclaimerModalProps
 
   return (
     <Dialog open={open} disableEscapeKeyDown>
-      <DialogTitle>Hinweis</DialogTitle>
+      <DialogTitle>Deine ENTEGA Fotobox!</DialogTitle>
       <DialogContent>
         <Typography variant="body1">
-          Bitte lesen Sie die Nutzungsbedingungen und Datenschutzhinweise. Um fortzufahren,
-          müssen Sie diesen zustimmen.
+        Dein Foto wird nur kurz verarbeitet - direkt nach dem Druck wird es gelöscht 🗑️.
+        Alles passiert lokal auf der Fotobox - keine Speicherung, kein Upload, kein Stress 🔒.
         </Typography>
         <FormControlLabel
           control={

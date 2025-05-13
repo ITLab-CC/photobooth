@@ -2,12 +2,14 @@ services:
   mongodb:
     image: mongo:latest
     container_name: mongodb
-    restart: always
+    restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGODB_ADMIN_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_ADMIN_PASSWORD}
     volumes:
       - ./data/mongodb:/data/db
+    ports:
+      - "27017:27017"
     networks:
       - default
 
@@ -25,7 +27,7 @@ services:
     build: .
     container_name: backend
     ports:
-      - "8000:8000"
+      - "8085:8085"
     restart: unless-stopped
     depends_on:
       - mongodb

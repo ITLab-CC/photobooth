@@ -1234,7 +1234,7 @@ class PrintResponse(BaseModel):
 @app.post(
     "/api/v1/print",
     response_model=PrintResponse,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
     description="Print an image by its ID. The image must be in the database."
 )
 async def api_print_image(print_req: PrintRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> PrintResponse:
@@ -1257,7 +1257,7 @@ async def api_print_image(print_req: PrintRequest, session: Session = Depends(au
 @app.get(
     "/api/v1/print",
     response_model=List[PrintResponse],
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
     description="Retrieve a list of all print jobs in the printer queue."
 )
 async def api_print_list(session: Session = Depends(auth(["boss", "printer"]))) -> List[PrintResponse]:
@@ -1273,7 +1273,7 @@ async def api_print_list(session: Session = Depends(auth(["boss", "printer"]))) 
 @app.delete(
     "/api/v1/print/{print_id}",
     response_model=OK,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
     description="Remove a print job from the printer queue by its ID."
 )
 async def api_print_remove(print_id: str, session: Session = Depends(auth(["boss", "printer"]))) -> OK:
@@ -1291,7 +1291,7 @@ async def api_print_remove(print_id: str, session: Session = Depends(auth(["boss
 @app.delete(
     "/api/v1/print",
     response_model=OK,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
     description="Clear all print jobs from the printer queue."
 )
 async def api_print_clear(session: Session = Depends(auth(["boss"]))) -> OK:

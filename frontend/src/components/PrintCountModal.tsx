@@ -67,9 +67,9 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
                   sx={{
                     height: 80,
                     fontSize: "2rem",
-                    backgroundColor: selectedCount === count ? "#4caf50" : undefined,
+                    backgroundColor: selectedCount === count ? "#ff8800" : undefined,
                     '&:hover': {
-                      backgroundColor: selectedCount === count ? "#388e3c" : undefined,
+                      backgroundColor: selectedCount === count ? "#dd7538" : undefined,
                     }
                   }}
                 >
