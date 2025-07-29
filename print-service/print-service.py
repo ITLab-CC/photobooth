@@ -6,7 +6,8 @@ import win32ui
 from PIL import Image, ImageWin
 from dotenv import load_dotenv
 import os
-from typing import Dict, Any, Optional
+import string
+from typing import Dict, Any, Optional, List
 
 # Get the full path of the .env file in the same directory as the script
 script_dir: str = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +61,47 @@ def print_image_from_bytes(img_bytes: bytes) -> None:
     hDC.EndDoc()
     hDC.DeleteDC()
 
+def get_usb_drives() -> List[str]:
+    """Returns a list of USB drive paths if any are connected."""
+    drives = []
+    for letter in string.ascii_uppercase:
+        drive = f"{letter}:\\"
+        if os.path.exists(drive):
+            try:
+                # Check if it's a removable drive (USB)
+                if os.path.exists(os.path.join(drive, "")) and win32file.GetDriveType(drive) == win32file.DRIVE_REMOVABLE:
+                    drives.append(drive)
+            except:
+                pass
+    return drives
+
+def save_image_to_usb(img_bytes: bytes, img_id: str) -> None:
+    """Saves the image to a USB drive if one is connected."""
+    usb_drives = get_usb_drives()
+    if not usb_drives:
+        print("No USB drives found.")
+        return
+    
+    # Use the first USB drive found
+    usb_path = usb_drives[0]
+    print(f"Saving image to USB drive: {usb_path}")
+    
+    try:
+        # Create a directory for the photos if it doesn't exist
+        save_dir = os.path.join(usb_path, "PhotoBooth")
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # Save the image with a timestamp and ID
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        file_path = os.path.join(save_dir, f"photo_{timestamp}_{img_id}.jpg")
+        
+        with open(file_path, 'wb') as f:
+            f.write(img_bytes)
+        
+        print(f"Image saved to {file_path}")
+    except Exception as e:
+        print(f"Error saving to USB: {e}")
+
 def make_request_with_retry(
     url: str, 
     method: str = "get", 
@@ -89,7 +131,7 @@ def make_request_with_retry(
         return res
 
 def main() -> None:
-    """Main function to fetch and print images."""
+    """Main function to fetch, print, and save images."""
     token: str = get_token()
     headers: Dict[str, str] = {"Authorization": f"Bearer {token}"}
 
@@ -106,8 +148,14 @@ def main() -> None:
             print_id: str = oldest_print["id"]
 
             img_res = make_request_with_retry(f"{BASE_URL}/api/v1/image/{img_id}", headers=headers)
-            print_image_from_bytes(img_res.content)
+            img_bytes = img_res.content
+            
+            # Print the image
+            print_image_from_bytes(img_bytes)
             print(f"Printed image: {img_id}")
+            
+            # Save to USB if available
+            save_image_to_usb(img_bytes, img_id)
 
             del_res = make_request_with_retry(f"{BASE_URL}/api/v1/print/{print_id}", method="delete", headers=headers)
             print(f"Deleted print: {img_id}")
