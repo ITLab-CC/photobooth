@@ -12,7 +12,7 @@ import {
 } from "@mui/material";
 import { keyframes } from "@mui/system";
 import AutoLogin from "../components/AutoLogin";
-import DisclaimerModal from "../components/DisclaimerModal";
+//import DisclaimerModal from "../components/DisclaimerModal";
 import PrintCountModal from "../components/PrintCountModal";
 import CustomCameraComponent from "../components/CustomCameraComponent";
 import BackgroundSlider from "../components/BackgroundSlider";
@@ -48,7 +48,7 @@ const backgroundAnimation = keyframes`
 export default function PhotoBoxPage() {
   const [token, setToken] = useState<string | null>(null);
   const [galleryId, setGalleryId] = useState<string | null>(null);
-  const [showDisclaimer, setShowDisclaimer] = useState(true);
+  //const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [showPrintCountModal, setShowPrintCountModal] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState<boolean>(false);
@@ -173,16 +173,8 @@ export default function PhotoBoxPage() {
         </Typography>
       )}
 
-      {token && galleryId && showDisclaimer && (
-        <DisclaimerModal
-          open={showDisclaimer}
-          onAccept={() => {
-            setShowDisclaimer(false);
-          }}
-        />
-      )}
 
-      {token && galleryId && !showDisclaimer && !showResultModal && (
+      {token && galleryId && !showResultModal && (
         <>
           <CustomCameraComponent
             galleryId={galleryId}
