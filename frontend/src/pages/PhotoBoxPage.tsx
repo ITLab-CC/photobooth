@@ -551,8 +551,8 @@ export default function PhotoBoxPage() {
               borderRadius: 3,
               boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
               overflow: "hidden",
-              width: "90%",
-              maxWidth: "500px",
+              width: "95%",
+              maxWidth: "700px",
               margin: "auto"
             }
           }}
@@ -567,25 +567,38 @@ export default function PhotoBoxPage() {
           >
             {processing ? "Bild wird verarbeitet…" : "Euer Moment"}
           </DialogTitle>
-          <DialogContent sx={{ textAlign: "center", px: 3, pb: 3 }}>
+          <DialogContent sx={{ textAlign: "center", px: 4, pb: 4 }}>
             {processing ? (
               <CircularProgress sx={{ color: "#4a6741" }} />
             ) : (
               <Box
-                component="img"
-                src={capturedImage ? capturedImage : ""}
-                alt="Aufgenommenes Bild"
                 sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
                   width: "100%",
-                  borderRadius: 2,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                  border: "4px solid white",
-                  '@media print': {
-                    transform: 'rotate(90deg)',
-                    transformOrigin: 'center center',
-                  },
+                  height: "auto",
+                  overflow: "hidden",
                 }}
-              />
+              >
+                <Box
+                  component="img"
+                  src={capturedImage ? capturedImage : ""}
+                  alt="Aufgenommenes Bild"
+                  sx={{
+                    width: "100%",
+                    maxHeight: "70vh",
+                    objectFit: "contain",
+                    borderRadius: 2,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                    border: "4px solid white",
+                    '@media print': {
+                      transform: 'rotate(90deg)',
+                      transformOrigin: 'center center',
+                    },
+                  }}
+                />
+              </Box>
             )}
           </DialogContent>
           {!processing && (

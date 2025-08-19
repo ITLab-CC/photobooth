@@ -105,9 +105,9 @@ export default function CustomCameraComponent({
       <Box
         position="relative"
         sx={{
-          width: "100%", 
-          maxWidth: 680,
-          height: 680,
+          width: "calc(100% - 40px)",
+          maxWidth: "680px",
+          height: "680px",
           margin: "20px 0",
         }}
       >

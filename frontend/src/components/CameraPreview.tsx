@@ -22,7 +22,16 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
   }, [videoRef]);
 
   return (
-    <Paper elevation={3} sx={{ overflow: "hidden", borderRadius: 2 }}>
+    <Paper 
+      elevation={3} 
+      sx={{ 
+        overflow: "hidden", 
+        borderRadius: 2,
+        width: "100%",
+        maxWidth: "680px",
+        margin: "0 auto",
+      }}
+    >
       <Box
         component="video"
         ref={videoRef}
@@ -30,7 +39,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
         playsInline
         muted
         sx={{
-          width: "720px",
+          width: "100%",
           height: "680px",
           objectFit: "cover",
           transform: "scaleX(-1)",
