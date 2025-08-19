@@ -415,14 +415,17 @@ export default function PhotoBoxPage() {
                 
                 {/* Text outside the circle */}
                 <Typography
-                  variant="h3"
+                  variant="h4"
                   onClick={handleStartClick}
                   sx={{
                     fontFamily: "'Playfair Display', serif",
                     color: '#000000',
-                    fontWeight: 500,
+                    fontWeight: 300,
                     textAlign: 'center',
                     cursor: 'pointer',
+                    width: '100%',
+                    maxWidth: '90%',
+                    margin: '0 auto',
                     '&:hover': {
                       color: '#333333',
                     },

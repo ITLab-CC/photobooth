@@ -96,14 +96,21 @@ export default function CustomCameraComponent({
 
   return (
     <Box
-      position="relative"
       sx={{
-        width: "calc(100% - 40px)", 
-        maxWidth: 680,
-        height: 680,
-        margin: "20px auto",
+        display: "flex",
+        justifyContent: "center",
+        width: "100%",
       }}
     >
+      <Box
+        position="relative"
+        sx={{
+          width: "100%", 
+          maxWidth: 680,
+          height: 680,
+          margin: "20px 0",
+        }}
+      >
       <CameraPreview
         videoRef={videoRef}
         onLoadedMetadata={() => {
@@ -175,6 +182,7 @@ export default function CustomCameraComponent({
           </Typography>
         </Box>
       )}
+      </Box>
     </Box>
   );
 }
