@@ -28,9 +28,6 @@ import {
   printImage,
 } from "../api";
 
-// Wedding theme icons
-import weddingRings from "../assets/wedding-rings.svg";
-
 interface ImageResponse {
   image_id: string;
   type: string;
