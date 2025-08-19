@@ -242,7 +242,7 @@ export default function PhotoBoxPage() {
     }, 2000);
   };
 
-  const handleBackgroundSelect = (bgId: string | null) => {
+  const handleBackgroundSelect = (bgId: string) => {
     console.log("Ausgewählter Hintergrund:", bgId);
     setSelectedBackgroundId(bgId);
   };
@@ -254,7 +254,7 @@ export default function PhotoBoxPage() {
     setShowResultModal(true);
     const payload = {
       image_id: imageId,
-      image_background_id: selectedBackgroundId,
+      image_background_id: selectedBackgroundId ? selectedBackgroundId : "",
       img_frame_id: frameId ? frameId : "",
       refine_foreground: false,
     };

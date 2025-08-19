@@ -452,9 +452,8 @@ export async function deleteBackground(
 // POST /api/v1/image/process
 export interface ImageProcessRequest {
   image_id: string;
-  image_background_id?: string | null;
+  image_background_id: string;
   refine_foreground?: boolean;
-  img_frame_id?: string;
 }
 export interface ImageProcessResponse {
   image_id: string;

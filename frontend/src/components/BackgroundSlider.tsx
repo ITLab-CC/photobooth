@@ -16,7 +16,7 @@ interface BackgroundListResponse {
 
 interface BackgroundSliderProps {
   token: string;
-  onSelect?: (backgroundId: string | null) => void;
+  onSelect?: (backgroundId: string) => void;
 }
 
 
@@ -39,13 +39,8 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
   }, [token]);
 
   useEffect(() => {
-    if (onSelect) {
-      if (selectedIndex === 1) {
-        // First item is "No Background" - pass null
-        onSelect(null);
-      } else if (paddedBackgrounds[selectedIndex]) {
-        onSelect(paddedBackgrounds[selectedIndex]!.background_id);
-      }
+    if (onSelect && paddedBackgrounds[selectedIndex]) {
+      onSelect(paddedBackgrounds[selectedIndex]!.background_id);
     }
   }, [selectedIndex, paddedBackgrounds, onSelect]);
 
