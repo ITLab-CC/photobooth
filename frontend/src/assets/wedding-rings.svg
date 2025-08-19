@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g opacity="0.9">
+    <!-- First ring -->
+    <path d="M320 170C320 226.885 273.885 273 217 273C160.115 273 114 226.885 114 170C114 113.115 160.115 67 217 67C273.885 67 320 113.115 320 170Z" stroke="#4a6741" stroke-width="18" stroke-linecap="round" fill="none"/>
+    
+    <!-- Second ring -->
+    <path d="M398 230C398 286.885 351.885 333 295 333C238.115 333 192 286.885 192 230C192 173.115 238.115 127 295 127C351.885 127 398 173.115 398 230Z" stroke="#4a6741" stroke-width="18" stroke-linecap="round" fill="none"/>
+    
+    <!-- Highlight effects -->
+    <path d="M295 145C318.196 145 337 163.804 337 187" stroke="#d4c1a9" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <path d="M217 85C240.196 85 259 103.804 259 127" stroke="#d4c1a9" stroke-width="8" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>
