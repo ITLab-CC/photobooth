@@ -8,7 +8,10 @@ import {
   Grid,
   Box,
   Typography,
+  Paper,
 } from "@mui/material";
+import PrintIcon from "@mui/icons-material/Print";
+import ImageIcon from "@mui/icons-material/Image";
 
 interface PrintCountModalProps {
   open: boolean;
@@ -57,24 +60,54 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
           Wie viele Exemplare möchtest Du drucken?
         </Typography>
         <Box sx={{ width: "100%", mx: "auto" }}>
-          <Grid container spacing={2} justifyContent="center">
+          <Grid container spacing={3} justifyContent="center">
             {[1, 2, 3].map((count) => (
               <Grid item xs={4} key={count}>
-                <Button
-                  variant={selectedCount === count ? "contained" : "outlined"}
+                <Paper 
+                  elevation={selectedCount === count ? 8 : 2}
                   onClick={() => handleCountSelect(count)}
-                  fullWidth
                   sx={{
-                    height: 80,
-                    fontSize: "2rem",
-                    backgroundColor: selectedCount === count ? "#ff8800" : undefined,
+                    height: 120,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    border: selectedCount === count ? "2px solid #ff8800" : "1px solid #e0e0e0",
+                    borderRadius: 2,
+                    transition: "all 0.2s ease",
+                    backgroundColor: selectedCount === count ? "rgba(255, 136, 0, 0.1)" : "#ffffff",
                     '&:hover': {
-                      backgroundColor: selectedCount === count ? "#dd7538" : undefined,
+                      backgroundColor: selectedCount === count ? "rgba(255, 136, 0, 0.15)" : "#f5f5f5",
+                      transform: "translateY(-2px)"
                     }
                   }}
                 >
-                  {count}
-                </Button>
+                  <Box sx={{ position: "relative", mb: 1 }}>
+                    {Array(count).fill(0).map((_, i) => (
+                      <ImageIcon 
+                        key={i} 
+                        sx={{ 
+                          fontSize: "1.8rem", 
+                          color: "#555",
+                          position: "relative",
+                          left: i * -5,
+                          zIndex: 3 - i
+                        }} 
+                      />
+                    ))}
+                  </Box>
+                  <Typography 
+                    variant="h4" 
+                    sx={{ 
+                      fontWeight: 600, 
+                      color: selectedCount === count ? "#ff8800" : "#333",
+                      fontFamily: "'Inter', sans-serif"
+                    }}
+                  >
+                    {count}
+                  </Typography>
+                </Paper>
               </Grid>
             ))}
           </Grid>
@@ -85,11 +118,19 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
           variant="contained"
           fullWidth
           onClick={handleConfirm}
+          startIcon={<PrintIcon sx={{ fontSize: "1.8rem" }} />}
           sx={{
             fontSize: "1.4rem",
             py: 1.5,
-            background: "linear-gradient(45deg,rgb(255, 255, 255),rgb(204, 204, 204))",
-            color: "black",
+            background: "linear-gradient(45deg, #ff8800, #ff6600)",
+            color: "white",
+            fontWeight: 500,
+            borderRadius: 2,
+            boxShadow: "0 4px 10px rgba(255, 136, 0, 0.3)",
+            '&:hover': {
+              background: "linear-gradient(45deg, #ff9900, #ff7700)",
+              boxShadow: "0 6px 12px rgba(255, 136, 0, 0.4)",
+            }
           }}
         >
           Drucken

@@ -54,36 +54,43 @@ const weddingTheme = createTheme({
     },
   },
   typography: {
-    fontFamily: "'Cormorant Garamond', serif",
+    fontFamily: "'Inter', sans-serif",
     h1: {
-      fontFamily: "'Playfair Display', serif",
+      fontFamily: "'Inter', sans-serif",
       color: '#000000',
+      fontWeight: 600,
     },
     h2: {
-      fontFamily: "'Playfair Display', serif",
+      fontFamily: "'Inter', sans-serif",
       color: '#000000',
+      fontWeight: 600,
     },
     h3: {
-      fontFamily: "'Playfair Display', serif",
+      fontFamily: "'Inter', sans-serif",
       color: '#000000',
+      fontWeight: 500,
     },
     h4: {
-      fontFamily: "'Playfair Display', serif",
+      fontFamily: "'Inter', sans-serif",
       color: '#000000',
+      fontWeight: 500,
     },
     h5: {
-      fontFamily: "'Playfair Display', serif",
+      fontFamily: "'Inter', sans-serif",
       color: '#000000',
+      fontWeight: 400,
     },
     h6: {
-      fontFamily: "'Playfair Display', serif",
+      fontFamily: "'Inter', sans-serif",
       color: '#000000',
+      fontWeight: 400,
     },
     button: {
-      fontFamily: "'Cormorant Garamond', serif",
+      fontFamily: "'Inter', sans-serif",
       textTransform: 'none',
       color: '#000000',
       secondary: "#666666",
+      fontWeight: 500,
     },
   },
   components: {
@@ -192,7 +199,7 @@ export default function PhotoBoxPage() {
   useEffect(() => {
     // Lade Schriftarten
     const link = document.createElement('link');
-    link.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Cormorant+Garamond:wght@400;500;600&display=swap';
+    link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
     link.rel = 'stylesheet';
     document.head.appendChild(link);
     
@@ -417,9 +424,9 @@ export default function PhotoBoxPage() {
                   variant="h4"
                   onClick={handleStartClick}
                   sx={{
-                    fontFamily: "'Playfair Display', serif",
+                    fontFamily: "'Inter', sans-serif",
                     color: '#000000',
-                    fontWeight: 300,
+                    fontWeight: 400,
                     textAlign: 'center',
                     cursor: 'pointer',
                     width: '100%',
@@ -450,9 +457,9 @@ export default function PhotoBoxPage() {
                   <Typography 
                     variant="h2" 
                     sx={{ 
-                      fontFamily: "'Playfair Display', serif",
+                      fontFamily: "'Inter', sans-serif",
                       color: "#3c3c3c",
-                      fontWeight: 500,
+                      fontWeight: 600,
                       letterSpacing: 1,
                       mb: 1,
                     }}
@@ -462,10 +469,10 @@ export default function PhotoBoxPage() {
                   <Typography 
                     variant="h5" 
                     sx={{ 
-                      fontFamily: "'Cormorant Garamond', serif",
+                      fontFamily: "'Inter', sans-serif",
                       color: "#666666",
                       fontWeight: 400,
-                      letterSpacing: 2,
+                      letterSpacing: 1,
                     }}
                   >
                     24.08.2025 • Wiesbaden
@@ -489,9 +496,9 @@ export default function PhotoBoxPage() {
             <Typography 
               variant="h3" 
               sx={{ 
-                fontFamily: "'Playfair Display', serif",
+                fontFamily: "'Inter', sans-serif",
                 color: "#3c3c3c",
-                fontWeight: 500,
+                fontWeight: 600,
                 letterSpacing: 1,
                 mb: 1,
               }}
@@ -501,10 +508,10 @@ export default function PhotoBoxPage() {
             <Typography 
               variant="h6" 
               sx={{ 
-                fontFamily: "'Cormorant Garamond', serif",
+                fontFamily: "'Inter', sans-serif",
                 color: "#666666",
                 fontWeight: 400,
-                letterSpacing: 2,
+                letterSpacing: 1,
               }}
             >
               24.08.2025 • Wiesbaden
@@ -559,8 +566,9 @@ export default function PhotoBoxPage() {
           <DialogTitle 
             sx={{ 
               textAlign: "center",
-              fontFamily: "'Playfair Display', serif",
+              fontFamily: "'Inter', sans-serif",
               fontSize: "1.5rem",
+              fontWeight: 500,
               pt: 3,
             }}
           >
@@ -643,8 +651,9 @@ export default function PhotoBoxPage() {
           ContentProps={{
             sx: {
               background: "#4a6741",
-              fontFamily: "'Cormorant Garamond', serif",
+              fontFamily: "'Inter', sans-serif",
               fontSize: "1.1rem",
+              fontWeight: 400,
             }
           }}
         />

@@ -77,7 +77,19 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
       </IconButton>
       <Box display="flex" gap={1}>
         {leftItem ? (
-          <Paper sx={{ width: 150, height: 150, overflow: "hidden" }}>
+          <Paper 
+            sx={{ 
+              width: 150, 
+              height: 150, 
+              overflow: "hidden",
+              cursor: "pointer",
+              transition: "transform 0.2s",
+              '&:hover': {
+                transform: "scale(1.05)",
+              }
+            }}
+            onClick={handlePrev}
+          >
             <BackgroundImage
               token={token}
               backgroundId={leftItem.background_id}
@@ -106,7 +118,19 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
           )}
         </Paper>
         {rightItem ? (
-          <Paper sx={{ width: 150, height: 150, overflow: "hidden" }}>
+          <Paper 
+            sx={{ 
+              width: 150, 
+              height: 150, 
+              overflow: "hidden",
+              cursor: "pointer",
+              transition: "transform 0.2s",
+              '&:hover': {
+                transform: "scale(1.05)",
+              }
+            }}
+            onClick={handleNext}
+          >
             <BackgroundImage
               token={token}
               backgroundId={rightItem.background_id}
