@@ -12,3 +12,5 @@ redis
 qrcode
 types-qrcode
 dotenv
+opencv-python
+numpy
