@@ -1094,7 +1094,7 @@ class ImageProcessRequest(BaseModel):
     qr_code: bool = False
 
 class ImageProcessResponse(BaseModel):
-    img_no_background: ImageResponse
+    img_no_background: Optional[ImageResponse] = None
     img_new_background: ImageResponse
     img_with_frame: ImageResponse
 
@@ -1198,7 +1198,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             image_id=img_no_background_for_db._id,
             type=img_no_background_for_db.type,
             gallery=img_no_background_for_db.gallery
-        ),
+        )
 
     # save img_with_new_background
     img_with_new_background_for_db = IMG(img=img_with_new_background, type="new-background", gallery=img.gallery)
