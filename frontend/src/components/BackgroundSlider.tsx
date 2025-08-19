@@ -16,21 +16,21 @@ interface BackgroundListResponse {
 
 interface BackgroundSliderProps {
   token: string;
-  onSelect?: (backgroundId: string) => void;
+  onSelect?: (backgroundId: string | null) => void;
 }
 
 
 const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) => {
   const [backgrounds, setBackgrounds] = useState<BackgroundResponse[]>([]);
   const paddedBackgrounds = [null, ...backgrounds, null];
-  const [selectedIndex, setSelectedIndex] = useState<number>(1);
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
   useEffect(() => {
     listBackgrounds(token)
       .then((data: BackgroundListResponse) => {
         if (data.backgrounds && data.backgrounds.length > 0) {
           setBackgrounds(data.backgrounds);
-          setSelectedIndex(1);
+          // Behalte den Index 0 für "No Background"
         }
       })
       .catch((err) => {
@@ -39,13 +39,18 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
   }, [token]);
 
   useEffect(() => {
-    if (onSelect && paddedBackgrounds[selectedIndex]) {
-      onSelect(paddedBackgrounds[selectedIndex]!.background_id);
+    if (onSelect) {
+      // Wenn das erste Element ausgewählt ist (No Background), null übergeben
+      if (selectedIndex === 0) {
+        onSelect(null);
+      } else if (paddedBackgrounds[selectedIndex]) {
+        onSelect(paddedBackgrounds[selectedIndex]!.background_id);
+      }
     }
   }, [selectedIndex, paddedBackgrounds, onSelect]);
 
   const clampIndex = (index: number) =>
-    Math.max(1, Math.min(index, paddedBackgrounds.length - 2));
+    Math.max(0, Math.min(index, paddedBackgrounds.length - 2));
 
   const handlePrev = () => {
     setSelectedIndex((prev) => clampIndex(prev - 1));
@@ -67,7 +72,7 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
 
   return (
     <Box {...swipeHandlers} display="flex" alignItems="center" mt={2}>
-      <IconButton onClick={handlePrev} disabled={selectedIndex === 1}>
+      <IconButton onClick={handlePrev} disabled={selectedIndex === 0}>
         <ArrowBackIosIcon />
       </IconButton>
       <Box display="flex" gap={1}>
