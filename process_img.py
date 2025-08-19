@@ -286,6 +286,70 @@ class IMGReplacer:
 
 
         
+def resize_with_crop_or_pad(
+    img: Image.Image,
+    target_size: Tuple[int, int],
+    background_color: Optional[Tuple[int, int, int, int]] = None,
+    resample: Optional[int] = None
+) -> Image.Image:
+    """
+    Resize an image to exactly (target_w, target_h) without distortion:
+      - If the scaled image is larger than target in either dimension, center-crop the overflow.
+      - If smaller, center it on a canvas and pad (transparent by default for RGBA, white for RGB).
+
+    Parameters:
+        img: PIL Image.
+        target_size: (target_w, target_h).
+        background_color: RGBA/RGB fill for padding. If None:
+            - uses transparent (0,0,0,0) for RGBA output,
+            - or white (255,255,255) for RGB/others.
+        resample: PIL resampling filter. Defaults to LANCZOS if available.
+
+    Returns:
+        PIL Image of size target_size, same mode as input if possible (RGBA preferred if input has alpha).
+    """
+    target_w, target_h = target_size
+
+    if resample is None:
+        try:
+            resample = Image.Resampling.LANCZOS
+        except AttributeError:
+            resample = Image.ANTIALIAS  # type: ignore
+
+    # Decide output mode and background
+    if img.mode == "RGBA":
+        out_mode = "RGBA"
+        default_bg = (0, 0, 0, 0)
+    else:
+        out_mode = "RGB"
+        default_bg = (255, 255, 255)
+
+    if background_color is None:
+        background_color = default_bg
+
+    # Convert to a working mode that supports alpha if present
+    work = img.convert(out_mode)
+
+    # Compute scale to cover the target (no letterbox inside content)
+    scale = max(target_w / work.width, target_h / work.height) if work.width and work.height else 1.0
+    scaled_w = max(1, int(round(work.width * scale)))
+    scaled_h = max(1, int(round(work.height * scale)))
+    scaled = work.resize((scaled_w, scaled_h), resample)
+
+    # Create background canvas
+    canvas = Image.new(out_mode, (target_w, target_h), background_color)
+
+    # Compute paste position to center
+    offset_x = (target_w - scaled_w) // 2
+    offset_y = (target_h - scaled_h) // 2
+
+    # If scaled is larger than target in any dimension, paste will be negative.
+    # Paste with mask if RGBA to preserve transparency.
+    mask = scaled.split()[3] if out_mode == "RGBA" and scaled.mode == "RGBA" else None
+    canvas.paste(scaled, (offset_x, offset_y), mask)
+
+    return canvas
+
 
 
 def main() -> None:
