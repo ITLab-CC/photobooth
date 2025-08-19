@@ -20,6 +20,7 @@ import CustomCameraComponent from "../components/CustomCameraComponent";
 import BackgroundSlider from "../components/BackgroundSlider";
 import {
   createGallery,
+  deleteGallery,
   GalleryResponse,
   processImage,
   listFrames,
@@ -274,12 +275,31 @@ export default function PhotoBoxPage() {
       });
   };
 
-  // Beim Erneut Versuchen: Alle Daten zurücksetzen (nichts wird gespeichert)
+  // Beim Erneut Versuchen: Alte Galerie löschen und neue erstellen
   const handleRetry = () => {
     setCapturedImage(null);
     setProcessedImageId(null);
     setProcessing(false);
     setShowResultModal(false);
+    
+    // Alte Galerie löschen, wenn vorhanden
+    if (token && galleryId) {
+      deleteGallery(token, galleryId)
+        .then(() => {
+          console.log("Alte Galerie gelöscht:", galleryId);
+          setGalleryId(""); // Galerie-ID zurücksetzen
+          
+          // Neue Galerie erstellen
+          return createGallery(token);
+        })
+        .then((resp: GalleryResponse) => {
+          console.log("Neue Galerie erstellt:", resp.gallery_id);
+          setGalleryId(resp.gallery_id);
+        })
+        .catch((err: Error) => {
+          console.error("Fehler beim Löschen/Erstellen der Galerie:", err);
+        });
+    }
   };
 
   // Klick auf Fertigstellen: Öffnet die Druckauswahl-Modal

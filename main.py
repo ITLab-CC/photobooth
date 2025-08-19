@@ -1189,9 +1189,16 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         raise HTTPException(status_code=500, detail="Error adding frame to image: " + str(e))
 
     # save img_no_background
-    img_no_background_for_db = IMG(img=img_no_background, type="no-background", gallery=img.gallery)
-    img_no_background_for_db.db_save(db)
-    g.db_add_image(db, img_no_background_for_db._id)
+    img_no_background_return = None
+    if background_img is None:
+        img_no_background_for_db = IMG(img=img_no_background, type="no-background", gallery=img.gallery)
+        img_no_background_for_db.db_save(db)
+        g.db_add_image(db, img_no_background_for_db._id)
+        img_no_background_return = ImageResponse(
+            image_id=img_no_background_for_db._id,
+            type=img_no_background_for_db.type,
+            gallery=img_no_background_for_db.gallery
+        ),
 
     # save img_with_new_background
     img_with_new_background_for_db = IMG(img=img_with_new_background, type="new-background", gallery=img.gallery)
@@ -1205,11 +1212,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
     # retrun new img id
     return ImageProcessResponse(
-        img_no_background = ImageResponse(
-            image_id=img_no_background_for_db._id,
-            type=img_no_background_for_db.type,
-            gallery=img_no_background_for_db.gallery
-            ),
+        img_no_background = img_no_background_return,
         img_new_background = ImageResponse(
             image_id=img_with_new_background_for_db._id,
             type=img_with_new_background_for_db.type,

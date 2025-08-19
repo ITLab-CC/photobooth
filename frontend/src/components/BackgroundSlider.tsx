@@ -71,17 +71,17 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
         <ArrowBackIosIcon />
       </IconButton>
       <Box display="flex" gap={1}>
-        <Paper sx={{ width: 150, height: 150, overflow: "hidden" }}>
-          {leftItem ? (
+        {leftItem ? (
+          <Paper sx={{ width: 150, height: 150, overflow: "hidden" }}>
             <BackgroundImage
               token={token}
               backgroundId={leftItem.background_id}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
-          ) : (
-            <Box sx={{ width: "100%", height: "100%" }} />
-          )}
-        </Paper>
+          </Paper>
+        ) : (
+          <Box sx={{ width: 150, height: 150 }} /> /* Unsichtbarer Platzhalter */
+        )}
         <Paper
           sx={{
             width: 180,
@@ -100,17 +100,17 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
             />
           )}
         </Paper>
-        <Paper sx={{ width: 150, height: 150, overflow: "hidden" }}>
-          {rightItem ? (
+        {rightItem ? (
+          <Paper sx={{ width: 150, height: 150, overflow: "hidden" }}>
             <BackgroundImage
               token={token}
               backgroundId={rightItem.background_id}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
-          ) : (
-            <Box sx={{ width: "100%", height: "100%" }} />
-          )}
-        </Paper>
+          </Paper>
+        ) : (
+          <Box sx={{ width: 150, height: 150 }} /> /* Unsichtbarer Platzhalter */
+        )}
       </Box>
       <IconButton onClick={handleNext} disabled={selectedIndex === paddedBackgrounds.length - 2}>
         <ArrowForwardIosIcon />
