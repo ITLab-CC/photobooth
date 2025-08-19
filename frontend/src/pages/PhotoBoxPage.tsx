@@ -13,7 +13,6 @@ import {
   createTheme,
   Fade,
   Container,
-  Paper,
 } from "@mui/material";
 import { keyframes } from "@mui/system";
 import AutoLogin from "../components/AutoLogin";
@@ -159,7 +158,6 @@ export default function PhotoBoxPage() {
   const [processing, setProcessing] = useState<boolean>(false);
   const [processedImageId, setProcessedImageId] = useState<string | null>(null);
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
-  const [magicInProgress, setMagicInProgress] = useState<boolean>(false);
   const [magicEnabled, setMagicEnabled] = useState<boolean>(false);
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -256,7 +254,7 @@ export default function PhotoBoxPage() {
   };
 
   // Bild hochladen und verarbeiten
-  const handleImageUpload = (imageId: string, useRandomStuff: boolean = false) => {
+  const handleImageUpload = (imageId: string) => {
     setCapturedImage(imageId);
     setProcessing(true);
     setShowResultModal(true);
@@ -265,7 +263,7 @@ export default function PhotoBoxPage() {
       image_id: imageId,
       img_frame_id: frameId ? frameId : "",
       refine_foreground: false,
-      random_stuff: useRandomStuff,
+      random_stuff: magicEnabled,
     };
     
     // image_background_id nur hinzufügen, wenn ein Hintergrund ausgewählt wurde
@@ -282,29 +280,16 @@ export default function PhotoBoxPage() {
         const processedImageUrl = URL.createObjectURL(blob);
         setCapturedImage(processedImageUrl);
         setProcessing(false);
-        setMagicInProgress(false);
       })
       .catch((err) => {
         console.error("Fehler bei der Bildverarbeitung:", err);
         setProcessing(false);
-        setMagicInProgress(false);
       });
   };
   
-  // Magic Switch Handler
-  const handleMagicSwitchToggle = () => {
-    if (!capturedImage) {
-      alert("Bitte zuerst ein Foto aufnehmen!");
-      return;
-    }
-    
-    const newMagicState = !magicEnabled;
-    setMagicEnabled(newMagicState);
-    
-    if (newMagicState) {
-      setMagicInProgress(true);
-      handleImageUpload(capturedImage, true);
-    }
+  // Magic Toggle Handler
+  const handleMagicToggle = () => {
+    setMagicEnabled(!magicEnabled);
   };
 
   // Beim Erneut Versuchen: Alte Galerie löschen und neue erstellen
@@ -564,29 +549,23 @@ export default function PhotoBoxPage() {
               token={token}
               onImageUpload={handleImageUpload}
             />
-            <Box mt={10}>
-              <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
-            </Box>
-            
-            {/* Magic Slider (iPhone Style) */}
-            <Container maxWidth="sm" sx={{ mt: 4, textAlign: 'center' }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h6" sx={{ fontWeight: 500, mb: 1 }}>
-                  ✨ Let the magic begin
+            {/* Magic Toggle Switch */}
+            <Container maxWidth="sm" sx={{ mt: 2, textAlign: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  Magic Mode
                 </Typography>
-                
-                {/* iPhone-style slider */}
                 <Box 
-                  onClick={() => !magicInProgress && capturedImage && handleMagicSwitchToggle()}
+                  onClick={() => !processing && handleMagicToggle()}
                   sx={{
-                    width: '80px',
-                    height: '40px',
-                    borderRadius: '20px',
+                    width: '60px',
+                    height: '30px',
+                    borderRadius: '15px',
                     backgroundColor: magicEnabled ? '#000000' : '#e0e0e0',
                     position: 'relative',
                     transition: 'background-color 0.3s',
-                    cursor: capturedImage && !magicInProgress ? 'pointer' : 'not-allowed',
-                    opacity: capturedImage ? 1 : 0.6,
+                    cursor: processing ? 'not-allowed' : 'pointer',
+                    opacity: processing ? 0.6 : 1,
                     boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)',
                     display: 'flex',
                     alignItems: 'center',
@@ -594,30 +573,26 @@ export default function PhotoBoxPage() {
                     padding: '3px',
                   }}
                 >
-                  <Paper
-                    elevation={2}
+                  <Box
                     sx={{
-                      width: '34px',
-                      height: '34px',
+                      width: '24px',
+                      height: '24px',
                       borderRadius: '50%',
                       backgroundColor: '#ffffff',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
                       transition: 'transform 0.3s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
                     }}
-                  >
-                    {magicInProgress && (
-                      <CircularProgress size={20} sx={{ color: '#000000' }} />
-                    )}
-                  </Paper>
+                  />
                 </Box>
-                
-                <Typography variant="body2" sx={{ mt: 1, color: '#666666' }}>
-                  {magicEnabled ? 'Magic aktiviert' : 'Magic deaktiviert'}
+                <Typography variant="body2" sx={{ color: '#666666' }}>
+                  {magicEnabled ? '✨ An' : 'Aus'}
                 </Typography>
               </Box>
             </Container>
+            
+            <Box mt={4}>
+              <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
+            </Box>
           </>
         )}
 
