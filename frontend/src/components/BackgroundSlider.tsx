@@ -5,6 +5,7 @@ import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import { useSwipeable } from "react-swipeable";
 import { listBackgrounds } from "../api";
 import BackgroundImage from "./BackgroundImage";
+import { preloadBackgrounds } from "../utils/backgroundPreloader";
 
 interface BackgroundResponse {
   background_id: string;
@@ -26,11 +27,17 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
   useEffect(() => {
+    // Hintergrundbilder laden
     listBackgrounds(token)
       .then((data: BackgroundListResponse) => {
         if (data.backgrounds && data.backgrounds.length > 0) {
           setBackgrounds(data.backgrounds);
           // Behalte den Index 0 für "No Background"
+          
+          // Starte das Preloading der Hintergrundbilder im Hintergrund
+          preloadBackgrounds(token).catch(err => {
+            console.error("Fehler beim Preloading der Hintergrundbilder:", err);
+          });
         }
       })
       .catch((err) => {
