@@ -1088,7 +1088,7 @@ async def api_frame_delete(frame_id: str, session: Session = Depends(auth(["boss
 # Image processing models
 class ImageProcessRequest(BaseModel):
     image_id: str
-    image_background_id: str
+    image_background_id: Optional[str] = None
     img_frame_id: str
     refine_foreground: bool = False
     qr_code: bool = False
@@ -1121,9 +1121,11 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         raise HTTPException(status_code=404, detail="Gallery not found")
 
     # get the background image
-    background_img = Background.db_find(db, image.image_background_id)
-    if background_img is None:
-        raise HTTPException(status_code=404, detail="Background image not found")
+    background_img = None
+    if image.image_background_id is not None:
+        background_img = Background.db_find(db, image.image_background_id)
+        if background_img is None:
+            raise HTTPException(status_code=404, detail="Background image not found")
 
     # get the frame
     frame_img = FRAME.db_find(db, image.img_frame_id)
@@ -1152,23 +1154,28 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             raise HTTPException(status_code=500, detail="Error adding QR code to frame: " + str(e))
 
     # remove background
-    try:
-        img_no_background = Replacer.remove_background(img.img)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
+    if background_img is None:
+        try:
+            img_no_background = Replacer.remove_background(img.img)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
 
-    # replace background
-    try:
-        img_with_new_background = Replacer.replace_background(
-            img_no_background,
-            background_img.img,
-            image.refine_foreground,
-            margin_ratio=0.9,
-            apply_alpha_threshold=True
-            )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
-    
+        # replace background
+        try:
+            img_with_new_background = Replacer.replace_background(
+                img_no_background,
+                background_img.img,
+                image.refine_foreground,
+                margin_ratio=0.9,
+                apply_alpha_threshold=True
+                )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
+    else:
+        # Dont replace the background
+        img_with_new_background = img.img
+
+
     # Add a Frame to the image
     try:
         img_with_frame = Replacer.add_frame(

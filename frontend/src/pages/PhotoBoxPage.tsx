@@ -198,7 +198,7 @@ export default function PhotoBoxPage() {
     link.rel = 'stylesheet';
     document.head.appendChild(link);
     
-    // Verhindere Wischgesten
+    // Verhindere Wischgesten, aber erlaube Kamera-Interaktion
     const style = document.createElement('style');
     style.textContent = `
       html, body {
@@ -207,23 +207,26 @@ export default function PhotoBoxPage() {
         position: fixed;
         width: 100%;
         height: 100%;
-        touch-action: none;
         -webkit-overflow-scrolling: touch;
         -ms-overflow-style: none;
       }
     `;
     document.head.appendChild(style);
     
-    // Verhindere Standard-Touch-Ereignisse
-    const preventDefaultTouch = (e: TouchEvent) => {
-      e.preventDefault();
+    // Verhindere nur horizontales Wischen, erlaube vertikales Scrollen und Kamera-Interaktion
+    const preventHorizontalSwipe = (e: TouchEvent) => {
+      // Nur horizontales Wischen verhindern, vertikales Scrollen erlauben
+      if (e.touches[0] && Math.abs(e.touches[0].clientX) > Math.abs(e.touches[0].clientY)) {
+        e.preventDefault();
+      }
     };
-    document.addEventListener('touchmove', preventDefaultTouch, { passive: false });
+    // Verwende ein passives Event für bessere Performance
+    document.addEventListener('touchmove', preventHorizontalSwipe, { passive: false });
     
     return () => {
       document.head.removeChild(link);
       document.head.removeChild(style);
-      document.removeEventListener('touchmove', preventDefaultTouch);
+      document.removeEventListener('touchmove', preventHorizontalSwipe);
     };
   }, []);
   
@@ -317,11 +320,10 @@ export default function PhotoBoxPage() {
           padding: '20px',
           position: 'relative',
           overflow: 'hidden',
-          overscrollBehavior: 'none', 
-          touchAction: 'none', 
-          userSelect: 'none', 
-          WebkitOverflowScrolling: 'touch', 
-          msOverflowStyle: 'none', 
+          overscrollBehavior: 'none',
+          userSelect: 'none',
+          WebkitOverflowScrolling: 'touch',
+          msOverflowStyle: 'none',
         }}
       >
         
