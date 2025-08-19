@@ -100,24 +100,7 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
             />
           </Paper>
         ) : (
-          <Paper 
-            sx={{ 
-              width: 150, 
-              height: 150,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#f5f5f5",
-              color: "#666",
-              fontSize: "14px",
-              fontWeight: 500,
-              cursor: selectedIndex === 0 ? "default" : "pointer",
-              border: "1px solid #e0e0e0"
-            }}
-            onClick={selectedIndex !== 0 ? handlePrev : undefined}
-          >
-            {selectedIndex === 0 && "No Background"}
-          </Paper>
+          <Box sx={{ width: 150, height: 150 }} /> /* Unsichtbarer Platzhalter */
         )}
         <Paper
           sx={{
@@ -169,24 +152,7 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
             />
           </Paper>
         ) : (
-          <Paper 
-            sx={{ 
-              width: 150, 
-              height: 150,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#f5f5f5",
-              color: "#666",
-              fontSize: "14px",
-              fontWeight: 500,
-              cursor: selectedIndex === paddedBackgrounds.length - 2 ? "default" : "pointer",
-              border: "1px solid #e0e0e0"
-            }}
-            onClick={selectedIndex !== paddedBackgrounds.length - 2 ? handleNext : undefined}
-          >
-            {selectedIndex === paddedBackgrounds.length - 2 && "No Background"}
-          </Paper>
+          <Box sx={{ width: 150, height: 150 }} /> /* Unsichtbarer Platzhalter */
         )}
       </Box>
       <IconButton onClick={handleNext} disabled={selectedIndex === paddedBackgrounds.length - 2}>
