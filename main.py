@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 import time
 import io
+import PIL
 from math import ceil
 import os
 from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, Union
@@ -1126,7 +1127,18 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         if background_img is None:
             raise HTTPException(status_code=404, detail="Background image not found")
     else:
-        background_img = None
+        # get any background image
+        back_images = Background.db_find_all(db)
+        if len(back_images) == 0:
+            raise HTTPException(status_code=404, detail="No background images found")
+        
+        # get the size of the first background image
+        first_background_img = back_images[0]
+        x_size, y_size = first_background_img.img.size
+
+        # create an empty image with the same size
+        background_img = PIL.Image.new("RGBA", (x_size, y_size))
+        
 
     # get the frame
     frame_img = FRAME.db_find(db, image.img_frame_id)
@@ -1155,26 +1167,22 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             raise HTTPException(status_code=500, detail="Error adding QR code to frame: " + str(e))
 
     # remove background
-    if background_img is not None:
-        try:
-            img_no_background = Replacer.remove_background(img.img)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
+    try:
+        img_no_background = Replacer.remove_background(img.img)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
 
-        # replace background
-        try:
-            img_with_new_background = Replacer.replace_background(
-                img_no_background,
-                background_img.img,
-                image.refine_foreground,
-                margin_ratio=0.9,
-                apply_alpha_threshold=True
-                )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
-    else:
-        # Dont replace the background
-        img_with_new_background = img.img
+    # replace background
+    try:
+        img_with_new_background = Replacer.replace_background(
+            img_no_background,
+            background_img.img,
+            image.refine_foreground,
+            margin_ratio=0.9,
+            apply_alpha_threshold=True
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
 
 
     # Add a Frame to the image
@@ -1191,7 +1199,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
     # save img_no_background
     img_no_background_return = None
-    if background_img is not None:
+    if image.image_background_id is not None:
         img_no_background_for_db = IMG(img=img_no_background, type="no-background", gallery=img.gallery)
         img_no_background_for_db.db_save(db)
         g.db_add_image(db, img_no_background_for_db._id)
