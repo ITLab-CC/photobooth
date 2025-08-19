@@ -42,6 +42,9 @@ COPY --from=backend-builder /usr/local/bin /usr/local/bin
 # Copy backend application source code
 COPY *.py ./
 
+COPY models ./models
+COPY smileys ./smileys
+
 # Copy built frontend files to backend
 COPY --from=frontend-builder /frontend/dist ./frontend/dist
 
