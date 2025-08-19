@@ -1167,10 +1167,13 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             raise HTTPException(status_code=500, detail="Error adding QR code to frame: " + str(e))
 
     # remove background
-    try:
-        img_no_background = Replacer.remove_background(img.img)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
+    if image.image_background_id is not None:
+        try:
+            img_no_background = Replacer.remove_background(img.img)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
+    else:
+        img_no_background = img.img
 
     # replace background
     try:
