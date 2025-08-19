@@ -1137,8 +1137,8 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         x_size, y_size = first_background_img.img.size
 
         # create an empty image with the same size
-        background_img = PIL.Image.new("RGBA", (x_size, y_size))
-        
+        empty_img = PIL.Image.new("RGBA", (x_size, y_size))
+        background_img = Background(img=empty_img)
 
     # get the frame
     frame_img = FRAME.db_find(db, image.img_frame_id)
@@ -1167,10 +1167,13 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             raise HTTPException(status_code=500, detail="Error adding QR code to frame: " + str(e))
 
     # remove background
-    try:
-        img_no_background = Replacer.remove_background(img.img)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
+    if image.image_background_id is not None:
+        try:
+            img_no_background = Replacer.remove_background(img.img)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
+    else:
+        img_no_background = img.img
 
     # replace background
     try:
