@@ -1137,8 +1137,8 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         x_size, y_size = first_background_img.img.size
 
         # create an empty image with the same size
-        background_img = PIL.Image.new("RGBA", (x_size, y_size))
-        
+        empty_img = PIL.Image.new("RGBA", (x_size, y_size))
+        background_img = Background(img=empty_img)
 
     # get the frame
     frame_img = FRAME.db_find(db, image.img_frame_id)
