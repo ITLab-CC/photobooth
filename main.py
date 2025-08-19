@@ -27,6 +27,7 @@ from img import IMG
 from frame import FRAME
 from printer import PrinterQueueItem
 from process_img import IMGReplacer, resize_with_crop_or_pad
+from face_smiley_replacer import replace_faces_with_smileys_dnn
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -1092,6 +1093,7 @@ class ImageProcessRequest(BaseModel):
     img_frame_id: str
     refine_foreground: bool = False
     qr_code: bool = False
+    random_stuff: bool = False
 
 class ImageProcessResponse(BaseModel):
     img_no_background: Optional[ImageResponse] = None
@@ -1187,6 +1189,15 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         # resize the image
         img_with_new_background = resize_with_crop_or_pad(img.img, (x_size, y_size))
 
+
+    # replace faces with smileys
+    if image.random_stuff:
+        try:
+            img_with_new_background = replace_faces_with_smileys_dnn(
+                img_with_new_background
+                )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error replacing faces with smileys in image: " + str(e))
 
     # Add a Frame to the image
     try:
