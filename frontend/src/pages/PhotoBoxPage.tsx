@@ -12,6 +12,7 @@ import {
   ThemeProvider,
   createTheme,
   Fade,
+  Container,
 } from "@mui/material";
 import { keyframes } from "@mui/system";
 import AutoLogin from "../components/AutoLogin";
@@ -32,6 +33,15 @@ interface ImageResponse {
   image_id: string;
   type: string;
   gallery: string;
+}
+
+interface ImageProcessRequest {
+  image_id: string;
+  image_background_id: string;
+  refine_foreground?: boolean;
+  random_stuff?: boolean;
+  qr_code?: boolean;
+  img_frame_id?: string;
 }
 
 interface ExtendedImageProcessResponse {
@@ -157,6 +167,7 @@ export default function PhotoBoxPage() {
   const [processing, setProcessing] = useState<boolean>(false);
   const [processedImageId, setProcessedImageId] = useState<string | null>(null);
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
+  const [magicInProgress, setMagicInProgress] = useState<boolean>(false);
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   
@@ -252,7 +263,7 @@ export default function PhotoBoxPage() {
   };
 
   // Bild hochladen und verarbeiten
-  const handleImageUpload = (imageId: string) => {
+  const handleImageUpload = (imageId: string, useRandomStuff: boolean = false) => {
     setCapturedImage(imageId);
     setProcessing(true);
     setShowResultModal(true);
@@ -261,6 +272,7 @@ export default function PhotoBoxPage() {
       image_id: imageId,
       img_frame_id: frameId ? frameId : "",
       refine_foreground: false,
+      random_stuff: useRandomStuff,
     };
     
     // image_background_id nur hinzufügen, wenn ein Hintergrund ausgewählt wurde
@@ -277,11 +289,24 @@ export default function PhotoBoxPage() {
         const processedImageUrl = URL.createObjectURL(blob);
         setCapturedImage(processedImageUrl);
         setProcessing(false);
+        setMagicInProgress(false);
       })
       .catch((err) => {
         console.error("Fehler bei der Bildverarbeitung:", err);
         setProcessing(false);
+        setMagicInProgress(false);
       });
+  };
+  
+  // Magic Button Handler
+  const handleMagicButtonClick = () => {
+    if (!capturedImage) {
+      alert("Bitte zuerst ein Foto aufnehmen!");
+      return;
+    }
+    
+    setMagicInProgress(true);
+    handleImageUpload(capturedImage, true);
   };
 
   // Beim Erneut Versuchen: Alte Galerie löschen und neue erstellen
@@ -544,6 +569,36 @@ export default function PhotoBoxPage() {
             <Box mt={10}>
               <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
             </Box>
+            
+            {/* Magic Button */}
+            <Container maxWidth="sm" sx={{ mt: 4, textAlign: 'center' }}>
+              <Button
+                variant="contained"
+                onClick={handleMagicButtonClick}
+                disabled={!capturedImage || magicInProgress}
+                sx={{
+                  mt: 2,
+                  py: 1.5,
+                  px: 4,
+                  fontSize: '1.1rem',
+                  fontWeight: 600,
+                  background: 'linear-gradient(45deg, #000000 30%, #333333 90%)',
+                  boxShadow: '0 3px 5px 2px rgba(0, 0, 0, .3)',
+                  '&:hover': {
+                    background: 'linear-gradient(45deg, #333333 30%, #000000 90%)',
+                  },
+                }}
+              >
+                {magicInProgress ? (
+                  <>
+                    <CircularProgress size={20} sx={{ color: '#ffffff', mr: 1 }} />
+                    Magic läuft...
+                  </>
+                ) : (
+                  '✨ Let the magic begin'
+                )}
+              </Button>
+            </Container>
           </>
         )}
 
