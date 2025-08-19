@@ -111,14 +111,39 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            position: "relative",
+            cursor: selectedIndex !== 0 ? "pointer" : "default"
           }}
+          onClick={selectedIndex !== 0 ? () => {
+            setSelectedIndex(0);
+            if (onSelect) onSelect(null);
+          } : undefined}
         >
           {centerItem ? (
-            <BackgroundImage
-              token={token}
-              backgroundId={centerItem.background_id}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
+            <>
+              <BackgroundImage
+                token={token}
+                backgroundId={centerItem.background_id}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+              {/* Overlay für "No Background" Button */}
+              {selectedIndex !== 0 && (
+                <Box sx={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: "rgba(0,0,0,0.6)",
+                  color: "white",
+                  padding: "4px 0",
+                  fontSize: "12px",
+                  textAlign: "center",
+                  fontWeight: 500
+                }}>
+                  No Background
+                </Box>
+              )}
+            </>
           ) : (
             <Box sx={{ 
               width: "100%", 

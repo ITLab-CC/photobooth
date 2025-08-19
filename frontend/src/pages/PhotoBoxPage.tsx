@@ -135,12 +135,7 @@ const weddingTheme = createTheme({
 
 // No longer needed since we're using a solid white background
 
-// Decorative leaf animation
-const floatAnimation = keyframes`
-  0% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-10px) rotate(5deg); }
-  100% { transform: translateY(0px) rotate(0deg); }
-`;
+// Animation für Text-Einblendung
 
 // Animation for text fade in
 const fadeInAnimation = keyframes`
@@ -162,7 +157,6 @@ export default function PhotoBoxPage() {
   
   // Animation states for start screen
   const [showStartScreen, setShowStartScreen] = useState(true);
-  const [animationStarted, setAnimationStarted] = useState(false);
   const [showNames, setShowNames] = useState(false);
   const [showMainContent, setShowMainContent] = useState(false);
 
@@ -237,7 +231,6 @@ export default function PhotoBoxPage() {
   
   // Handle the start animation sequence
   const handleStartClick = () => {
-    setAnimationStarted(true);
     setShowNames(true);
     
     setTimeout(() => {
@@ -349,138 +342,141 @@ export default function PhotoBoxPage() {
           position: 'relative',
           overflow: 'hidden',
           overscrollBehavior: 'none',
-          userSelect: 'none',
-          WebkitOverflowScrolling: 'touch',
-          msOverflowStyle: 'none',
         }}
       >
-        
         {/* Start Screen */}
         {showStartScreen && (
-          <Box
+          <Box 
+            onClick={handleStartClick}
             sx={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              height: '100vh',
               width: '100%',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              zIndex: 10,
+              height: '100vh',
+              cursor: 'pointer', // Zeigt an, dass der gesamte Bereich klickbar ist
             }}
           >
-            {/* Tap to Start with Hand Icon */}
-            {!animationStarted && (
+            <Box
+              sx={{
+                width: '200px',
+                height: '200px',
+                borderRadius: '50%',
+                backgroundColor: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.1)',
+                mb: 4,
+                '&:hover': {
+                  transform: 'scale(1.05)',
+                  transition: 'transform 0.3s ease',
+                },
+              }}
+            >
+              {/* Kamera-Icon */}
               <Box
                 sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: '100%',
+                  width: '80px',
+                  height: '80px',
+                  position: 'relative',
                 }}
               >
-                {/* Circle with Hand Icon */}
+                {/* Einfaches Kamera-Icon mit CSS */}
                 <Box
-                  onClick={handleStartClick}
                   sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    width: '60px',
+                    height: '40px',
+                    backgroundColor: '#333333',
+                    borderRadius: '5px',
+                    position: 'absolute',
+                    top: '20px',
+                    left: '10px',
+                  }}
+                />
+                <Box
+                  sx={{
+                    width: '30px',
+                    height: '30px',
+                    border: '3px solid #333333',
                     borderRadius: '50%',
-                    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-                    width: 180,
-                    height: 180,
-                    transition: 'all 0.3s ease',
-                    mb: 3,
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.1)',
-                      transform: 'scale(1.05)',
-                    },
+                    position: 'absolute',
+                    top: '25px',
+                    left: '25px',
                   }}
-                >
-                  {/* Hand Icon */}
-                  <Box
-                    sx={{
-                      width: 100,
-                      height: 100,
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23000000'%3E%3Cpath d='M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V336c0 1.5 0 3.1 .1 4.6L67.6 283c-16-15.2-41.3-14.6-56.6 1.4s-14.6 41.3 1.4 56.6L124.8 448c43.1 41.1 100.4 64 160 64H304c97.2 0 176-78.8 176-176V128c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V32z'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: 'no-repeat',
-                      backgroundSize: 'contain',
-                      animation: `${floatAnimation} 2s ease-in-out infinite`,
-                    }}
-                  />
-                </Box>
-                
-                {/* Text outside the circle */}
-                <Typography
-                  variant="h4"
-                  onClick={handleStartClick}
+                />
+                <Box
                   sx={{
-                    fontFamily: "'Inter', sans-serif",
-                    color: '#000000',
-                    fontWeight: 400,
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    width: '100%',
-                    maxWidth: '90%',
-                    margin: '0 auto',
-                    '&:hover': {
-                      color: '#333333',
-                    },
+                    width: '20px',
+                    height: '10px',
+                    backgroundColor: '#333333',
+                    borderRadius: '5px 5px 0 0',
+                    position: 'absolute',
+                    top: '10px',
+                    left: '30px',
                   }}
-                >
-                  Erschaffe eine Erinnerung<br/>Crea un recuerdo
-                </Typography>
+                />
               </Box>
-            )}
+            </Box>
             
-            
-            {/* Names Reveal */}
-            {showNames && (
-              <Fade in={showNames} timeout={1000}>
-                <Box 
-                  sx={{ 
-                    textAlign: "center", 
-                    position: "relative",
-                    zIndex: 1,
-                    animation: `${fadeInAnimation} 1s ease`,
-                  }}
-                >
-                  <Typography 
-                    variant="h2" 
-                    sx={{ 
-                      fontFamily: "'Inter', sans-serif",
-                      color: "#3c3c3c",
-                      fontWeight: 600,
-                      letterSpacing: 1,
-                      mb: 1,
-                    }}
-                  >
-                    Paola & Andreas
-                  </Typography>
-                  <Typography 
-                    variant="h5" 
-                    sx={{ 
-                      fontFamily: "'Inter', sans-serif",
-                      color: "#666666",
-                      fontWeight: 400,
-                      letterSpacing: 1,
-                    }}
-                  >
-                    24.08.2025 • Wiesbaden
-                  </Typography>
-                </Box>
-              </Fade>
-            )}
+            {/* Text outside the circle */}
+            <Typography
+              variant="h4"
+              sx={{
+                fontFamily: "'Inter', sans-serif",
+                color: '#000000',
+                fontWeight: 400,
+                textAlign: 'center',
+                width: '100%',
+                maxWidth: '90%',
+                margin: '0 auto',
+                '&:hover': {
+                  color: '#333333',
+                },
+              }}
+            >
+              Erschaffe eine Erinnerung<br/>Crea un recuerdo
+            </Typography>
           </Box>
+        )}
+        
+        {/* Names Reveal */}
+        {showNames && (
+          <Fade in={showNames} timeout={1000}>
+            <Box 
+              sx={{ 
+                textAlign: "center", 
+                position: "relative",
+                zIndex: 1,
+                animation: `${fadeInAnimation} 1s ease`,
+              }}
+            >
+              <Typography 
+                variant="h2" 
+                sx={{ 
+                  fontFamily: "'Inter', sans-serif",
+                  color: "#3c3c3c",
+                  fontWeight: 600,
+                  letterSpacing: 1,
+                  mb: 1,
+                }}
+              >
+                Paola & Andreas
+              </Typography>
+              <Typography 
+                variant="h5" 
+                sx={{ 
+                  fontFamily: "'Inter', sans-serif",
+                  color: "#666666",
+                  fontWeight: 400,
+                  letterSpacing: 1,
+                }}
+              >
+                24.08.2025 • Wiesbaden
+              </Typography>
+            </Box>
+          </Fade>
         )}
 
         {/* Wedding title - shown after animation or when returning to main screen */}
