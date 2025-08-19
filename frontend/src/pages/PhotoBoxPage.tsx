@@ -338,7 +338,7 @@ export default function PhotoBoxPage() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'flex-start',
+          justifyContent: 'center', // Vertikale Zentrierung
           padding: '20px',
           position: 'relative',
           overflow: 'hidden',
@@ -374,6 +374,11 @@ export default function PhotoBoxPage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: '100%',
                 }}
               >
                 {/* Circle with Hand Icon */}
@@ -423,7 +428,7 @@ export default function PhotoBoxPage() {
                     },
                   }}
                 >
-                  Tap to Start
+                  Erschaffe eine Erinnerung<br/>Crea un recuerdo
                 </Typography>
               </Box>
             )}
@@ -536,13 +541,16 @@ export default function PhotoBoxPage() {
         <Dialog 
           open={showResultModal} 
           disableEscapeKeyDown 
-          maxWidth="xs" 
+          maxWidth="sm" 
           fullWidth
           PaperProps={{
             sx: {
               borderRadius: 3,
               boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
               overflow: "hidden",
+              width: "90%",
+              maxWidth: "500px",
+              margin: "auto"
             }
           }}
         >

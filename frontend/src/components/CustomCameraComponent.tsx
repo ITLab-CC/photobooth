@@ -148,10 +148,12 @@ export default function CustomCameraComponent({
           }}
           onClick={startCountdown}
         >
-          <PhotoCameraIcon sx={{ fontSize: 64, color: "white" }} />
-          <Typography variant="h6" color="white" sx={{ mt: 1 }}>
-            Tippe um den Countdown zu starten
-          </Typography>
+          <Box sx={{ width: "100%", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <PhotoCameraIcon sx={{ fontSize: 64, color: "white" }} />
+            <Typography variant="h6" color="white" sx={{ mt: 1 }}>
+              Tippe um den Countdown zu starten
+            </Typography>
+          </Box>
         </Box>
       )}
 
