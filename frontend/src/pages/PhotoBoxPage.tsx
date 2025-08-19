@@ -13,6 +13,7 @@ import {
   createTheme,
   Fade,
   Container,
+  Paper,
 } from "@mui/material";
 import { keyframes } from "@mui/system";
 import AutoLogin from "../components/AutoLogin";
@@ -33,15 +34,6 @@ interface ImageResponse {
   image_id: string;
   type: string;
   gallery: string;
-}
-
-interface ImageProcessRequest {
-  image_id: string;
-  image_background_id: string;
-  refine_foreground?: boolean;
-  random_stuff?: boolean;
-  qr_code?: boolean;
-  img_frame_id?: string;
 }
 
 interface ExtendedImageProcessResponse {
@@ -168,6 +160,7 @@ export default function PhotoBoxPage() {
   const [processedImageId, setProcessedImageId] = useState<string | null>(null);
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
   const [magicInProgress, setMagicInProgress] = useState<boolean>(false);
+  const [magicEnabled, setMagicEnabled] = useState<boolean>(false);
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   
@@ -298,15 +291,20 @@ export default function PhotoBoxPage() {
       });
   };
   
-  // Magic Button Handler
-  const handleMagicButtonClick = () => {
+  // Magic Switch Handler
+  const handleMagicSwitchToggle = () => {
     if (!capturedImage) {
       alert("Bitte zuerst ein Foto aufnehmen!");
       return;
     }
     
-    setMagicInProgress(true);
-    handleImageUpload(capturedImage, true);
+    const newMagicState = !magicEnabled;
+    setMagicEnabled(newMagicState);
+    
+    if (newMagicState) {
+      setMagicInProgress(true);
+      handleImageUpload(capturedImage, true);
+    }
   };
 
   // Beim Erneut Versuchen: Alte Galerie löschen und neue erstellen
@@ -570,34 +568,55 @@ export default function PhotoBoxPage() {
               <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
             </Box>
             
-            {/* Magic Button */}
+            {/* Magic Slider (iPhone Style) */}
             <Container maxWidth="sm" sx={{ mt: 4, textAlign: 'center' }}>
-              <Button
-                variant="contained"
-                onClick={handleMagicButtonClick}
-                disabled={!capturedImage || magicInProgress}
-                sx={{
-                  mt: 2,
-                  py: 1.5,
-                  px: 4,
-                  fontSize: '1.1rem',
-                  fontWeight: 600,
-                  background: 'linear-gradient(45deg, #000000 30%, #333333 90%)',
-                  boxShadow: '0 3px 5px 2px rgba(0, 0, 0, .3)',
-                  '&:hover': {
-                    background: 'linear-gradient(45deg, #333333 30%, #000000 90%)',
-                  },
-                }}
-              >
-                {magicInProgress ? (
-                  <>
-                    <CircularProgress size={20} sx={{ color: '#ffffff', mr: 1 }} />
-                    Magic läuft...
-                  </>
-                ) : (
-                  '✨ Let the magic begin'
-                )}
-              </Button>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h6" sx={{ fontWeight: 500, mb: 1 }}>
+                  ✨ Let the magic begin
+                </Typography>
+                
+                {/* iPhone-style slider */}
+                <Box 
+                  onClick={() => !magicInProgress && capturedImage && handleMagicSwitchToggle()}
+                  sx={{
+                    width: '80px',
+                    height: '40px',
+                    borderRadius: '20px',
+                    backgroundColor: magicEnabled ? '#000000' : '#e0e0e0',
+                    position: 'relative',
+                    transition: 'background-color 0.3s',
+                    cursor: capturedImage && !magicInProgress ? 'pointer' : 'not-allowed',
+                    opacity: capturedImage ? 1 : 0.6,
+                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: magicEnabled ? 'flex-end' : 'flex-start',
+                    padding: '3px',
+                  }}
+                >
+                  <Paper
+                    elevation={2}
+                    sx={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '50%',
+                      backgroundColor: '#ffffff',
+                      transition: 'transform 0.3s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {magicInProgress && (
+                      <CircularProgress size={20} sx={{ color: '#000000' }} />
+                    )}
+                  </Paper>
+                </Box>
+                
+                <Typography variant="body2" sx={{ mt: 1, color: '#666666' }}>
+                  {magicEnabled ? 'Magic aktiviert' : 'Magic deaktiviert'}
+                </Typography>
+              </Box>
             </Container>
           </>
         )}
