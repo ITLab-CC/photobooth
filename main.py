@@ -1121,11 +1121,12 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         raise HTTPException(status_code=404, detail="Gallery not found")
 
     # get the background image
-    background_img = None
     if image.image_background_id is not None:
         background_img = Background.db_find(db, image.image_background_id)
         if background_img is None:
             raise HTTPException(status_code=404, detail="Background image not found")
+    else:
+        background_img = None
 
     # get the frame
     frame_img = FRAME.db_find(db, image.img_frame_id)
