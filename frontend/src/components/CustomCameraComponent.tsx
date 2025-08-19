@@ -100,15 +100,17 @@ export default function CustomCameraComponent({
         display: "flex",
         justifyContent: "center",
         width: "100%",
+        padding: "0 5%",
+        boxSizing: "border-box",
       }}
     >
       <Box
         position="relative"
         sx={{
-          width: "calc(100% - 40px)",
+          width: "100%",
           maxWidth: "680px",
           height: "680px",
-          margin: "20px 0",
+          margin: "20px auto",
         }}
       >
       <CameraPreview

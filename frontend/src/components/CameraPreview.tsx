@@ -27,9 +27,10 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
       sx={{ 
         overflow: "hidden", 
         borderRadius: 2,
-        width: "90%",
+        width: "100%",
         maxWidth: "680px",
         margin: "0 auto",
+        boxSizing: "border-box",
       }}
     >
       <Box
@@ -39,7 +40,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
         playsInline
         muted
         sx={{
-          width: "90%",
+          width: "100%",
           height: "680px",
           objectFit: "cover",
           transform: "scaleX(-1)",

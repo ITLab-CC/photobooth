@@ -339,7 +339,6 @@ export default function PhotoBoxPage() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center', // Vertikale Zentrierung
-          padding: '20px',
           position: 'relative',
           overflow: 'hidden',
           overscrollBehavior: 'none',
