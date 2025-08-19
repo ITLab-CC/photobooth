@@ -89,11 +89,7 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
               width: 150, 
               height: 150, 
               overflow: "hidden",
-              cursor: "pointer",
-              transition: "transform 0.2s",
-              '&:hover': {
-                transform: "scale(1.05)",
-              }
+              cursor: "pointer"
             }}
             onClick={handlePrev}
           >
@@ -104,7 +100,24 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
             />
           </Paper>
         ) : (
-          <Box sx={{ width: 150, height: 150 }} /> /* Unsichtbarer Platzhalter */
+          <Paper 
+            sx={{ 
+              width: 150, 
+              height: 150,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#f5f5f5",
+              color: "#666",
+              fontSize: "14px",
+              fontWeight: 500,
+              cursor: selectedIndex === 0 ? "default" : "pointer",
+              border: "1px solid #e0e0e0"
+            }}
+            onClick={selectedIndex !== 0 ? handlePrev : undefined}
+          >
+            {selectedIndex === 0 && "No Background"}
+          </Paper>
         )}
         <Paper
           sx={{
@@ -112,16 +125,31 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
             height: 180,
             overflow: "hidden",
             border: "4px solid #1976d2",
-            transition: "transform 0.3s",
-            transform: "scale(1.2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          {centerItem && (
+          {centerItem ? (
             <BackgroundImage
               token={token}
               backgroundId={centerItem.background_id}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
+          ) : (
+            <Box sx={{ 
+              width: "100%", 
+              height: "100%", 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center",
+              backgroundColor: "#f5f5f5",
+              color: "#333",
+              fontSize: "18px",
+              fontWeight: 600
+            }}>
+              No Background
+            </Box>
           )}
         </Paper>
         {rightItem ? (
@@ -130,11 +158,7 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
               width: 150, 
               height: 150, 
               overflow: "hidden",
-              cursor: "pointer",
-              transition: "transform 0.2s",
-              '&:hover': {
-                transform: "scale(1.05)",
-              }
+              cursor: "pointer"
             }}
             onClick={handleNext}
           >
@@ -145,7 +169,24 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
             />
           </Paper>
         ) : (
-          <Box sx={{ width: 150, height: 150 }} /> /* Unsichtbarer Platzhalter */
+          <Paper 
+            sx={{ 
+              width: 150, 
+              height: 150,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#f5f5f5",
+              color: "#666",
+              fontSize: "14px",
+              fontWeight: 500,
+              cursor: selectedIndex === paddedBackgrounds.length - 2 ? "default" : "pointer",
+              border: "1px solid #e0e0e0"
+            }}
+            onClick={selectedIndex !== paddedBackgrounds.length - 2 ? handleNext : undefined}
+          >
+            {selectedIndex === paddedBackgrounds.length - 2 && "No Background"}
+          </Paper>
         )}
       </Box>
       <IconButton onClick={handleNext} disabled={selectedIndex === paddedBackgrounds.length - 2}>
