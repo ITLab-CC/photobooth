@@ -151,7 +151,7 @@ def replace_faces_with_smileys_dnn(
     model_path: str = "models/res10_300x300_ssd_iter_140000.caffemodel",
     conf_threshold: float = 0.85,
     face_scale: float = 1.25,
-    random_seed: Optional[int] = int(datetime.now().timestamp()),
+    random_seed: Optional[int] = int(datetime.now().timestamp() * 1000000),
     print_detections: bool = True
 ) -> Image.Image:
     if random_seed is not None:
