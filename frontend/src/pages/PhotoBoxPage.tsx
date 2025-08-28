@@ -28,6 +28,7 @@ import {
   getImage,
   printImage,
 } from "../api";
+import itlabImage from "../assets/it-lab-banner.svg";
 
 interface ImageResponse {
   image_id: string;
@@ -690,6 +691,20 @@ export default function PhotoBoxPage() {
             setShowPrintCountModal(false);
           }}
         />
+
+      <Box
+        component="img"
+        src={itlabImage}
+        alt="Itlab Logo"
+        sx={{
+          position: "fixed",
+          bottom: 16,
+          right: 16,
+          width: 250,
+          opacity: 0.8,
+        }}
+      />
+
 
         <Snackbar
           open={snackbarOpen}
