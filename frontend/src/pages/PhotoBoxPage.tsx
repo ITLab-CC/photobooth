@@ -445,7 +445,7 @@ export default function PhotoBoxPage() {
                     },
                   }}
                 >
-                  Erschaffe eine Erinnerung<br/>Crea un recuerdo
+                  Erschaffe eine Erinnerung
                 </Typography>
               </Box>
             )}
@@ -472,7 +472,7 @@ export default function PhotoBoxPage() {
                       mb: 1,
                     }}
                   >
-                    Paola & Andreas
+                    Umwelt- und Familientag
                   </Typography>
                   <Typography 
                     variant="h5" 
@@ -483,7 +483,7 @@ export default function PhotoBoxPage() {
                       letterSpacing: 1,
                     }}
                   >
-                    24.08.2025 • Wiesbaden
+                    13.09.2025 • Darmstadt
                   </Typography>
                 </Box>
               </Fade>
@@ -511,7 +511,7 @@ export default function PhotoBoxPage() {
                 mb: 1,
               }}
             >
-              Paola & Andreas
+              Umwelt- und Familientag
             </Typography>
             <Typography 
               variant="h6" 
@@ -522,7 +522,7 @@ export default function PhotoBoxPage() {
                 letterSpacing: 1,
               }}
             >
-              24.08.2025 • Wiesbaden
+              13.09.2025 • Darmstadt
             </Typography>
           </Box>
         )}
