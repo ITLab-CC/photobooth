@@ -67,7 +67,7 @@ const DetailPage: React.FC = () => {
             textShadow: "2px 2px 4px black",
           }}
         >
-          Nacht der Ausbildung bei der Entega
+          FotoBox
         </Typography>
       </Box>
 

@@ -28,7 +28,7 @@ import {
   getImage,
   printImage,
 } from "../api";
-import itlabImage from "../assets/it-lab-banner.svg";
+import itlabImage from "../assets/itlab_logo.png";
 
 interface ImageResponse {
   image_id: string;
@@ -473,7 +473,7 @@ export default function PhotoBoxPage() {
                       mb: 1,
                     }}
                   >
-                    Umwelt- und Familientag
+                    IT-Lab 2026
                   </Typography>
                   <Typography 
                     variant="h5" 
@@ -484,7 +484,7 @@ export default function PhotoBoxPage() {
                       letterSpacing: 1,
                     }}
                   >
-                    13.09.2025 • Darmstadt
+                    ENTEGA • Darmstadt
                   </Typography>
                 </Box>
               </Fade>
@@ -512,7 +512,7 @@ export default function PhotoBoxPage() {
                 mb: 1,
               }}
             >
-              Umwelt- und Familientag
+              IT-Lab 2026
             </Typography>
             <Typography 
               variant="h6" 
@@ -523,7 +523,7 @@ export default function PhotoBoxPage() {
                 letterSpacing: 1,
               }}
             >
-              13.09.2025 • Darmstadt
+              ENTEGA • Darmstadt
             </Typography>
           </Box>
         )}
@@ -678,7 +678,7 @@ export default function PhotoBoxPage() {
                   fontWeight: 600,
                 }}
               >
-                ✨ Speichern & Drucken
+                ✨ Drucken
               </Button>
             </DialogActions>
           )}
@@ -700,7 +700,7 @@ export default function PhotoBoxPage() {
           position: "fixed",
           bottom: 16,
           right: 16,
-          width: 250,
+          width: 125,
           opacity: 0.8,
         }}
       />
