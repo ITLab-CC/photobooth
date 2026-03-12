@@ -51,8 +51,15 @@ const delay = (ms: number): Promise<void> => {
 
 /**
  * Lädt alle Hintergrundbilder vor und speichert sie im Local Storage mit Rate Limiting
+ * DEAKTIVIERT wegen Storage Quota und Rate Limiting Problemen
  */
 export const preloadBackgrounds = async (token: string): Promise<void> => {
+  // Preloading deaktiviert um Speicherplatz zu sparen und Rate Limits zu vermeiden
+  console.log('Background preloading ist deaktiviert');
+  return;
+  
+  // Alter Code (deaktiviert):
+  /*
   // Nur einmal alle 24 Stunden preloaden
   if (!shouldPreload()) {
     console.log('Hintergrundbilder wurden bereits kürzlich vorgeladen');
@@ -95,4 +102,5 @@ export const preloadBackgrounds = async (token: string): Promise<void> => {
   } catch (error) {
     console.error('Fehler beim Preloading der Hintergrundbilder:', error);
   }
+  */
 };

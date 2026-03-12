@@ -78,7 +78,7 @@ const base64ToBlob = (base64: string): Blob => {
 };
 
 /**
- * Speichert ein Bild im Local Storage
+ * Speichert ein Bild im Local Storage (mit Quota-Handling)
  */
 const saveImageToLocalStorage = async (id: string, blob: Blob) => {
   try {
@@ -86,7 +86,25 @@ const saveImageToLocalStorage = async (id: string, blob: Blob) => {
     localStorage.setItem(LS_PREFIX + id, base64);
     localStorage.setItem(LS_TIMESTAMP_PREFIX + id, Date.now().toString());
   } catch (error) {
-    console.error('Fehler beim Speichern im Local Storage:', error);
+    if (error instanceof Error && error.name === 'QuotaExceededError') {
+      console.warn('Local Storage voll, überspringe Cache für Hintergrundbild:', id);
+      // Lösche alte Cache-Einträge um Platz zu schaffen
+      try {
+        const keys = Object.keys(localStorage);
+        const bgKeys = keys.filter(key => key.startsWith(LS_PREFIX));
+        // Lösche die ältesten 5 Hintergrundbilder
+        bgKeys.slice(0, 5).forEach(key => {
+          const timestampKey = key.replace(LS_PREFIX, LS_TIMESTAMP_PREFIX);
+          localStorage.removeItem(key);
+          localStorage.removeItem(timestampKey);
+        });
+        console.log('Alte Cache-Einträge gelöscht');
+      } catch (cleanupError) {
+        console.error('Fehler beim Cleanup des Local Storage:', cleanupError);
+      }
+    } else {
+      console.error('Fehler beim Speichern im Local Storage:', error);
+    }
   }
 };
 

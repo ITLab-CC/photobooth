@@ -4,8 +4,7 @@ import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import { useSwipeable } from "react-swipeable";
 import { listBackgrounds } from "../api";
-import BackgroundImage from "./BackgroundImage";
-import { preloadBackgrounds } from "../utils/backgroundPreloader";
+import OptimizedBackgroundImage from "./OptimizedBackgroundImage";
 
 interface BackgroundResponse {
   background_id: string;
@@ -33,15 +32,10 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
         if (data.backgrounds && data.backgrounds.length > 0) {
           setBackgrounds(data.backgrounds);
           // Behalte den Index 0 für "No Background"
-          
-          // Starte das Preloading der Hintergrundbilder im Hintergrund
-          preloadBackgrounds(token).catch(err => {
-            console.error("Fehler beim Preloading der Hintergrundbilder:", err);
-          });
         }
       })
       .catch((err) => {
-        console.error("Fehler beim Laden der Hintergründe:", err);
+        console.error("Fehler beim Laden der Hintergrundbilder:", err);
       });
   }, [token]);
 
@@ -83,76 +77,67 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
         <ArrowBackIosIcon />
       </IconButton>
       <Box display="flex" gap={1}>
-        {leftItem ? (
-          <Paper 
-            sx={{ 
-              width: 150, 
-              height: 150, 
-              overflow: "hidden",
-              cursor: "pointer"
+        {leftItem && (
+          <OptimizedBackgroundImage
+            token={token}
+            backgroundId={leftItem.background_id}
+            style={{
+              width: 150,
+              height: 150,
+              borderRadius: 4,
+              objectFit: "cover",
+              opacity: 0.7,
+              cursor: "pointer",
             }}
             onClick={handlePrev}
-          >
-            <BackgroundImage
-              token={token}
-              backgroundId={leftItem.background_id}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          </Paper>
-        ) : (
-          <Box sx={{ width: 150, height: 150 }} /> /* Unsichtbarer Platzhalter */
+          />
         )}
-        <Paper
-          sx={{
-            width: 180,
-            height: 180,
-            overflow: "hidden",
-            border: "4px solid #1976d2",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
+        <Box sx={{ position: "relative", width: 180, height: 180 }}>
           {centerItem ? (
-            <BackgroundImage
+            <OptimizedBackgroundImage
               token={token}
               backgroundId={centerItem.background_id}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              style={{
+                width: "100%",
+                height: "100%",
+                borderRadius: 2,
+                objectFit: "cover",
+                border: "3px solid #fff",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              }}
             />
           ) : (
-            <Box sx={{ 
-              width: "100%", 
-              height: "100%", 
-              display: "flex", 
-              alignItems: "center", 
-              justifyContent: "center",
-              backgroundColor: "#f5f5f5",
-              color: "#333",
-              fontSize: "18px",
-              fontWeight: 600
-            }}>
+            <Box
+              sx={{
+                width: "100%",
+                height: "100%",
+                borderRadius: 2,
+                border: "3px solid #fff",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "rgba(255,255,255,0.1)",
+              }}
+            >
               No Background
             </Box>
           )}
-        </Paper>
-        {rightItem ? (
-          <Paper 
-            sx={{ 
-              width: 150, 
-              height: 150, 
-              overflow: "hidden",
-              cursor: "pointer"
+        </Box>
+        {rightItem && (
+          <OptimizedBackgroundImage
+            token={token}
+            backgroundId={rightItem.background_id}
+            style={{
+              width: 150,
+              height: 150,
+              borderRadius: 4,
+              objectFit: "cover",
+              opacity: 0.7,
+              cursor: "pointer",
             }}
             onClick={handleNext}
-          >
-            <BackgroundImage
-              token={token}
-              backgroundId={rightItem.background_id}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          </Paper>
-        ) : (
-          <Box sx={{ width: 150, height: 150 }} /> /* Unsichtbarer Platzhalter */
+          />
         )}
       </Box>
       <IconButton onClick={handleNext} disabled={selectedIndex === paddedBackgrounds.length - 2}>
