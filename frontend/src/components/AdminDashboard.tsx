@@ -11,7 +11,6 @@ import {
   DialogActions,
   IconButton,
   TextField,
-  CircularProgress,
 } from "@mui/material";
 import BackspaceIcon from "@mui/icons-material/Backspace";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -33,7 +32,6 @@ import {
 } from "../api";
 import LazyGalleryThumbnail from "./LazyGalleryThumbnail";
 import BackgroundImage from "./BackgroundImage";
-import itlabImage from "../assets/it-lab-banner.svg";
 
 export interface BackgroundResponse {
   background_id: string;
