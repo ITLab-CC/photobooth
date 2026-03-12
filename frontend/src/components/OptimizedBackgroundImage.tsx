@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getBackground } from "../api";
+import { loadBackgroundWithCache } from "../utils/intelligentCache";
 
 interface OptimizedBackgroundImageProps {
   token: string;
@@ -24,8 +24,7 @@ const OptimizedBackgroundImage: React.FC<OptimizedBackgroundImageProps> = ({
     const loadImage = async () => {
       setIsLoading(true);
       try {
-        const blob = await getBackground(token, backgroundId);
-        url = URL.createObjectURL(blob);
+        const url = await loadBackgroundWithCache(token, backgroundId);
         if (isMounted) {
           setImageUrl(url);
         }
