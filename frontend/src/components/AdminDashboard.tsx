@@ -31,7 +31,7 @@ import {
   deleteBackground,
   printImage,
 } from "../api";
-import GalleryThumbnail from "./GalleryThumbnail";
+import LazyGalleryThumbnail from "./LazyGalleryThumbnail";
 import BackgroundImage from "./BackgroundImage";
 import itlabImage from "../assets/it-lab-banner.svg";
 
@@ -67,14 +67,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
 
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
-  const [countdown, setCountdown] = useState(60);
-  const [loadedImages, setLoadedImages] = useState(0);
-
-  // Berechne die Gesamtzahl der Bilder in allen Galerien
-  const totalImages = galleries.reduce(
-    (acc, gallery) => acc + (gallery.images ? gallery.images.length : 0),
-    0
-  );
 
   useEffect(() => {
     if (token) {
@@ -100,22 +92,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
     }
   }, [token]);
 
-  // Starte den Reload-Timer NUR, wenn bereits Galerien (also erwartete Bilder) vorhanden sind
-  // und noch nicht alle Bilder geladen wurden.
-  useEffect(() => {
-    // Falls noch keine Bilder erwartet werden oder bereits alle geladen sind, wird kein Timer gesetzt.
-    if (totalImages === 0 || loadedImages >= totalImages) return;
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          window.location.reload();
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [loadedImages, totalImages]);
 
   const handleDeleteGallery = async (galleryId: string) => {
     if (!token) return;
@@ -291,13 +267,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
                       <Box sx={{ mt: 2 }}>
                         <Typography variant="body2">Bilder:</Typography>
                         <Box sx={{ display: "flex", gap: 1, overflowX: "auto", pt: 1 }}>
-                          {g.images.map((imgId) => (
-                            <GalleryThumbnail
+                          {g.images.map((imgId, index) => (
+                            <LazyGalleryThumbnail
                               key={imgId}
                               token={token}
                               imageId={imgId}
                               onClick={() => handleThumbnailClick(imgId)}
-                              onLoad={() => setLoadedImages((prev) => prev + 1)}
+                              loadImmediately={index === 0} // Nur das erste Bild sofort laden
                             />
                           ))}
                         </Box>
@@ -517,39 +493,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
         </DialogActions>
       </Dialog>
 
-      <Box
-        sx={{
-          position: "fixed",
-          bottom: 16,
-          right: 16,
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-        }}
-      >
-        <Box
-          component="img"
-          src={itlabImage}
-          alt="Itlab Logo"
-          sx={{
-            width: 100,
-            opacity: 0.8,
-          }}
-        />
-        <Box
-          sx={{
-            backgroundColor: "#fff",
-            boxShadow: "0px 4px 10px rgba(0,0,0,0.2)",
-            borderRadius: 2,
-            display: "flex",
-            alignItems: "center",
-            padding: "8px 16px",
-          }}
-        >
-          <CircularProgress size={24} sx={{ mr: 1 }} />
-          <Typography variant="body2">{countdown}</Typography>
-        </Box>
-      </Box>
     </Box>
   );
 };

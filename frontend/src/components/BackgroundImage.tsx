@@ -5,6 +5,37 @@ import { getBackground } from "../api";
 const urlCache: Record<string, string> = {};
 const promiseCache: Record<string, Promise<string>> = {};
 
+// Rate Limiting: Nur eine Anfrage gleichzeitig
+let isRequestInProgress = false;
+const requestQueue: Array<{ resolve: (value: string) => void; reject: (reason: any) => void; backgroundId: string; token: string }> = [];
+
+/**
+ * Verarbeitet die Warteschlange für Hintergrundbild-Anfragen
+ */
+const processQueue = async () => {
+  if (isRequestInProgress || requestQueue.length === 0) return;
+  
+  isRequestInProgress = true;
+  const { resolve, reject, backgroundId, token } = requestQueue.shift()!;
+  
+  try {
+    const blob = await getBackground(token, backgroundId);
+    const objectUrl = URL.createObjectURL(blob);
+    urlCache[backgroundId] = objectUrl;
+    
+    // Im Local Storage speichern für zukünftige Verwendung
+    await saveImageToLocalStorage(backgroundId, blob);
+    
+    resolve(objectUrl);
+  } catch (error) {
+    reject(error);
+  } finally {
+    isRequestInProgress = false;
+    // Verarbeite nächsten Eintrag in der Warteschlange nach einer kurzen Verzögerung
+    setTimeout(() => processQueue(), 500);
+  }
+};
+
 // Local Storage Keys
 const LS_PREFIX = 'photobooth_bg_';
 const LS_TIMESTAMP_PREFIX = 'photobooth_bg_timestamp_';
@@ -101,16 +132,11 @@ const BackgroundImage: React.FC<BackgroundImageProps> = ({ token, backgroundId, 
       return;
     }
     
-    // 3. Wenn nicht im Cache oder abgelaufen, vom Server laden
+    // 3. Wenn nicht im Cache oder abgelaufen, vom Server laden mit Rate Limiting
     if (!promiseCache[backgroundId]) {
-      promiseCache[backgroundId] = getBackground(token, backgroundId).then(async (blob) => {
-        const objectUrl = URL.createObjectURL(blob);
-        urlCache[backgroundId] = objectUrl;
-        
-        // Im Local Storage speichern für zukünftige Verwendung
-        await saveImageToLocalStorage(backgroundId, blob);
-        
-        return objectUrl;
+      promiseCache[backgroundId] = new Promise<string>((resolve, reject) => {
+        requestQueue.push({ resolve, reject, backgroundId, token });
+        processQueue();
       });
     }
     
