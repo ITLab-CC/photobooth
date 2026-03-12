@@ -473,7 +473,7 @@ export default function PhotoBoxPage() {
                       mb: 1,
                     }}
                   >
-                    IT-Lab 2026
+                    Nacht der Ausbildung 2026
                   </Typography>
                   <Typography 
                     variant="h5" 
@@ -512,7 +512,7 @@ export default function PhotoBoxPage() {
                 mb: 1,
               }}
             >
-              IT-Lab 2026
+              Nacht der Ausbildung 2026
             </Typography>
             <Typography 
               variant="h6" 
