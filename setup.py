@@ -226,6 +226,25 @@ def post_create_default_env(base_url: str, user: str = "printer", password: Opti
         env_file.write(f'PHOTO_BOOTH="{user}"\n')
         env_file.write(f'PHOTO_BOOTH_PASSWORD="{printer_password}"\n')
 
+def migrate(db_url: str, db_root: str, db_pw: str, db_name: str) -> None:
+    """
+    Non-destructive migration for existing deployments: creates any new
+    collections that don't exist yet and refreshes MongoDB role privileges
+    (roles only — no existing data/collections are dropped or modified).
+    """
+    admin_db = connect_db(db_url, db_root, db_pw, db_name)
+
+    # Create any newly-introduced collections (each is a no-op if it already exists).
+    EventConfig.db_create_collection(admin_db)
+
+    # Refresh role privileges so existing roles (e.g. "boss", "photo_booth")
+    # pick up permissions for new collections/actions (e.g. event_config, FRAME UPDATE).
+    admin_db.create_roles([User, Gallery, IMG, Background, FRAME, PrinterQueueItem, EventConfig])
+
+    admin_db.close()
+    print("Migration complete: collections and roles are up to date.")
+
+
 def main() -> None:
     # Argument parser
     parser = argparse.ArgumentParser(description="Setup script for MongoDB users and roles.")
@@ -237,6 +256,7 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--create-env", action="store_true", help="Create a default .env file.")
     group.add_argument("--setup", action="store_true", help="Clean everything and setup everything.")
+    group.add_argument("--migrate", action="store_true", help="Create new collections and refresh roles without touching existing data.")
     group.add_argument("--create-admin", action="store_true", help="Create an admin account (boss).")
     group.add_argument("--create-photo-booth", action="store_true", help="Create a photo_booth account.")
     group.add_argument("--create-printer", action="store_true", help="Create a printer account.")
@@ -278,6 +298,8 @@ def main() -> None:
 
         # Create the default .env file for the print service
         post_create_default_env(base_url, "printer", printer_pw)
+    elif args.migrate:
+        migrate(db_url, db_root, db_pw, db_name)
     elif args.create_admin:
         create_admin(db_url, db_root, db_pw, db_name)
     elif args.create_photo_booth:

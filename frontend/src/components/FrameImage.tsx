@@ -5,6 +5,31 @@ import { getFrame } from "../api";
 const urlCache: Record<string, string> = {};
 const promiseCache: Record<string, Promise<string>> = {};
 
+// Rate Limiting: nur eine Frame-Anfrage gleichzeitig (Backend erlaubt nur
+// 1 Request/Sekunde auf /api/v1/frame/{id} — mehrere Frames gleichzeitig
+// gerendert würden sonst sofort 429 auslösen).
+let isRequestInProgress = false;
+const requestQueue: Array<{ resolve: (value: string) => void; reject: (reason: any) => void; frameId: string; token: string }> = [];
+
+const processQueue = async () => {
+  if (isRequestInProgress || requestQueue.length === 0) return;
+
+  isRequestInProgress = true;
+  const { resolve, reject, frameId, token } = requestQueue.shift()!;
+
+  try {
+    const blob = await getFrame(token, frameId);
+    const objectUrl = URL.createObjectURL(blob);
+    urlCache[frameId] = objectUrl;
+    resolve(objectUrl);
+  } catch (error) {
+    reject(error);
+  } finally {
+    isRequestInProgress = false;
+    setTimeout(() => processQueue(), 500);
+  }
+};
+
 interface FrameImageProps {
   token: string;
   frameId: string;
@@ -24,10 +49,9 @@ const FrameImage: React.FC<FrameImageProps> = ({ token, frameId, onClick, style 
     }
 
     if (!promiseCache[frameId]) {
-      promiseCache[frameId] = getFrame(token, frameId).then((blob) => {
-        const objectUrl = URL.createObjectURL(blob);
-        urlCache[frameId] = objectUrl;
-        return objectUrl;
+      promiseCache[frameId] = new Promise<string>((resolve, reject) => {
+        requestQueue.push({ resolve, reject, frameId, token });
+        processQueue();
       });
     }
 
