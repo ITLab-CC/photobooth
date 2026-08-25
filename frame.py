@@ -22,6 +22,7 @@ class FRAME:
     background_crop: Union[int, Tuple[int, int, int, int]] = 0
     qr_position: Tuple[int, int] = (0, 0)
     qr_scale: float = 1.0
+    is_active: bool = False
     _id: str = field(default_factory=lambda: f"FRAME-{uuid.uuid4()}")
 
     # Collection name for MongoDB
@@ -44,7 +45,8 @@ class FRAME:
             "background_offset": self.background_offset,
             "background_crop": self.background_crop,
             "qr_position": self.qr_position,
-            "qr_scale": self.qr_scale
+            "qr_scale": self.qr_scale,
+            "is_active": self.is_active
         }
 
     def __str__(self) -> str:
@@ -62,7 +64,8 @@ class FRAME:
             "background_offset": self.background_offset,
             "background_crop": self.background_crop,
             "qr_position": self.qr_position,
-            "qr_scale": self.qr_scale
+            "qr_scale": self.qr_scale,
+            "is_active": self.is_active
         }, indent=4)
     
     def __repr__(self) -> str:
@@ -86,7 +89,7 @@ class FRAME:
             "validator": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": ["_id", "frame", "background_scale", "background_offset", "background_crop", "qr_position", "qr_scale"],
+                    "required": ["_id", "frame", "background_scale", "background_offset", "background_crop", "qr_position", "qr_scale", "is_active"],
                     "properties": {
                         "_id": {
                             "bsonType": "string",
@@ -124,6 +127,10 @@ class FRAME:
                         "qr_scale": {
                             "bsonType": "double",
                             "description": "Scaling factor for the QR code"
+                        },
+                        "is_active": {
+                            "bsonType": "bool",
+                            "description": "Whether this frame is the one currently used by the kiosk"
                         }
                     }
                 }
@@ -212,9 +219,31 @@ class FRAME:
             background_offset=data.get("background_offset", (0, 0)),
             background_crop=data.get("background_crop", 0),
             qr_position=data.get("qr_position", (0, 0)),
-            qr_scale=data.get("qr_scale", 1.0)
+            qr_scale=data.get("qr_scale", 1.0),
+            is_active=data.get("is_active", False)
         )
 
+    def _to_storage_dict(self) -> dict:
+        """
+        Build a Mongo-storable dict from this FRAME: PIL Image -> bytes,
+        tuples -> lists/ints as required by the collection's JSON schema.
+        Shared by db_save and db_update so both stay in sync.
+        """
+        data = self.to_dict()
+        data["frame"] = self._image_to_bytes(self.frame)
+        data["background_scale"] = float(data["background_scale"])
+        data["background_offset"] = list(data["background_offset"])
+
+        # Handle background_crop as either an int or an array
+        if isinstance(data["background_crop"], (tuple, list)):
+            data["background_crop"] = list(data["background_crop"])
+        else:
+            data["background_crop"] = int(data["background_crop"])
+
+        data["qr_position"] = list(data["qr_position"])
+        data["qr_scale"] = float(data["qr_scale"])
+        data["is_active"] = bool(data["is_active"])
+        return data
 
     @mongodb_permissions(collection=FRAME_COLLECTION, actions=[MongoDBPermissions.INSERT], roles=["boss"])
     def db_save(self, db_c: MongoDBConnection) -> None:
@@ -223,22 +252,27 @@ class FRAME:
         Converts the PIL Image to binary data before insertion.
         """
         collection: Collection = db_c.db[self.COLLECTION_NAME]
-        data = self.to_dict()
-        data["frame"] = self._image_to_bytes(self.frame)
-        data["background_scale"] = float(data["background_scale"])
-        data["background_offset"] = list(data["background_offset"])
-        
-        # Handle background_crop as either an int or an array
-        if isinstance(data["background_crop"], (tuple, list)):
-            data["background_crop"] = list(data["background_crop"])
-        else:
-            data["background_crop"] = int(data["background_crop"])
-        
-        data["qr_position"] = list(data["qr_position"])
-        data["qr_scale"] = float(data["qr_scale"])
-        collection.insert_one(data)
+        collection.insert_one(self._to_storage_dict())
 
-    
+    @mongodb_permissions(collection=FRAME_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
+    def db_update(self, db_c: MongoDBConnection) -> None:
+        """
+        Update the FRAME object in the database.
+        """
+        collection: Collection = db_c.db[self.COLLECTION_NAME]
+        collection.update_one({"_id": self._id}, {"$set": self._to_storage_dict()})
+
+    @classmethod
+    @mongodb_permissions(collection=FRAME_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
+    def db_set_active(cls, db_c: MongoDBConnection, frame_id: str) -> None:
+        """
+        Mark the given frame as the active one and unmark all others,
+        so exactly one frame is ever active at a time.
+        """
+        collection: Collection = db_c.db[cls.COLLECTION_NAME]
+        collection.update_many({"_id": {"$ne": frame_id}}, {"$set": {"is_active": False}})
+        collection.update_one({"_id": frame_id}, {"$set": {"is_active": True}})
+
     @classmethod
     @mongodb_permissions(collection=FRAME_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth"])
     def db_find(cls, db_c: MongoDBConnection, _id: str) -> Optional['FRAME']:
@@ -251,7 +285,7 @@ class FRAME:
         if data:
             return cls._db_load(data)
         return None
-    
+
     @mongodb_permissions(collection=FRAME_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss"])
     def db_delete(self, db_c: MongoDBConnection) -> None:
         """

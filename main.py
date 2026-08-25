@@ -26,6 +26,7 @@ from gallery import Gallery
 from img import IMG
 from frame import FRAME
 from printer import PrinterQueueItem
+from event_config import EventConfig
 from process_img import IMGReplacer, resize_with_crop_or_pad
 from face_smiley_replacer import replace_faces_with_smileys_dnn
 from setup import check_dotenv, setup
@@ -999,6 +1000,37 @@ class FrameRequest(BaseModel):
 
 class FrameResponse(BaseModel):
     frame_id: str
+    background_scale: float = 1.0
+    background_offset: Tuple[int, int] = (0, 0)
+    background_crop: Tuple[int, int, int, int] = (0, 0, 0, 0)
+    qr_position: Tuple[int, int] = (0, 0)
+    qr_scale: float = 1.0
+    is_active: bool = False
+
+
+class FramePatchRequest(BaseModel):
+    image_base64: Optional[str] = None
+    background_scale: float = 1.0
+    background_offset: Tuple[int, int] = (0, 0)
+    background_crop: Tuple[int, int, int, int] = (0, 0, 0, 0)
+    qr_position: Tuple[int, int] = (0, 0)
+    qr_scale: float = 1.0
+
+
+def _frame_to_response(img: FRAME) -> FrameResponse:
+    crop = img.background_crop
+    if isinstance(crop, int):
+        crop = (crop, crop, crop, crop)
+    return FrameResponse(
+        frame_id=img._id,
+        background_scale=img.background_scale,
+        background_offset=(img.background_offset[0], img.background_offset[1]),
+        background_crop=crop,
+        qr_position=(img.qr_position[0], img.qr_position[1]),
+        qr_scale=img.qr_scale,
+        is_active=img.is_active,
+    )
+
 
 @app.post(
     "/api/v1/frame",
@@ -1013,7 +1045,7 @@ async def api_frame_add(frame_img: FrameRequest, session: Session = Depends(auth
         img = FRAME.from_base64(frame_img.image_base64)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     img.background_scale = frame_img.background_scale
     img.background_offset = frame_img.background_offset
     img.background_crop = frame_img.background_crop
@@ -1021,7 +1053,7 @@ async def api_frame_add(frame_img: FrameRequest, session: Session = Depends(auth
     img.qr_scale = frame_img.qr_scale
     img.db_save(db)
 
-    return FrameResponse(frame_id=img._id)
+    return _frame_to_response(img)
 
 class FrameListResponse(BaseModel):
     frames: List[FrameResponse]
@@ -1037,13 +1069,57 @@ async def api_frame_list(session: Session = Depends(auth(["boss", "photo_booth"]
     db = session.mongodb_connection
 
     frames = FRAME.db_find_all(db)
-    return_frames: List[FrameResponse] = []
-    for img in frames:
-        return_frames.append(FrameResponse(
-            frame_id=img._id
-        ))
+    return FrameListResponse(frames=[_frame_to_response(img) for img in frames])
 
-    return FrameListResponse(frames=return_frames)
+
+# update frame alignment (and optionally the image itself)
+@app.patch(
+    "/api/v1/frame/{frame_id}",
+    response_model=FrameResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Update an existing frame's image and/or alignment values (scale/offset/crop/QR)."
+)
+async def api_frame_update(frame_id: str, patch: FramePatchRequest, session: Session = Depends(auth(["boss"]))) -> FrameResponse:
+    db = session.mongodb_connection
+
+    img = FRAME.db_find(db, frame_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image not found")
+
+    if patch.image_base64 is not None:
+        try:
+            new_img = FRAME.from_base64(patch.image_base64)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        img.frame = new_img.frame
+
+    img.background_scale = patch.background_scale
+    img.background_offset = patch.background_offset
+    img.background_crop = patch.background_crop
+    img.qr_position = patch.qr_position
+    img.qr_scale = patch.qr_scale
+    img.db_update(db)
+
+    return _frame_to_response(img)
+
+
+# set a frame as the active one used by the kiosk
+@app.post(
+    "/api/v1/frame/{frame_id}/activate",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Mark a frame as the active frame used by the kiosk. Unmarks all other frames."
+)
+async def api_frame_activate(frame_id: str, session: Session = Depends(auth(["boss"]))) -> OK:
+    db = session.mongodb_connection
+
+    img = FRAME.db_find(db, frame_id)
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image not found")
+
+    FRAME.db_set_active(db, frame_id)
+
+    return OK(ok=True)
 
 # get frame
 @app.get(
@@ -1081,6 +1157,83 @@ async def api_frame_delete(frame_id: str, session: Session = Depends(auth(["boss
     img.db_delete(db)
 
     return OK(ok=True)
+
+
+# ---------------------------
+# Settings Endpoints
+# ---------------------------
+# Default values used when no settings document has been saved yet.
+# Kept in sync with the frontend's build-time fallbacks in frontend/src/config/event.ts.
+SETTINGS_DEFAULTS = {
+    "title": "IT-Lab 2026",
+    "subtitle": "ENTEGA • Darmstadt",
+    "brand_name": "ENTEGA",
+    "pin_fail_redirect_url": "https://www.entega.ag/karriere/ausbildung-duales-studium-berufsorientierung/ausbildung/",
+}
+
+
+class SettingsRequest(BaseModel):
+    title: str
+    subtitle: str
+    brand_name: str
+    pin_fail_redirect_url: str
+
+
+class SettingsResponse(BaseModel):
+    title: str
+    subtitle: str
+    brand_name: str
+    pin_fail_redirect_url: str
+
+
+@app.get(
+    "/api/v1/settings",
+    response_model=SettingsResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Retrieve the event title/branding settings. Returns built-in defaults if none have been saved yet."
+)
+async def api_settings_get(session: Session = Depends(auth(["boss", "photo_booth"]))) -> SettingsResponse:
+    db = session.mongodb_connection
+
+    config = EventConfig.db_find(db)
+    if config is None:
+        return SettingsResponse(**SETTINGS_DEFAULTS)
+
+    return SettingsResponse(
+        title=config.title,
+        subtitle=config.subtitle,
+        brand_name=config.brand_name,
+        pin_fail_redirect_url=config.pin_fail_redirect_url,
+    )
+
+
+@app.put(
+    "/api/v1/settings",
+    response_model=SettingsResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Update the event title/branding settings (creates the settings document if it doesn't exist yet)."
+)
+async def api_settings_update(settings: SettingsRequest, session: Session = Depends(auth(["boss"]))) -> SettingsResponse:
+    db = session.mongodb_connection
+
+    existing = EventConfig.db_find(db)
+    config = EventConfig(
+        title=settings.title,
+        subtitle=settings.subtitle,
+        brand_name=settings.brand_name,
+        pin_fail_redirect_url=settings.pin_fail_redirect_url,
+    )
+    if existing is None:
+        config.db_save(db)
+    else:
+        config.db_update(db)
+
+    return SettingsResponse(
+        title=config.title,
+        subtitle=config.subtitle,
+        brand_name=config.brand_name,
+        pin_fail_redirect_url=config.pin_fail_redirect_url,
+    )
 
 
 # ---------------------------

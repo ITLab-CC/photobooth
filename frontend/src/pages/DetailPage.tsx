@@ -5,6 +5,7 @@ import { Box, Typography, Grid,  Snackbar, Alert, IconButton } from "@mui/materi
 import PinModal from "../components/PinModal";
 import itlabLogo from "../assets/it-lab-banner.svg";
 import DownloadIcon from "@mui/icons-material/Download";
+import { PIN_FAIL_REDIRECT_URL } from "../config/event";
 
 const DetailPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -25,8 +26,7 @@ const DetailPage: React.FC = () => {
         setPinModalOpen(false);
       })
       .catch(() => {
-        window.location.href =
-          "https://www.entega.ag/karriere/ausbildung-duales-studium-berufsorientierung/ausbildung/";
+        window.location.href = PIN_FAIL_REDIRECT_URL;
       });
   };
 

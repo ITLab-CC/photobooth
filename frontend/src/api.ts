@@ -42,7 +42,7 @@
       - DELETE /api/v1/print
 */
 
-const BASE_URL = "http://127.0.0.1:8085";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8085";
 
 async function request<T>(
   method: string,
@@ -520,25 +520,51 @@ export async function clearPrintQueue(token: string): Promise<{ ok: boolean }> {
 }
 
 // =============== 7) Frame ===============
+// Crop tuple order matches the backend exactly: (top, right, left, bottom) pixels.
+export type FrameCrop = [number, number, number, number];
+export type FrameOffset = [number, number];
+
 export interface FrameRequest {
   image_base64: string;
+  background_scale?: number;
+  background_offset?: FrameOffset;
+  background_crop?: FrameCrop;
+  qr_position?: FrameOffset;
+  qr_scale?: number;
+}
+
+export interface FramePatchRequest {
+  image_base64?: string;
+  background_scale: number;
+  background_offset: FrameOffset;
+  background_crop: FrameCrop;
+  qr_position: FrameOffset;
+  qr_scale: number;
 }
 
 export interface FrameResponse {
   frame_id: string;
+  background_scale: number;
+  background_offset: FrameOffset;
+  background_crop: FrameCrop;
+  qr_position: FrameOffset;
+  qr_scale: number;
+  is_active: boolean;
 }
 
 export interface FrameListResponse {
   frames: FrameResponse[];
 }
 
-// 7.1) POST /api/v1/frames
+// 7.1) POST /api/v1/frame
 export async function createFrame(
   token: string,
-  base64: string
+  base64: string,
+  alignment?: Omit<FrameRequest, "image_base64">
 ): Promise<FrameResponse> {
   return await request<FrameResponse>("POST", "/api/v1/frame", token, {
     image_base64: base64,
+    ...alignment,
   });
 }
 
@@ -568,5 +594,59 @@ export async function deleteFrame(
     "DELETE",
     `/api/v1/frame/${frameId}`,
     token
+  );
+}
+
+// 7.5) PATCH /api/v1/frame/{frame_id}
+export async function updateFrame(
+  token: string,
+  frameId: string,
+  payload: FramePatchRequest
+): Promise<FrameResponse> {
+  return await request<FrameResponse>(
+    "PATCH",
+    `/api/v1/frame/${frameId}`,
+    token,
+    payload
+  );
+}
+
+// 7.6) POST /api/v1/frame/{frame_id}/activate
+export async function activateFrame(
+  token: string,
+  frameId: string
+): Promise<{ ok: boolean }> {
+  return await request<{ ok: boolean }>(
+    "POST",
+    `/api/v1/frame/${frameId}/activate`,
+    token
+  );
+}
+
+// =============== 8) Settings ===============
+export interface EventConfigResponse {
+  title: string;
+  subtitle: string;
+  brand_name: string;
+  pin_fail_redirect_url: string;
+}
+
+// 8.1) GET /api/v1/settings
+export async function getEventConfig(
+  token: string
+): Promise<EventConfigResponse> {
+  return await request<EventConfigResponse>("GET", "/api/v1/settings", token);
+}
+
+// 8.2) PUT /api/v1/settings
+export async function updateEventConfig(
+  token: string,
+  payload: EventConfigResponse
+): Promise<EventConfigResponse> {
+  return await request<EventConfigResponse>(
+    "PUT",
+    "/api/v1/settings",
+    token,
+    payload
   );
 }

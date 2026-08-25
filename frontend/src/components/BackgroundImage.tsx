@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { getBackground } from "../api";
+import { logDebug } from "../utils/logger";
 
 // In-Memory-Cache für die aktuelle Sitzung
 const urlCache: Record<string, string> = {};
@@ -98,7 +99,7 @@ const saveImageToLocalStorage = async (id: string, blob: Blob) => {
           localStorage.removeItem(key);
           localStorage.removeItem(timestampKey);
         });
-        console.log('Alte Cache-Einträge gelöscht');
+        logDebug('Alte Cache-Einträge gelöscht');
       } catch (cleanupError) {
         console.error('Fehler beim Cleanup des Local Storage:', cleanupError);
       }

@@ -15,6 +15,7 @@ from frame import FRAME
 from gallery import Gallery
 from session import SessionManager
 from printer import PrinterQueueItem
+from event_config import EventConfig
 
 
 def generate_password(length: int = 32) -> str:
@@ -94,6 +95,7 @@ def setup(db_url: str, db_root: str, db_pw: str, db_name: str) -> None:
     Background.db_drop_collection(admin_db)
     FRAME.db_drop_collection(admin_db)
     PrinterQueueItem.db_drop_collection(admin_db)
+    EventConfig.db_drop_collection(admin_db)
 
     # Create collections
     User.db_create_collection(admin_db)
@@ -102,9 +104,10 @@ def setup(db_url: str, db_root: str, db_pw: str, db_name: str) -> None:
     Background.db_create_collection(admin_db)
     FRAME.db_create_collection(admin_db)
     PrinterQueueItem.db_create_collection(admin_db)
+    EventConfig.db_create_collection(admin_db)
 
     # Create roles based on the given models
-    admin_db.create_roles([User, Gallery, IMG, Background, FRAME, PrinterQueueItem])
+    admin_db.create_roles([User, Gallery, IMG, Background, FRAME, PrinterQueueItem, EventConfig])
 
     # Create additional users (using the DB layer’s user creation, without ORM password hashing)
     admin_db.create_user(LOGIN_MANAGER, LOGIN_MANAGER_PASSWORD, ["login_manager"])

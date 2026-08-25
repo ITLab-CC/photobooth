@@ -73,12 +73,12 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
                     alignItems: "center",
                     justifyContent: "center",
                     cursor: "pointer",
-                    border: selectedCount === count ? "2px solid #ff8800" : "1px solid #e0e0e0",
+                    border: selectedCount === count ? "2px solid #000000" : "1px solid #e0e0e0",
                     borderRadius: 2,
                     transition: "all 0.2s ease",
-                    backgroundColor: selectedCount === count ? "rgba(255, 136, 0, 0.1)" : "#ffffff",
+                    backgroundColor: selectedCount === count ? "rgba(0, 0, 0, 0.05)" : "#ffffff",
                     '&:hover': {
-                      backgroundColor: selectedCount === count ? "rgba(255, 136, 0, 0.15)" : "#f5f5f5",
+                      backgroundColor: selectedCount === count ? "rgba(0, 0, 0, 0.08)" : "#f5f5f5",
                       transform: "translateY(-2px)"
                     }
                   }}
@@ -97,11 +97,11 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
                       />
                     ))}
                   </Box>
-                  <Typography 
-                    variant="h4" 
-                    sx={{ 
-                      fontWeight: 600, 
-                      color: selectedCount === count ? "#ff8800" : "#333",
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      fontWeight: 600,
+                      color: selectedCount === count ? "#000000" : "#333",
                       fontFamily: "'Inter', sans-serif"
                     }}
                   >
@@ -122,14 +122,14 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
           sx={{
             fontSize: "1.4rem",
             py: 1.5,
-            background: "linear-gradient(45deg, #ff8800, #ff6600)",
+            backgroundColor: "#000000",
             color: "white",
             fontWeight: 500,
             borderRadius: 2,
-            boxShadow: "0 4px 10px rgba(255, 136, 0, 0.3)",
+            boxShadow: "0 4px 10px rgba(0, 0, 0, 0.25)",
             '&:hover': {
-              background: "linear-gradient(45deg, #ff9900, #ff7700)",
-              boxShadow: "0 6px 12px rgba(255, 136, 0, 0.4)",
+              backgroundColor: "#333333",
+              boxShadow: "0 6px 12px rgba(0, 0, 0, 0.3)",
             }
           }}
         >

@@ -9,8 +9,6 @@ import {
   DialogActions,
   CircularProgress,
   Snackbar,
-  ThemeProvider,
-  createTheme,
   Fade,
   Container,
 } from "@mui/material";
@@ -28,6 +26,8 @@ import {
   getImage,
   printImage,
 } from "../api";
+import { runtimeConfig, initEventConfig } from "../config/event";
+import { logDebug } from "../utils/logger";
 import itlabImage from "../assets/itlab_logo.png";
 
 interface ImageResponse {
@@ -41,101 +41,6 @@ interface ExtendedImageProcessResponse {
   img_new_background: ImageResponse;
   img_with_frame: ImageResponse;
 }
-
-// Black and white theme
-const weddingTheme = createTheme({
-  palette: {
-    primary: {
-      main: '#000000', // Black
-    },
-    secondary: {
-      main: '#333333', // Dark gray
-    },
-    background: {
-      default: '#ffffff', // White
-    },
-  },
-  typography: {
-    fontFamily: "'Inter', sans-serif",
-    h1: {
-      fontFamily: "'Inter', sans-serif",
-      color: '#000000',
-      fontWeight: 600,
-    },
-    h2: {
-      fontFamily: "'Inter', sans-serif",
-      color: '#000000',
-      fontWeight: 600,
-    },
-    h3: {
-      fontFamily: "'Inter', sans-serif",
-      color: '#000000',
-      fontWeight: 500,
-    },
-    h4: {
-      fontFamily: "'Inter', sans-serif",
-      color: '#000000',
-      fontWeight: 500,
-    },
-    h5: {
-      fontFamily: "'Inter', sans-serif",
-      color: '#000000',
-      fontWeight: 400,
-    },
-    h6: {
-      fontFamily: "'Inter', sans-serif",
-      color: '#000000',
-      fontWeight: 400,
-    },
-    button: {
-      fontFamily: "'Inter', sans-serif",
-      textTransform: 'none',
-      color: '#000000',
-      secondary: "#666666",
-      fontWeight: 500,
-    },
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 30,
-          padding: '10px 20px',
-          color: '#000000',
-          borderColor: '#000000',
-          "&:hover": {
-            boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
-          },
-        },
-        contained: {
-          backgroundColor: "#000000",
-          color: "#ffffff",
-          "&:hover": {
-            backgroundColor: "#333333",
-          },
-        },
-        outlined: {
-          borderColor: "#000000",
-          color: "#000000",
-          "&:hover": {
-            borderColor: "#333333",
-            backgroundColor: "rgba(0, 0, 0, 0.04)",
-          },
-        },
-      },
-    },
-    MuiDialog: {
-      styleOverrides: {
-        paper: {
-          borderRadius: 12,
-          padding: 8,
-        },
-      },
-    },
-  },
-});
-
-// No longer needed since we're using a solid white background
 
 // Decorative leaf animation
 const floatAnimation = keyframes`
@@ -174,7 +79,7 @@ export default function PhotoBoxPage() {
     if (token && !galleryId) {
       createGallery(token)
         .then((resp: GalleryResponse) => {
-          console.log("Galerie erstellt:", resp.gallery_id);
+          logDebug("Galerie erstellt:", resp.gallery_id);
           setGalleryId(resp.gallery_id);
         })
         .catch((err) => {
@@ -183,13 +88,21 @@ export default function PhotoBoxPage() {
     }
   }, [token, galleryId]);
 
+  // Event-Settings (Titel/Branding) vom Backend laden
+  useEffect(() => {
+    if (token) {
+      initEventConfig(token);
+    }
+  }, [token]);
+
   // Frames laden
   useEffect(() => {
     if (token) {
       listFrames(token)
         .then((res) => {
           if (res.frames && res.frames.length > 0) {
-            setFrameId(res.frames[0].frame_id);
+            const activeFrame = res.frames.find((f) => f.is_active);
+            setFrameId((activeFrame ?? res.frames[0]).frame_id);
           }
         })
         .catch((err) => {
@@ -198,14 +111,8 @@ export default function PhotoBoxPage() {
     }
   }, [token]);
 
-  // Load wedding fonts and disable swipe gestures
+  // Disable swipe gestures, but allow camera interaction
   useEffect(() => {
-    // Lade Schriftarten
-    const link = document.createElement('link');
-    link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
-    link.rel = 'stylesheet';
-    document.head.appendChild(link);
-    
     // Verhindere Wischgesten, aber erlaube Kamera-Interaktion
     const style = document.createElement('style');
     style.textContent = `
@@ -232,7 +139,6 @@ export default function PhotoBoxPage() {
     document.addEventListener('touchmove', preventHorizontalSwipe, { passive: false });
     
     return () => {
-      document.head.removeChild(link);
       document.head.removeChild(style);
       document.removeEventListener('touchmove', preventHorizontalSwipe);
     };
@@ -250,7 +156,7 @@ export default function PhotoBoxPage() {
   };
 
   const handleBackgroundSelect = (bgId: string | null) => {
-    console.log("Ausgewählter Hintergrund:", bgId);
+    logDebug("Ausgewählter Hintergrund:", bgId);
     setSelectedBackgroundId(bgId);
   };
 
@@ -304,14 +210,14 @@ export default function PhotoBoxPage() {
     if (token && galleryId) {
       deleteGallery(token, galleryId)
         .then(() => {
-          console.log("Alte Galerie gelöscht:", galleryId);
+          logDebug("Alte Galerie gelöscht:", galleryId);
           setGalleryId(""); // Galerie-ID zurücksetzen
           
           // Neue Galerie erstellen
           return createGallery(token);
         })
         .then((resp: GalleryResponse) => {
-          console.log("Neue Galerie erstellt:", resp.gallery_id);
+          logDebug("Neue Galerie erstellt:", resp.gallery_id);
           setGalleryId(resp.gallery_id);
         })
         .catch((err: Error) => {
@@ -345,7 +251,6 @@ export default function PhotoBoxPage() {
   };
 
   return (
-    <ThemeProvider theme={weddingTheme}>
       <Box
         sx={{
           minHeight: '100vh',
@@ -473,7 +378,7 @@ export default function PhotoBoxPage() {
                       mb: 1,
                     }}
                   >
-                    IT-Lab 2026
+                    {runtimeConfig.title}
                   </Typography>
                   <Typography 
                     variant="h5" 
@@ -484,7 +389,7 @@ export default function PhotoBoxPage() {
                       letterSpacing: 1,
                     }}
                   >
-                    ENTEGA • Darmstadt
+                    {runtimeConfig.subtitle}
                   </Typography>
                 </Box>
               </Fade>
@@ -512,7 +417,7 @@ export default function PhotoBoxPage() {
                 mb: 1,
               }}
             >
-              IT-Lab 2026
+              {runtimeConfig.title}
             </Typography>
             <Typography 
               variant="h6" 
@@ -523,7 +428,7 @@ export default function PhotoBoxPage() {
                 letterSpacing: 1,
               }}
             >
-              ENTEGA • Darmstadt
+              {runtimeConfig.subtitle}
             </Typography>
           </Box>
         )}
@@ -531,12 +436,11 @@ export default function PhotoBoxPage() {
         {!token && <AutoLogin onToken={setToken} />}
 
         {token && !galleryId && !showStartScreen && (
-          <Typography 
-            variant="h5" 
-            sx={{ 
-              mb: 2, 
+          <Typography
+            variant="h5"
+            sx={{
+              mb: 2,
               color: "#3c3c3c",
-              fontFamily: "'Playfair Display', serif" 
             }}
           >
             Galerie wird erstellt…
@@ -626,7 +530,7 @@ export default function PhotoBoxPage() {
           </DialogTitle>
           <DialogContent sx={{ textAlign: "center", px: 4, pb: 4 }}>
             {processing ? (
-              <CircularProgress sx={{ color: "#4a6741" }} />
+              <CircularProgress sx={{ color: "#000000" }} />
             ) : (
               <Box
                 sx={{
@@ -714,7 +618,7 @@ export default function PhotoBoxPage() {
           anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
           ContentProps={{
             sx: {
-              background: "#4a6741",
+              background: "#000000",
               fontFamily: "'Inter', sans-serif",
               fontSize: "1.1rem",
               fontWeight: 400,
@@ -722,6 +626,5 @@ export default function PhotoBoxPage() {
           }}
         />
       </Box>
-    </ThemeProvider>
   );
 }

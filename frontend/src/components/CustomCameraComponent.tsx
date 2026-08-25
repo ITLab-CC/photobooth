@@ -5,6 +5,8 @@ import { addGalleryImage } from "../api";
 import CameraPreview from "./CameraPreview";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import confetti from "canvas-confetti";
+import { logDebug } from "../utils/logger";
+import { KIOSK_WIDTH } from "../theme";
 
 const flashAnimation = keyframes`
   from { opacity: 1; }
@@ -44,6 +46,9 @@ export default function CustomCameraComponent({
     const interval = setInterval(() => {
       counter -= 1;
       setCountdown(counter);
+      if (counter === 0) {
+        videoRef.current?.pause();
+      }
       if (counter < 0) {
         clearInterval(interval);
         capturePhoto();
@@ -61,6 +66,7 @@ export default function CustomCameraComponent({
         alert("Kamerastream ist noch nicht verfügbar.");
         setCountdown(null);
         setIsCapturing(false);
+        videoRef.current?.play();
         return;
       }
       canvas.width = width;
@@ -73,7 +79,7 @@ export default function CustomCameraComponent({
         const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
         try {
           const response = await addGalleryImage(token, galleryId, base64Data, "");
-          console.log("Foto erfolgreich hochgeladen, Bild ID:", response.image_id);
+          logDebug("Foto erfolgreich hochgeladen, Bild ID:", response.image_id);
           if (onImageUpload) {
             onImageUpload(response.image_id);
           }
@@ -92,6 +98,7 @@ export default function CustomCameraComponent({
     }
     setCountdown(null);
     setIsCapturing(false);
+    videoRef.current?.play();
   };
 
   return (
@@ -108,15 +115,15 @@ export default function CustomCameraComponent({
         position="relative"
         sx={{
           width: "100%",
-          maxWidth: "680px",
-          height: "680px",
+          maxWidth: `${KIOSK_WIDTH}px`,
+          height: `${KIOSK_WIDTH}px`,
           margin: "20px auto",
         }}
       >
       <CameraPreview
         videoRef={videoRef}
         onLoadedMetadata={() => {
-          console.log(
+          logDebug(
             "loadedmetadata fired:",
             videoRef.current?.videoWidth,
             videoRef.current?.videoHeight

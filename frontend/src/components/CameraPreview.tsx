@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { Box, Paper } from "@mui/material";
+import { KIOSK_WIDTH } from "../theme";
 
 interface CameraPreviewProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -8,9 +9,11 @@ interface CameraPreviewProps {
 
 const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadata }) => {
   useEffect(() => {
+    let activeStream: MediaStream | null = null;
     async function initCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        activeStream = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -19,6 +22,9 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
       }
     }
     initCamera();
+    return () => {
+      activeStream?.getTracks().forEach((track) => track.stop());
+    };
   }, [videoRef]);
 
   return (
@@ -28,7 +34,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
         overflow: "hidden", 
         borderRadius: 2,
         width: "100%",
-        maxWidth: "680px",
+        maxWidth: `${KIOSK_WIDTH}px`,
         margin: "0 auto",
         boxSizing: "border-box",
       }}
@@ -41,7 +47,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
         muted
         sx={{
           width: "100%",
-          height: "680px",
+          height: `${KIOSK_WIDTH}px`,
           objectFit: "cover",
           transform: "scaleX(-1)",
         }}

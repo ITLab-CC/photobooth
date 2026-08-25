@@ -1,4 +1,5 @@
 import { getBackground } from "../api";
+import { logDebug } from "./logger";
 
 // Cache Konfiguration
 const CACHE_PREFIX = 'photobooth_bg_cache_';
@@ -83,7 +84,7 @@ const cleanupOldCache = (): void => {
     localStorage.removeItem(METADATA_PREFIX + backgroundId);
   });
   
-  console.log(`Cache aufgeräumt: ${toDelete.length} alte Einträge gelöscht`);
+  logDebug(`Cache aufgeräumt: ${toDelete.length} alte Einträge gelöscht`);
 };
 
 /**
@@ -104,7 +105,7 @@ const saveToCache = async (backgroundId: string, blob: Blob): Promise<void> => {
     localStorage.setItem(CACHE_PREFIX + backgroundId, base64);
     localStorage.setItem(METADATA_PREFIX + backgroundId, JSON.stringify(metadata));
     
-    console.log(`Hintergrundbild ${backgroundId} im Cache gespeichert`);
+    logDebug(`Hintergrundbild ${backgroundId} im Cache gespeichert`);
   } catch (error) {
     if (error instanceof Error && error.name === 'QuotaExceededError') {
       console.warn('Cache voll, führe erzwungenes Cleanup durch');
@@ -182,12 +183,12 @@ export const loadBackgroundWithCache = async (token: string, backgroundId: strin
   // 1. Versuche aus Cache zu laden
   const cached = loadFromCache(backgroundId);
   if (cached.blob && cached.isValid) {
-    console.log(`Hintergrundbild ${backgroundId} aus Cache geladen`);
+    logDebug(`Hintergrundbild ${backgroundId} aus Cache geladen`);
     return URL.createObjectURL(cached.blob);
   }
   
   // 2. Lade vom Server
-  console.log(`Hintergrundbild ${backgroundId} vom Server laden`);
+  logDebug(`Hintergrundbild ${backgroundId} vom Server laden`);
   const blob = await getBackground(token, backgroundId);
   
   // 3. Speichere im Cache für nächste Verwendung
