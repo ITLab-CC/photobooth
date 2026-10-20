@@ -1085,6 +1085,7 @@ class ImageProcessRequest(BaseModel):
     img_frame_id: str
     refine_foreground: bool = False
     random_stuff: bool = False
+    light_match: bool = True  # adapt the person's light to the new background
     magic_style: str = "smileys"  # "smileys" or one of face_props.PROP_STYLES
 
 class ProcessingStats:
@@ -1166,7 +1167,8 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
                 background_img.img,
                 image.refine_foreground,
                 margin_ratio=0.9,
-                apply_alpha_threshold=True
+                apply_alpha_threshold=True,
+                light_match=image.light_match
                 )
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))

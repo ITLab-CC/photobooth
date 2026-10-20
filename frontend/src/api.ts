@@ -384,6 +384,7 @@ export interface ImageProcessRequest {
   refine_foreground?: boolean;
   random_stuff?: boolean;
   magic_style?: MagicStyle;
+  light_match?: boolean;
 }
 export interface ImageProcessResponse {
   image_id: string;

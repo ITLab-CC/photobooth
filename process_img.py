@@ -5,6 +5,7 @@ from PIL.Image import Image as PilImage
 
 
 import torch
+from relight import match_light
 from ben2 import BEN_Base  # type: ignore
 from typing import Optional, Tuple, Union, cast
 
@@ -98,7 +99,8 @@ class IMGReplacer:
         new_background: Image.Image,
         refine_foreground: bool = False,
         margin_ratio: float = 0.9,
-        apply_alpha_threshold: bool = True
+        apply_alpha_threshold: bool = True,
+        light_match: bool = False
     ) -> Image.Image:
         """
         Replaces the background of the input image with a new background.
@@ -110,6 +112,7 @@ class IMGReplacer:
         :param refine_foreground: If True, uses BEN2 "Refined Matting" (slower but more accurate).
         :param margin_ratio: For example, 0.9 means 90% of the maximum possible size (adds an automatic margin).
         :param apply_alpha_threshold: If True, uses get_bbox_with_alpha_threshold to ignore semi-transparent edge pixels.
+        :param light_match: If True, adapt the subject's brightness/color to the new background (see relight.py).
         :return: Composited image (RGBA).
         """
         # 1) Isolate the foreground
@@ -169,6 +172,9 @@ class IMGReplacer:
         # 8) Create a new RGBA image with the same size as the background
         new_fg = Image.new("RGBA", (frame_w, frame_h), (0, 0, 0, 0))
         new_fg.paste(fg_rgba_scaled, (offset_x, offset_y), fg_rgba_scaled)
+
+        if light_match:
+            new_fg = match_light(new_fg, bg_rgba)
 
         # 9) Insert the subject into the background
         bg_rgba.paste(new_fg, (0, 0), new_fg)
