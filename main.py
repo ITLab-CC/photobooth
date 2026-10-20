@@ -1094,7 +1094,7 @@ class LogoRequest(BaseModel):
     "/api/v1/settings/logo",
     response_model=SettingsResponse,
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Upload the event logo shown on the photo booth. It is scaled down to at most 600 px and stored as PNG."
+    description="Upload an additional event logo shown next to the fixed IT-Lab logo on the photo booth. It is scaled down to at most 600 px and stored as PNG."
 )
 async def api_settings_logo_put(logo: LogoRequest, session: Session = Depends(auth(["boss"]))) -> SettingsResponse:
     db = session.mongodb_connection
@@ -1119,7 +1119,7 @@ async def api_settings_logo_put(logo: LogoRequest, session: Session = Depends(au
     "/api/v1/settings/logo",
     response_model=SettingsResponse,
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Remove the uploaded logo. The photo booth falls back to its built-in logo."
+    description="Remove the uploaded event logo. The IT-Lab logo always stays."
 )
 async def api_settings_logo_delete(session: Session = Depends(auth(["boss"]))) -> SettingsResponse:
     db = session.mongodb_connection

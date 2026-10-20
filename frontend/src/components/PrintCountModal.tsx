@@ -1,3 +1,4 @@
+import { brand } from "../theme";
 import React, { useState } from "react";
 import {
   Dialog,
@@ -46,7 +47,6 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
       disableEscapeKeyDown
       PaperProps={{
         sx: {
-          background: "linear-gradient(45deg, #ffffff, #f0f0f0)",
           boxShadow: 3,
           p: 2,
         },
@@ -73,12 +73,12 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
                     alignItems: "center",
                     justifyContent: "center",
                     cursor: "pointer",
-                    border: selectedCount === count ? "2px solid #000000" : "1px solid #e0e0e0",
+                    border: selectedCount === count ? `3px solid ${brand.teal}` : `1px solid ${brand.line}`,
                     borderRadius: 2,
                     transition: "all 0.2s ease",
-                    backgroundColor: selectedCount === count ? "rgba(0, 0, 0, 0.05)" : "#ffffff",
+                    backgroundColor: selectedCount === count ? brand.tealTint : "#ffffff",
                     '&:hover': {
-                      backgroundColor: selectedCount === count ? "rgba(0, 0, 0, 0.08)" : "#f5f5f5",
+                      backgroundColor: selectedCount === count ? brand.tealTint : brand.surface,
                       transform: "translateY(-2px)"
                     }
                   }}
@@ -89,7 +89,7 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
                         key={i} 
                         sx={{ 
                           fontSize: "1.8rem", 
-                          color: "#555",
+                          color: "text.secondary",
                           position: "relative",
                           left: i * -5,
                           zIndex: 3 - i
@@ -101,7 +101,7 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
                     variant="h4"
                     sx={{
                       fontWeight: 600,
-                      color: selectedCount === count ? "#000000" : "#333",
+                      color: selectedCount === count ? "primary.main" : "text.primary",
                       fontFamily: "'Inter', sans-serif"
                     }}
                   >
@@ -122,15 +122,9 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
           sx={{
             fontSize: "1.4rem",
             py: 1.5,
-            backgroundColor: "#000000",
-            color: "white",
-            fontWeight: 500,
+            fontWeight: 600,
+            minHeight: 72,
             borderRadius: 2,
-            boxShadow: "0 4px 10px rgba(0, 0, 0, 0.25)",
-            '&:hover': {
-              backgroundColor: "#333333",
-              boxShadow: "0 6px 12px rgba(0, 0, 0, 0.3)",
-            }
           }}
         >
           Drucken

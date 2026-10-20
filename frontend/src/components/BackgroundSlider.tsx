@@ -1,37 +1,39 @@
 import React, { useEffect, useState } from "react";
-import { Box, IconButton } from "@mui/material";
-import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
+import { Box, IconButton, Typography } from "@mui/material";
+import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
+import BlockIcon from "@mui/icons-material/Block";
 import { useSwipeable } from "react-swipeable";
-import { listBackgrounds } from "../api";
+import { listBackgrounds, BackgroundResponse } from "../api";
 import OptimizedBackgroundImage from "./OptimizedBackgroundImage";
-
-interface BackgroundResponse {
-  background_id: string;
-}
-
-interface BackgroundListResponse {
-  backgrounds: BackgroundResponse[];
-}
+import { brand } from "../theme";
 
 interface BackgroundSliderProps {
   token: string;
   onSelect?: (backgroundId: string | null) => void;
 }
 
+const SIDE_SIZE = 132;
+const CENTER_SIZE = 190;
+
+const arrowSx = {
+  width: 64,
+  height: 64,
+  color: "text.primary",
+  "&.Mui-disabled": { opacity: 0.25 },
+};
 
 const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) => {
   const [backgrounds, setBackgrounds] = useState<BackgroundResponse[]>([]);
+  // Index 0 and the last entry are empty slots, so the first real item can sit in the center.
   const paddedBackgrounds = [null, ...backgrounds, null];
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
   useEffect(() => {
-    // Hintergrundbilder laden
     listBackgrounds(token, true)
-      .then((data: BackgroundListResponse) => {
+      .then((data) => {
         if (data.backgrounds && data.backgrounds.length > 0) {
           setBackgrounds(data.backgrounds);
-          // Behalte den Index 0 für "No Background"
         }
       })
       .catch((err) => {
@@ -41,7 +43,6 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
 
   useEffect(() => {
     if (onSelect) {
-      // Wenn das erste Element ausgewählt ist (No Background), null übergeben
       if (selectedIndex === 0) {
         onSelect(null);
       } else if (paddedBackgrounds[selectedIndex]) {
@@ -50,20 +51,13 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
     }
   }, [selectedIndex, paddedBackgrounds, onSelect]);
 
-  const clampIndex = (index: number) =>
-    Math.max(0, Math.min(index, paddedBackgrounds.length - 2));
-
-  const handlePrev = () => {
-    setSelectedIndex((prev) => clampIndex(prev - 1));
-  };
-
-  const handleNext = () => {
-    setSelectedIndex((prev) => clampIndex(prev + 1));
-  };
+  const clampIndex = (index: number) => Math.max(0, Math.min(index, paddedBackgrounds.length - 2));
+  const handlePrev = () => setSelectedIndex((prev) => clampIndex(prev - 1));
+  const handleNext = () => setSelectedIndex((prev) => clampIndex(prev + 1));
 
   const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => handleNext(),
-    onSwipedRight: () => handlePrev(),
+    onSwipedLeft: handleNext,
+    onSwipedRight: handlePrev,
     trackMouse: true,
   });
 
@@ -71,78 +65,84 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
   const centerItem = paddedBackgrounds[selectedIndex];
   const rightItem = paddedBackgrounds[selectedIndex + 1];
 
+  const centerName = centerItem
+    ? centerItem.name || `Hintergrund ${selectedIndex}`
+    : "Ohne Hintergrund (Original)";
+
+  const sideTile = (item: BackgroundResponse, onClick: () => void) => (
+    <OptimizedBackgroundImage
+      token={token}
+      backgroundId={item.background_id}
+      onClick={onClick}
+      style={{
+        width: SIDE_SIZE,
+        height: SIDE_SIZE,
+        borderRadius: 12,
+        objectFit: "cover",
+        opacity: 0.7,
+        cursor: "pointer",
+      }}
+    />
+  );
+
   return (
-    <Box {...swipeHandlers} display="flex" alignItems="center" mt={2}>
-      <IconButton onClick={handlePrev} disabled={selectedIndex === 0}>
-        <ArrowBackIosIcon />
-      </IconButton>
-      <Box display="flex" gap={1}>
-        {leftItem && (
-          <OptimizedBackgroundImage
-            token={token}
-            backgroundId={leftItem.background_id}
-            style={{
-              width: 150,
-              height: 150,
-              borderRadius: 4,
-              objectFit: "cover",
-              opacity: 0.7,
-              cursor: "pointer",
+    <Box {...swipeHandlers} sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0.5 }}>
+        <IconButton onClick={handlePrev} disabled={selectedIndex === 0} aria-label="Voriger Hintergrund" sx={arrowSx}>
+          <ArrowBackIosNewIcon />
+        </IconButton>
+
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Box sx={{ width: SIDE_SIZE, height: SIDE_SIZE, display: "flex" }}>
+            {leftItem && sideTile(leftItem, handlePrev)}
+          </Box>
+
+          <Box
+            sx={{
+              width: CENTER_SIZE,
+              height: CENTER_SIZE,
+              borderRadius: 3,
+              border: `4px solid ${brand.teal}`,
+              boxShadow: "0 6px 16px rgba(37, 43, 63, 0.18)",
+              overflow: "hidden",
+              backgroundColor: "background.paper",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-            onClick={handlePrev}
-          />
-        )}
-        <Box sx={{ position: "relative", width: 180, height: 180 }}>
-          {centerItem ? (
-            <OptimizedBackgroundImage
-              token={token}
-              backgroundId={centerItem.background_id}
-              style={{
-                width: "100%",
-                height: "100%",
-                borderRadius: 2,
-                objectFit: "cover",
-                border: "3px solid #fff",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-              }}
-            />
-          ) : (
-            <Box
-              sx={{
-                width: "100%",
-                height: "100%",
-                borderRadius: 2,
-                border: "3px solid #fff",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "rgba(255,255,255,0.1)",
-              }}
-            >
-              No Background
-            </Box>
-          )}
+          >
+            {centerItem ? (
+              <OptimizedBackgroundImage
+                token={token}
+                backgroundId={centerItem.background_id}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              <Box sx={{ textAlign: "center", color: "text.secondary", px: 1 }}>
+                <BlockIcon sx={{ fontSize: 44 }} />
+                <Typography variant="body1">Original</Typography>
+              </Box>
+            )}
+          </Box>
+
+          <Box sx={{ width: SIDE_SIZE, height: SIDE_SIZE, display: "flex" }}>
+            {rightItem && sideTile(rightItem, handleNext)}
+          </Box>
         </Box>
-        {rightItem && (
-          <OptimizedBackgroundImage
-            token={token}
-            backgroundId={rightItem.background_id}
-            style={{
-              width: 150,
-              height: 150,
-              borderRadius: 4,
-              objectFit: "cover",
-              opacity: 0.7,
-              cursor: "pointer",
-            }}
-            onClick={handleNext}
-          />
-        )}
+
+        <IconButton
+          onClick={handleNext}
+          disabled={selectedIndex === paddedBackgrounds.length - 2}
+          aria-label="Nächster Hintergrund"
+          sx={arrowSx}
+        >
+          <ArrowForwardIosIcon />
+        </IconButton>
       </Box>
-      <IconButton onClick={handleNext} disabled={selectedIndex === paddedBackgrounds.length - 2}>
-        <ArrowForwardIosIcon />
-      </IconButton>
+
+      <Typography variant="h6" sx={{ minHeight: "1.6em", textAlign: "center" }}>
+        {centerName}
+      </Typography>
     </Box>
   );
 };

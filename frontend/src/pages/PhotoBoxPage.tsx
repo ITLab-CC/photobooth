@@ -10,7 +10,8 @@ import {
   LinearProgress,
   Snackbar,
   Fade,
-  Container,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import { keyframes } from "@mui/system";
 import AutoLogin from "../components/AutoLogin";
@@ -29,6 +30,7 @@ import {
 } from "../api";
 import { runtimeConfig, initEventConfig } from "../config/event";
 import { logDebug } from "../utils/logger";
+import { KIOSK_WIDTH, brand } from "../theme";
 import { useIdleTimeout } from "../utils/useIdleTimeout";
 import itlabImage from "../assets/itlab_logo.png";
 
@@ -62,6 +64,12 @@ const MAGIC_STYLES: { value: MagicStyle; label: string }[] = [
   { value: "hearts", label: "😍 Herzaugen" },
   { value: "mix", label: "🎲 Überraschung" },
 ];
+
+// Soft ring that invites the first tap on the start screen.
+const pulseRing = keyframes`
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.3); opacity: 0; }
+`;
 
 // Decorative leaf animation
 const floatAnimation = keyframes`
@@ -156,6 +164,8 @@ export default function PhotoBoxPage() {
     
     // Verhindere nur horizontales Wischen, erlaube vertikales Scrollen und Kamera-Interaktion
     const preventHorizontalSwipe = (e: TouchEvent) => {
+      // Rows marked data-scroll-x (the Magic style picker) scroll sideways on purpose.
+      if ((e.target as HTMLElement | null)?.closest?.('[data-scroll-x]')) return;
       // Nur horizontales Wischen verhindern, vertikales Scrollen erlauben
       if (e.touches[0] && Math.abs(e.touches[0].clientX) > Math.abs(e.touches[0].clientY)) {
         e.preventDefault();
@@ -170,6 +180,11 @@ export default function PhotoBoxPage() {
     };
   }, []);
   
+  const showNotice = (message: string) => {
+    setSnackbarMessage(message);
+    setSnackbarOpen(true);
+  };
+
   // Schritte, die der Gast während der KI-Verarbeitung sieht
   const processingSteps = [
     selectedBackgroundId !== null ? "Ich schneide euch aus…" : "Euer Foto wird angepasst…",
@@ -255,11 +270,6 @@ export default function PhotoBoxPage() {
       });
   };
   
-  // Magic Toggle Handler
-  const handleMagicToggle = () => {
-    setMagicEnabled(!magicEnabled);
-  };
-
   // Beim Erneut Versuchen: Alte Galerie löschen und neue erstellen
   const handleRetry = () => {
     setCapturedImage(null);
@@ -318,7 +328,7 @@ export default function PhotoBoxPage() {
         sx={{
           minHeight: '100vh',
           width: '100%',
-          background: '#ffffff',
+          background: brand.surface,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -372,13 +382,25 @@ export default function PhotoBoxPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     borderRadius: '50%',
-                    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                    position: 'relative',
+                    backgroundColor: '#ffffff',
+                    border: `3px solid ${brand.teal}`,
+                    boxShadow: '0 10px 30px rgba(0, 117, 133, 0.18)',
+                    '&::after': {
+                      content: '""',
+                      position: 'absolute',
+                      inset: -6,
+                      borderRadius: '50%',
+                      border: `2px solid ${brand.teal}`,
+                      animation: `${pulseRing} 2.4s ease-out infinite`,
+                      '@media (prefers-reduced-motion: reduce)': { animation: 'none', opacity: 0.3 },
+                    },
                     width: 180,
                     height: 180,
                     transition: 'all 0.3s ease',
                     mb: 3,
                     '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                      backgroundColor: brand.tealTint,
                       transform: 'scale(1.05)',
                     },
                   }}
@@ -388,7 +410,7 @@ export default function PhotoBoxPage() {
                     sx={{
                       width: 100,
                       height: 100,
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23000000'%3E%3Cpath d='M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V336c0 1.5 0 3.1 .1 4.6L67.6 283c-16-15.2-41.3-14.6-56.6 1.4s-14.6 41.3 1.4 56.6L124.8 448c43.1 41.1 100.4 64 160 64H304c97.2 0 176-78.8 176-176V128c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V32z'/%3E%3C/svg%3E")`,
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23007585'%3E%3Cpath d='M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V336c0 1.5 0 3.1 .1 4.6L67.6 283c-16-15.2-41.3-14.6-56.6 1.4s-14.6 41.3 1.4 56.6L124.8 448c43.1 41.1 100.4 64 160 64H304c97.2 0 176-78.8 176-176V128c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V32z'/%3E%3C/svg%3E")`,
                       backgroundRepeat: 'no-repeat',
                       backgroundSize: 'contain',
                       animation: `${floatAnimation} 2s ease-in-out infinite`,
@@ -402,15 +424,15 @@ export default function PhotoBoxPage() {
                   onClick={handleStartClick}
                   sx={{
                     fontFamily: "'Inter', sans-serif",
-                    color: '#000000',
-                    fontWeight: 400,
+                    color: 'text.primary',
+                    fontWeight: 500,
                     textAlign: 'center',
                     cursor: 'pointer',
                     width: '100%',
                     maxWidth: '90%',
                     margin: '0 auto',
                     '&:hover': {
-                      color: '#333333',
+                      color: 'primary.main',
                     },
                   }}
                 >
@@ -435,7 +457,7 @@ export default function PhotoBoxPage() {
                     variant="h2" 
                     sx={{ 
                       fontFamily: "'Inter', sans-serif",
-                      color: "#3c3c3c",
+                      color: "text.primary",
                       fontWeight: 600,
                       letterSpacing: 1,
                       mb: 1,
@@ -447,7 +469,7 @@ export default function PhotoBoxPage() {
                     variant="h5" 
                     sx={{ 
                       fontFamily: "'Inter', sans-serif",
-                      color: "#666666",
+                      color: "text.secondary",
                       fontWeight: 400,
                       letterSpacing: 1,
                     }}
@@ -460,37 +482,12 @@ export default function PhotoBoxPage() {
           </Box>
         )}
 
-        {/* Wedding title - shown after animation or when returning to main screen */}
         {token && galleryId && !showResultModal && showMainContent && (
-          <Box 
-            sx={{ 
-              textAlign: "center", 
-              mb: 4, 
-              position: "relative",
-              zIndex: 1,
-            }}
-          >
-            <Typography 
-              variant="h3" 
-              sx={{ 
-                fontFamily: "'Inter', sans-serif",
-                color: "#3c3c3c",
-                fontWeight: 600,
-                letterSpacing: 1,
-                mb: 1,
-              }}
-            >
+          <Box sx={{ textAlign: "center", mb: 2, px: 2, position: "relative", zIndex: 1 }}>
+            <Typography variant="h4" component="h1" sx={{ letterSpacing: 0.5 }}>
               {runtimeConfig.title}
             </Typography>
-            <Typography 
-              variant="h6" 
-              sx={{ 
-                fontFamily: "'Inter', sans-serif",
-                color: "#666666",
-                fontWeight: 400,
-                letterSpacing: 1,
-              }}
-            >
+            <Typography variant="h6" component="p" color="text.secondary">
               {runtimeConfig.subtitle}
             </Typography>
           </Box>
@@ -499,14 +496,8 @@ export default function PhotoBoxPage() {
         {!token && <AutoLogin onToken={setToken} />}
 
         {token && !galleryId && !showStartScreen && (
-          <Typography
-            variant="h5"
-            sx={{
-              mb: 2,
-              color: "#3c3c3c",
-            }}
-          >
-            Galerie wird erstellt…
+          <Typography variant="h5" color="text.secondary" sx={{ mb: 2 }}>
+            Die Fotobox wird vorbereitet…
           </Typography>
         )}
 
@@ -516,64 +507,102 @@ export default function PhotoBoxPage() {
               galleryId={galleryId}
               token={token}
               onImageUpload={handleImageUpload}
+              onError={showNotice}
             />
-            {/* Magic Toggle Switch */}
-            <Container maxWidth="sm" sx={{ mt: 2, textAlign: 'center' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                  Magic Mode
+
+            {/* Space below keeps the controls clear of the fixed shutter button. */}
+            <Box
+              sx={{
+                width: "100%",
+                maxWidth: KIOSK_WIDTH,
+                px: 2,
+                pb: "140px",
+                boxSizing: "border-box",
+                display: "flex",
+                flexDirection: "column",
+                gap: 3,
+              }}
+            >
+              <Box component="section" aria-label="Hintergrund wählen">
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  Hintergrund wählen
                 </Typography>
-                <Box 
-                  onClick={() => !processing && handleMagicToggle()}
-                  sx={{
-                    width: '80px',
-                    height: '44px',
-                    borderRadius: '22px',
-                    backgroundColor: magicEnabled ? '#000000' : '#e0e0e0',
-                    position: 'relative',
-                    transition: 'background-color 0.3s',
-                    cursor: processing ? 'not-allowed' : 'pointer',
-                    opacity: processing ? 0.6 : 1,
-                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: magicEnabled ? 'flex-end' : 'flex-start',
-                    padding: '3px',
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: '38px',
-                      height: '38px',
-                      borderRadius: '50%',
-                      backgroundColor: '#ffffff',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                      transition: 'transform 0.3s',
-                    }}
-                  />
-                </Box>
-                <Typography variant="body2" sx={{ color: '#666666' }}>
-                  {magicEnabled ? '✨ An' : 'Aus'}
-                </Typography>
+                <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
               </Box>
-              {magicEnabled && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1, mt: 2 }}>
-                  {MAGIC_STYLES.map((style) => (
-                    <Button
-                      key={style.value}
-                      variant={magicStyle === style.value ? 'contained' : 'outlined'}
-                      onClick={() => setMagicStyle(style.value)}
-                      sx={{ minHeight: 52, fontSize: '1.05rem', borderRadius: 26 }}
+
+              <Box component="section" aria-label="Magic">
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    Magic
+                  </Typography>
+                  <ToggleButtonGroup
+                    exclusive
+                    value={magicEnabled ? "on" : "off"}
+                    onChange={(_event, value) => value && setMagicEnabled(value === "on")}
+                    aria-label="Magic ein oder aus"
+                  >
+                    <ToggleButton
+                      value="off"
+                      sx={{
+                        minHeight: 56,
+                        px: 3,
+                        fontSize: "1.1rem",
+                        "&.Mui-selected, &.Mui-selected:hover": { backgroundColor: brand.navy, color: "#ffffff" },
+                      }}
                     >
-                      {style.label}
-                    </Button>
-                  ))}
+                      Aus
+                    </ToggleButton>
+                    <ToggleButton
+                      value="on"
+                      sx={{
+                        minHeight: 56,
+                        px: 3,
+                        fontSize: "1.1rem",
+                        "&.Mui-selected, &.Mui-selected:hover": { backgroundColor: brand.magic, color: "#ffffff" },
+                      }}
+                    >
+                      ✨ Mit Magic
+                    </ToggleButton>
+                  </ToggleButtonGroup>
                 </Box>
-              )}
-            </Container>
-            
-            <Box mt={4}>
-              <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
+
+                {magicEnabled && (
+                  <Box
+                    data-scroll-x
+                    role="radiogroup"
+                    aria-label="Magic-Stil"
+                    sx={{
+                      display: "flex",
+                      gap: 1,
+                      overflowX: "auto",
+                      pb: 1,
+                      scrollSnapType: "x proximity",
+                      WebkitOverflowScrolling: "touch",
+                    }}
+                  >
+                    {MAGIC_STYLES.map((style) => (
+                      <Button
+                        key={style.value}
+                        role="radio"
+                        aria-checked={magicStyle === style.value}
+                        variant={magicStyle === style.value ? "contained" : "outlined"}
+                        onClick={() => setMagicStyle(style.value)}
+                        sx={{
+                          flex: "0 0 auto",
+                          minHeight: 56,
+                          px: 2.5,
+                          fontSize: "1.05rem",
+                          whiteSpace: "nowrap",
+                          scrollSnapAlign: "start",
+                          backgroundColor: magicStyle === style.value ? undefined : "background.paper",
+                        }}
+                      >
+                        {style.label}
+                      </Button>
+                    ))}
+                  </Box>
+                )}
+              </Box>
             </Box>
           </>
         )}
@@ -618,7 +647,7 @@ export default function PhotoBoxPage() {
                 <LinearProgress
                   variant="determinate"
                   value={((Math.min(processingStep, processingSteps.length - 1) + 1) / processingSteps.length) * 100}
-                  sx={{ height: 10, borderRadius: 5, "& .MuiLinearProgress-bar": { backgroundColor: "#000000" } }}
+                  sx={{ height: 10, borderRadius: 5, "& .MuiLinearProgress-bar": { backgroundColor: brand.teal } }}
                 />
               </Box>
             ) : (
@@ -690,16 +719,33 @@ export default function PhotoBoxPage() {
           }}
         />
 
+      {/* The IT-Lab logo is fixed branding. An event logo from the admin settings joins it on the left. */}
+      {runtimeConfig.logoUrl && (
+        <Box
+          component="img"
+          src={runtimeConfig.logoUrl}
+          alt="Event-Logo"
+          sx={{
+            position: "fixed",
+            bottom: 16,
+            left: 16,
+            maxWidth: 125,
+            maxHeight: 90,
+            objectFit: "contain",
+            opacity: 0.9,
+          }}
+        />
+      )}
       <Box
         component="img"
-        src={runtimeConfig.logoUrl ?? itlabImage}
-        alt="Logo"
+        src={itlabImage}
+        alt="IT-Lab Logo"
         sx={{
           position: "fixed",
           bottom: 16,
           right: 16,
           width: 125,
-          opacity: 0.8,
+          opacity: 0.9,
         }}
       />
 
@@ -712,7 +758,7 @@ export default function PhotoBoxPage() {
           anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
           ContentProps={{
             sx: {
-              background: "#000000",
+              background: brand.navy,
               fontFamily: "'Inter', sans-serif",
               fontSize: "1.1rem",
               fontWeight: 400,

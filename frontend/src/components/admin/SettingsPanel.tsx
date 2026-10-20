@@ -83,7 +83,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
       const saved = await deleteEventLogo(token);
       setConfig(saved);
       setLogoUrl(null);
-      showMessage("Logo entfernt, die Fotobox zeigt wieder das Standard-Logo.");
+      showMessage("Logo entfernt.");
     } catch {
       showMessage("Logo konnte nicht entfernt werden", "error");
     }
@@ -127,7 +127,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
 
         <Box sx={{ pt: 2, borderTop: 1, borderColor: "divider" }}>
           <Typography variant="subtitle1" sx={{ mb: 1 }}>
-            Logo
+            Zusätzliches Logo
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Erscheint links unten neben dem IT-Lab-Logo, das immer sichtbar bleibt.
           </Typography>
           <Box
             sx={{
@@ -144,7 +147,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
               <img src={logoUrl} alt="Logo" style={{ maxHeight: 100, maxWidth: "100%" }} />
             ) : (
               <Typography variant="body2" color="text.secondary">
-                Standard-Logo der Fotobox
+                Kein zusätzliches Logo
               </Typography>
             )}
           </Box>

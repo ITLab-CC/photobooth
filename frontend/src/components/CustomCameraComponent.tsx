@@ -1,12 +1,17 @@
 import { useRef, useState } from "react";
-import { Box, Typography } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import { keyframes } from "@mui/system";
 import { addGalleryImage } from "../api";
 import CameraPreview from "./CameraPreview";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import confetti from "canvas-confetti";
 import { logDebug } from "../utils/logger";
-import { KIOSK_WIDTH } from "../theme";
+import { KIOSK_WIDTH, brand } from "../theme";
+
+const countPop = keyframes`
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: scale(1); }
+`;
 
 const flashAnimation = keyframes`
   from { opacity: 1; }
@@ -17,12 +22,14 @@ interface CustomCameraComponentProps {
   galleryId: string;
   token: string;
   onImageUpload?: (imageId: string) => void;
+  onError?: (message: string) => void;
 }
 
 export default function CustomCameraComponent({
   galleryId,
   token,
   onImageUpload,
+  onError,
 }: CustomCameraComponentProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,13 +38,18 @@ export default function CustomCameraComponent({
   const [videoReady, setVideoReady] = useState<boolean>(false);
   const [flashActive, setFlashActive] = useState<boolean>(false);
 
+  const reportError = (message: string) => {
+    console.error(message);
+    onError?.(message);
+  };
+
   const startCountdown = () => {
     if (!galleryId) {
-      alert("Keine Galerie vorhanden. Bitte erst eine Galerie erstellen.");
+      reportError("Die Fotobox ist noch nicht bereit. Bitte kurz warten.");
       return;
     }
     if (!videoReady) {
-      alert("Kamerastream ist noch nicht bereit. Bitte warten Sie einen Moment.");
+      reportError("Die Kamera startet noch. Bitte kurz warten.");
       return;
     }
     setIsCapturing(true);
@@ -63,7 +75,7 @@ export default function CustomCameraComponent({
       const width = video.videoWidth;
       const height = video.videoHeight;
       if (width === 0 || height === 0) {
-        alert("Kamerastream ist noch nicht verfügbar.");
+        reportError("Die Kamera liefert noch kein Bild. Bitte kurz warten.");
         setCountdown(null);
         setIsCapturing(false);
         videoRef.current?.play();
@@ -92,7 +104,7 @@ export default function CustomCameraComponent({
           });
         } catch (uploadError) {
           console.error("Fehler beim Upload:", uploadError);
-          alert("Fehler beim Hochladen des Fotos.");
+          reportError("Das Foto konnte nicht gespeichert werden. Bitte noch einmal versuchen.");
         }
       }
     }
@@ -147,38 +159,10 @@ export default function CustomCameraComponent({
         />
       )}
  
-      {!isCapturing && (
-        <Box
-          position="absolute"
-          sx={{
-            top: 0,
-            right: 0,
-            bottom: 0,
-            left: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.4)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-          }}
-          onClick={startCountdown}
-        >
-          <Box sx={{ width: "100%", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <PhotoCameraIcon sx={{ fontSize: 64, color: "white" }} />
-            <Typography variant="h5" color="white" sx={{ mt: 1 }}>
-              Tippe um den Countdown zu starten
-            </Typography>
-            <Typography variant="body1" color="white" sx={{ mt: 1, opacity: 0.9 }}>
-              Rückt zusammen, damit alle ins Bild passen
-            </Typography>
-          </Box>
-        </Box>
-      )}
-
       {countdown !== null && (
         <Box
           position="absolute"
+          aria-live="assertive"
           sx={{
             top: 0,
             right: 0,
@@ -187,14 +171,49 @@ export default function CustomCameraComponent({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            pointerEvents: "none",
           }}
         >
-          <Typography variant="h1" color="white">
-            {countdown >= 0 ? (countdown === 0 ? "Go!" : countdown) : ""}
+          <Typography
+            key={countdown}
+            sx={{
+              fontSize: "14rem",
+              lineHeight: 1,
+              fontWeight: 700,
+              color: countdown === 0 ? brand.magic : "#ffffff",
+              textShadow: "0 4px 24px rgba(37, 43, 63, 0.55)",
+              animation: `${countPop} 0.5s cubic-bezier(0.22, 1, 0.36, 1)`,
+              "@media (prefers-reduced-motion: reduce)": { animation: "none" },
+            }}
+          >
+            {countdown >= 0 ? (countdown === 0 ? "Los!" : countdown) : ""}
           </Typography>
         </Box>
       )}
       </Box>
+
+      {!isCapturing && (
+        <Button
+          variant="contained"
+          onClick={startCountdown}
+          startIcon={<PhotoCameraIcon sx={{ fontSize: "2.2rem !important" }} />}
+          sx={{
+            position: "fixed",
+            bottom: 28,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 20,
+            minHeight: 84,
+            minWidth: 320,
+            px: 5,
+            fontSize: "1.7rem",
+            borderRadius: 42,
+            boxShadow: "0 10px 24px rgba(0, 117, 133, 0.35)",
+          }}
+        >
+          Foto machen
+        </Button>
+      )}
     </Box>
   );
 }
