@@ -101,7 +101,9 @@ while True:
 # Values
 # ---------------------------
 str_gallery_expiration: str = os.getenv("GALLERY_EXPIRATION_SECONDS") # type: ignore
-GALLERY_EXPIRATION = timedelta(seconds=int(str_gallery_expiration))
+# Photos are not kept for guests, so no session may live for days, whatever an older .env says.
+MAX_GALLERY_AGE = timedelta(hours=2)
+GALLERY_EXPIRATION = min(timedelta(seconds=int(str_gallery_expiration)), MAX_GALLERY_AGE)
 
 
 # ---------------------------
@@ -1362,6 +1364,25 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 # ---------------------------
 # Print Endpoints
 # ---------------------------
+def delete_session_if_printed(queue_db: MongoDBConnection, gallery_id: str) -> None:
+    """
+    Delete a session's gallery and all its photos once none of them is waiting to be printed.
+    Never raises: a failure here must not break the print service; the expiry job cleans up later.
+    """
+    try:
+        viewer = System["img_viewer"]
+        gallery = Gallery.db_find(viewer, gallery_id)
+        if gallery is None:
+            return
+        waiting = {job.img_id for job in PrinterQueueItem.db_find_all(queue_db)}
+        if waiting & set(gallery.images):
+            return
+        IMG.db_delete_by_gallery(viewer, gallery_id)
+        gallery.db_delete(viewer)
+    except Exception as e:
+        print(f"Could not delete printed session {gallery_id}: {e}")
+
+
 # Print models
 class PrintRequest(BaseModel):
     image_id: str
@@ -1432,7 +1453,13 @@ async def api_print_remove(print_id: str, session: Session = Depends(auth(["boss
     if item is None:
         raise HTTPException(status_code=404, detail="Print job not found")
 
+    # remember which session the printed photo belongs to before the job disappears
+    printed_image = IMG.db_find(db, item.img_id)
     item.db_delete(db)
+
+    # the print service removes a job once it is printed: that is the moment the photos can go
+    if printed_image is not None and printed_image.gallery:
+        delete_session_if_printed(db, printed_image.gallery)
 
     return OK(ok=True)
 

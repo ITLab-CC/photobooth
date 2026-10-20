@@ -181,7 +181,7 @@ def create_default_env() -> None:
         env_file.write(f'IMG_VIEWER_PASSWORD={img_viewer_password}\n')
         env_file.write('OLD_IMG_ERASER=old_img_eraser\n')
         env_file.write(f'OLD_IMG_ERASER_PASSWORD={old_img_eraser_password}\n')
-        env_file.write(f'GALLERY_EXPIRATION_SECONDS={60 * 60 * 24 * 7}\n')  # 1 week
+        env_file.write(f'GALLERY_EXPIRATION_SECONDS={60 * 60 * 2}\n')  # 2 hours: photos are not kept
     
     with  open('.env', 'w') as env_file:
         env_file.write('BASE_URL=http://localhost:8000\n')
@@ -196,7 +196,7 @@ def create_default_env() -> None:
         env_file.write(f'IMG_VIEWER_PASSWORD={img_viewer_password}\n')
         env_file.write('OLD_IMG_ERASER=old_img_eraser\n')
         env_file.write(f'OLD_IMG_ERASER_PASSWORD={old_img_eraser_password}\n')
-        env_file.write(f'GALLERY_EXPIRATION_SECONDS={60 * 60 * 24 * 7}\n')  # 1 week
+        env_file.write(f'GALLERY_EXPIRATION_SECONDS={60 * 60 * 2}\n')  # 2 hours: photos are not kept
 
 def check_dotenv(setup: bool = False) -> None:
     if setup:
