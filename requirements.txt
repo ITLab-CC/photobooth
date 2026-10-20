@@ -9,6 +9,6 @@ uvicorn[standard]
 fastapi-limiter
 bcrypt
 redis
-types-dotenv
+dotenv
 opencv-python
 numpy
