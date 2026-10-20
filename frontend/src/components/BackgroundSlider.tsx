@@ -6,19 +6,19 @@ import BlockIcon from "@mui/icons-material/Block";
 import { useSwipeable } from "react-swipeable";
 import { listBackgrounds, BackgroundResponse } from "../api";
 import OptimizedBackgroundImage from "./OptimizedBackgroundImage";
-import { brand } from "../theme";
+import { brand, px } from "../theme";
 
 interface BackgroundSliderProps {
   token: string;
   onSelect?: (backgroundId: string | null) => void;
 }
 
-const SIDE_SIZE = 132;
-const CENTER_SIZE = 190;
+const SIDE_SIZE = px(132);
+const CENTER_SIZE = px(190);
 
 const arrowSx = {
-  width: 64,
-  height: 64,
+  width: px(64),
+  height: px(64),
   color: "text.primary",
   "&.Mui-disabled": { opacity: 0.25 },
 };

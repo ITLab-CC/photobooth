@@ -6,7 +6,7 @@ import CameraPreview from "./CameraPreview";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import confetti from "canvas-confetti";
 import { logDebug } from "../utils/logger";
-import { KIOSK_WIDTH, brand } from "../theme";
+import { KIOSK_WIDTH, brand, px } from "../theme";
 
 const countPop = keyframes`
   from { opacity: 0; transform: scale(0.7); }
@@ -199,12 +199,12 @@ export default function CustomCameraComponent({
           startIcon={<PhotoCameraIcon sx={{ fontSize: "2.2rem !important" }} />}
           sx={{
             position: "fixed",
-            bottom: 28,
+            bottom: px(28),
             left: "50%",
             transform: "translateX(-50%)",
             zIndex: 20,
-            minHeight: 84,
-            minWidth: 320,
+            minHeight: px(84),
+            minWidth: px(320),
             px: 5,
             fontSize: "1.7rem",
             borderRadius: 42,

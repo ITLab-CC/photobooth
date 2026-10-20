@@ -1,7 +1,16 @@
 import { createTheme } from "@mui/material";
 
-// Fixed kiosk display size — the app targets one dedicated touchscreen device, not a responsive range.
-export const KIOSK_WIDTH = 680;
+// The kiosk is one dedicated touchscreen: a 49" TV standing upright, about 1080 px wide. The layout was
+// drawn for 760 px, so everything on the kiosk page is scaled by this factor (1 on small windows).
+const DESIGN_WIDTH = 760;
+export const KIOSK_SCALE = Math.min(
+  1.5,
+  Math.max(1, (typeof window !== "undefined" ? window.innerWidth : DESIGN_WIDTH) / DESIGN_WIDTH)
+);
+export const KIOSK_WIDTH = Math.round(680 * KIOSK_SCALE);
+
+// Scale a pixel size for the kiosk screen.
+export const px = (value: number): number => Math.round(value * KIOSK_SCALE);
 
 // IT-Lab identity: navy from the logo, teal from the banner. Shared by the kiosk and the admin panel.
 export const brand = {

@@ -30,7 +30,7 @@ import {
 } from "../api";
 import { runtimeConfig, initEventConfig } from "../config/event";
 import { logDebug } from "../utils/logger";
-import { KIOSK_WIDTH, brand } from "../theme";
+import { KIOSK_SCALE, KIOSK_WIDTH, brand, px } from "../theme";
 import { useIdleTimeout } from "../utils/useIdleTimeout";
 import itlabImage from "../assets/itlab_logo.png";
 
@@ -161,6 +161,9 @@ export default function PhotoBoxPage() {
       }
     `;
     document.head.appendChild(style);
+    // rem-based text (all MUI typography) scales with the kiosk screen; restored when leaving the page.
+    const previousFontSize = document.documentElement.style.fontSize;
+    document.documentElement.style.fontSize = `${16 * KIOSK_SCALE}px`;
     
     // Verhindere nur horizontales Wischen, erlaube vertikales Scrollen und Kamera-Interaktion
     const preventHorizontalSwipe = (e: TouchEvent) => {
@@ -176,6 +179,7 @@ export default function PhotoBoxPage() {
     
     return () => {
       document.head.removeChild(style);
+      document.documentElement.style.fontSize = previousFontSize;
       document.removeEventListener('touchmove', preventHorizontalSwipe);
     };
   }, []);
@@ -395,8 +399,8 @@ export default function PhotoBoxPage() {
                       animation: `${pulseRing} 2.4s ease-out infinite`,
                       '@media (prefers-reduced-motion: reduce)': { animation: 'none', opacity: 0.3 },
                     },
-                    width: 180,
-                    height: 180,
+                    width: px(180),
+                    height: px(180),
                     transition: 'all 0.3s ease',
                     mb: 3,
                     '&:hover': {
@@ -408,8 +412,8 @@ export default function PhotoBoxPage() {
                   {/* Hand Icon */}
                   <Box
                     sx={{
-                      width: 100,
-                      height: 100,
+                      width: px(100),
+                      height: px(100),
                       backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23007585'%3E%3Cpath d='M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V336c0 1.5 0 3.1 .1 4.6L67.6 283c-16-15.2-41.3-14.6-56.6 1.4s-14.6 41.3 1.4 56.6L124.8 448c43.1 41.1 100.4 64 160 64H304c97.2 0 176-78.8 176-176V128c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V32z'/%3E%3C/svg%3E")`,
                       backgroundRepeat: 'no-repeat',
                       backgroundSize: 'contain',
@@ -544,7 +548,7 @@ export default function PhotoBoxPage() {
                     <ToggleButton
                       value="off"
                       sx={{
-                        minHeight: 56,
+                        minHeight: px(56),
                         px: 3,
                         fontSize: "1.1rem",
                         "&.Mui-selected, &.Mui-selected:hover": { backgroundColor: brand.navy, color: "#ffffff" },
@@ -555,7 +559,7 @@ export default function PhotoBoxPage() {
                     <ToggleButton
                       value="on"
                       sx={{
-                        minHeight: 56,
+                        minHeight: px(56),
                         px: 3,
                         fontSize: "1.1rem",
                         "&.Mui-selected, &.Mui-selected:hover": { backgroundColor: brand.magic, color: "#ffffff" },
@@ -589,7 +593,7 @@ export default function PhotoBoxPage() {
                         onClick={() => setMagicStyle(style.value)}
                         sx={{
                           flex: "0 0 auto",
-                          minHeight: 56,
+                          minHeight: px(56),
                           px: 2.5,
                           fontSize: "1.05rem",
                           whiteSpace: "nowrap",
@@ -618,7 +622,7 @@ export default function PhotoBoxPage() {
               boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
               overflow: "hidden",
               width: "95%",
-              maxWidth: "700px",
+              maxWidth: px(700),
               margin: "auto"
             }
           }}
@@ -689,8 +693,8 @@ export default function PhotoBoxPage() {
                 sx={{ 
                   borderWidth: 1.5,
                   fontSize: "1.2rem",
-                  minHeight: 64,
-                  minWidth: 180,
+                  minHeight: px(64),
+                  minWidth: px(180),
                 }}
               >
                 Neues Foto
@@ -701,8 +705,8 @@ export default function PhotoBoxPage() {
                 sx={{ 
                   fontSize: "1.2rem",
                   fontWeight: 600,
-                  minHeight: 64,
-                  minWidth: 180,
+                  minHeight: px(64),
+                  minWidth: px(180),
                 }}
               >
                 ✨ Drucken
@@ -729,8 +733,8 @@ export default function PhotoBoxPage() {
             position: "fixed",
             bottom: 16,
             left: 16,
-            maxWidth: 125,
-            maxHeight: 90,
+            maxWidth: px(125),
+            maxHeight: px(90),
             objectFit: "contain",
             opacity: 0.9,
           }}
@@ -744,7 +748,7 @@ export default function PhotoBoxPage() {
           position: "fixed",
           bottom: 16,
           right: 16,
-          width: 125,
+          width: px(125),
           opacity: 0.9,
         }}
       />
