@@ -91,6 +91,8 @@ export default function PhotoBoxPage() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("Eure Erinnerung wird gedruckt!");
   const [processingStep, setProcessingStep] = useState(0);
+  // Re-render once the admin-configured texts and logo have been loaded.
+  const [, setEventConfigLoaded] = useState(false);
   
   // Animation states for start screen
   const [showStartScreen, setShowStartScreen] = useState(true);
@@ -115,7 +117,7 @@ export default function PhotoBoxPage() {
   // Event-Settings (Titel/Branding) vom Backend laden
   useEffect(() => {
     if (token) {
-      initEventConfig(token);
+      initEventConfig(token).then(() => setEventConfigLoaded(true));
     }
   }, [token]);
 
@@ -412,7 +414,7 @@ export default function PhotoBoxPage() {
                     },
                   }}
                 >
-                  Erschaffe eine Erinnerung
+                  {runtimeConfig.startText}
                 </Typography>
               </Box>
             )}
@@ -690,8 +692,8 @@ export default function PhotoBoxPage() {
 
       <Box
         component="img"
-        src={itlabImage}
-        alt="Itlab Logo"
+        src={runtimeConfig.logoUrl ?? itlabImage}
+        alt="Logo"
         sx={{
           position: "fixed",
           bottom: 16,

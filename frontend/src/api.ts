@@ -557,6 +557,8 @@ export interface EventConfigResponse {
   subtitle: string;
   brand_name: string;
   pin_fail_redirect_url: string;
+  start_text: string;
+  has_logo: boolean;
 }
 
 // 8.1) GET /api/v1/settings
@@ -577,6 +579,32 @@ export async function updateEventConfig(
     token,
     payload
   );
+}
+
+// 8.3) PUT /api/v1/settings/logo
+export async function uploadEventLogo(
+  token: string,
+  base64: string
+): Promise<EventConfigResponse> {
+  return await request<EventConfigResponse>("PUT", "/api/v1/settings/logo", token, {
+    image_base64: base64,
+  });
+}
+
+// 8.4) DELETE /api/v1/settings/logo
+export async function deleteEventLogo(token: string): Promise<EventConfigResponse> {
+  return await request<EventConfigResponse>("DELETE", "/api/v1/settings/logo", token);
+}
+
+// 8.5) GET /api/v1/settings/logo
+export async function getEventLogo(token: string): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/api/v1/settings/logo`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error("Kein Logo vorhanden");
+  }
+  return await res.blob();
 }
 
 // =============== 9) Health ===============

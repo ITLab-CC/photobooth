@@ -10,6 +10,8 @@ EVENT_CONFIG_COLLECTION = "event_config"
 # Singleton document id: this collection only ever holds one document.
 EVENT_CONFIG_ID = "CONFIG-default"
 
+DEFAULT_START_TEXT = "Erschaffe eine Erinnerung"
+
 
 @dataclass
 class EventConfig:
@@ -17,6 +19,7 @@ class EventConfig:
     subtitle: str
     brand_name: str
     pin_fail_redirect_url: str
+    start_text: str = DEFAULT_START_TEXT
     _id: str = field(default=EVENT_CONFIG_ID)
 
     # Collection name for MongoDB.
@@ -34,6 +37,7 @@ class EventConfig:
             "subtitle": self.subtitle,
             "brand_name": self.brand_name,
             "pin_fail_redirect_url": self.pin_fail_redirect_url,
+            "start_text": self.start_text,
         }
 
     def __str__(self) -> str:
@@ -144,5 +148,36 @@ class EventConfig:
             subtitle=data["subtitle"],
             brand_name=data["brand_name"],
             pin_fail_redirect_url=data["pin_fail_redirect_url"],
+            start_text=data.get("start_text", DEFAULT_START_TEXT),
             _id=str(data.get("_id", EVENT_CONFIG_ID)),
         )
+
+    @classmethod
+    @mongodb_permissions(collection=EVENT_CONFIG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth"])
+    def db_find_logo(cls, db_connection: MongoDBConnection) -> Optional[bytes]:
+        """
+        Return the uploaded logo (PNG bytes), or None if there is none.
+        """
+        collection = db_connection.db[cls.COLLECTION_NAME]
+        data = collection.find_one({"_id": EVENT_CONFIG_ID}, {"logo": 1})
+        if not data or data.get("logo") is None:
+            return None
+        return bytes(data["logo"])
+
+    @classmethod
+    @mongodb_permissions(collection=EVENT_CONFIG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth"])
+    def db_has_logo(cls, db_connection: MongoDBConnection) -> bool:
+        collection = db_connection.db[cls.COLLECTION_NAME]
+        return collection.count_documents({"_id": EVENT_CONFIG_ID, "logo": {"$exists": True}}) > 0
+
+    @classmethod
+    @mongodb_permissions(collection=EVENT_CONFIG_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
+    def db_set_logo(cls, db_connection: MongoDBConnection, png_bytes: Optional[bytes]) -> None:
+        """
+        Store or (with None) remove the logo. The settings document must already exist.
+        """
+        collection = db_connection.db[cls.COLLECTION_NAME]
+        if png_bytes is None:
+            collection.update_one({"_id": EVENT_CONFIG_ID}, {"$unset": {"logo": ""}})
+        else:
+            collection.update_one({"_id": EVENT_CONFIG_ID}, {"$set": {"logo": png_bytes}})

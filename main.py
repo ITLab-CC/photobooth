@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+import base64
 import hashlib
 import shutil
 import torch
@@ -25,12 +26,13 @@ from fastapi_limiter.depends import RateLimiter
 import uvicorn
 
 from background import Background
+from PIL import Image
 from thumbnails import png_to_webp_thumbnail
 from gallery import Gallery
 from img import IMG
 from frame import FRAME
 from printer import PrinterQueueItem
-from event_config import EventConfig
+from event_config import DEFAULT_START_TEXT, EventConfig
 from process_img import IMGReplacer, resize_with_crop_or_pad
 from face_smiley_replacer import replace_faces_with_smileys_dnn
 from face_props import PROP_STYLES, apply_face_props
@@ -1008,7 +1010,11 @@ SETTINGS_DEFAULTS = {
     "subtitle": "ENTEGA • Darmstadt",
     "brand_name": "ENTEGA",
     "pin_fail_redirect_url": "https://www.entega.ag/karriere/ausbildung-duales-studium-berufsorientierung/ausbildung/",
+    "start_text": DEFAULT_START_TEXT,
+    "has_logo": False,
 }
+
+MAX_LOGO_SIDE = 600
 
 
 class SettingsRequest(BaseModel):
@@ -1016,6 +1022,7 @@ class SettingsRequest(BaseModel):
     subtitle: str
     brand_name: str
     pin_fail_redirect_url: str
+    start_text: str = DEFAULT_START_TEXT
 
 
 class SettingsResponse(BaseModel):
@@ -1023,6 +1030,19 @@ class SettingsResponse(BaseModel):
     subtitle: str
     brand_name: str
     pin_fail_redirect_url: str
+    start_text: str = DEFAULT_START_TEXT
+    has_logo: bool = False
+
+
+def _settings_response(config: EventConfig, has_logo: bool) -> SettingsResponse:
+    return SettingsResponse(
+        title=config.title,
+        subtitle=config.subtitle,
+        brand_name=config.brand_name,
+        pin_fail_redirect_url=config.pin_fail_redirect_url,
+        start_text=config.start_text,
+        has_logo=has_logo,
+    )
 
 
 @app.get(
@@ -1038,12 +1058,7 @@ async def api_settings_get(session: Session = Depends(auth(["boss", "photo_booth
     if config is None:
         return SettingsResponse(**SETTINGS_DEFAULTS)
 
-    return SettingsResponse(
-        title=config.title,
-        subtitle=config.subtitle,
-        brand_name=config.brand_name,
-        pin_fail_redirect_url=config.pin_fail_redirect_url,
-    )
+    return _settings_response(config, EventConfig.db_has_logo(db))
 
 
 @app.put(
@@ -1061,18 +1076,71 @@ async def api_settings_update(settings: SettingsRequest, session: Session = Depe
         subtitle=settings.subtitle,
         brand_name=settings.brand_name,
         pin_fail_redirect_url=settings.pin_fail_redirect_url,
+        start_text=settings.start_text.strip() or DEFAULT_START_TEXT,
     )
     if existing is None:
         config.db_save(db)
     else:
         config.db_update(db)
 
-    return SettingsResponse(
-        title=config.title,
-        subtitle=config.subtitle,
-        brand_name=config.brand_name,
-        pin_fail_redirect_url=config.pin_fail_redirect_url,
-    )
+    return _settings_response(config, EventConfig.db_has_logo(db))
+
+
+class LogoRequest(BaseModel):
+    image_base64: str
+
+
+@app.put(
+    "/api/v1/settings/logo",
+    response_model=SettingsResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Upload the event logo shown on the photo booth. It is scaled down to at most 600 px and stored as PNG."
+)
+async def api_settings_logo_put(logo: LogoRequest, session: Session = Depends(auth(["boss"]))) -> SettingsResponse:
+    db = session.mongodb_connection
+
+    try:
+        img = Image.open(io.BytesIO(base64.b64decode(logo.image_base64))).convert("RGBA")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image")
+    img.thumbnail((MAX_LOGO_SIDE, MAX_LOGO_SIDE), Image.Resampling.LANCZOS)
+    png = io.BytesIO()
+    img.save(png, format="PNG")
+
+    config = EventConfig.db_find(db)
+    if config is None:
+        config = EventConfig(**{k: v for k, v in SETTINGS_DEFAULTS.items() if k != "has_logo"})
+        config.db_save(db)
+    EventConfig.db_set_logo(db, png.getvalue())
+    return _settings_response(config, True)
+
+
+@app.delete(
+    "/api/v1/settings/logo",
+    response_model=SettingsResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Remove the uploaded logo. The photo booth falls back to its built-in logo."
+)
+async def api_settings_logo_delete(session: Session = Depends(auth(["boss"]))) -> SettingsResponse:
+    db = session.mongodb_connection
+
+    EventConfig.db_set_logo(db, None)
+    config = EventConfig.db_find(db) or EventConfig(**{k: v for k, v in SETTINGS_DEFAULTS.items() if k != "has_logo"})
+    return _settings_response(config, False)
+
+
+@app.get(
+    "/api/v1/settings/logo",
+    dependencies=[Depends(RateLimiter(times=5, seconds=1))],
+    description="The uploaded event logo as PNG, or 404 if none was uploaded."
+)
+async def api_settings_logo_get(session: Session = Depends(auth(["boss", "photo_booth"]))) -> Response:
+    db = session.mongodb_connection
+
+    png = EventConfig.db_find_logo(db)
+    if png is None:
+        raise HTTPException(status_code=404, detail="No logo uploaded")
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "private, no-cache"})
 
 
 # ---------------------------
