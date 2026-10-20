@@ -46,6 +46,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
         playsInline
         muted
         sx={{
+          display: "block", // inline video leaves a baseline gap that shows as a white strip
           width: "100%",
           height: `${KIOSK_WIDTH}px`,
           objectFit: "cover",

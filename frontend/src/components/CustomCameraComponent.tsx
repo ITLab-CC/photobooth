@@ -131,7 +131,9 @@ export default function CustomCameraComponent({
           maxWidth: `${KIOSK_WIDTH}px`,
           height: `${KIOSK_WIDTH}px`,
           margin: "8px auto",
+          cursor: isCapturing ? "default" : "pointer",
         }}
+        onClick={() => !isCapturing && startCountdown()}
       >
       <CameraPreview
         videoRef={videoRef}
@@ -145,6 +147,30 @@ export default function CustomCameraComponent({
         }}
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
+
+      {/* Tapping anywhere on the live image takes the photo; the pill shows that and does not cover the faces.
+          Hidden while counting down. */}
+      {!isCapturing && (
+        <Button
+          variant="contained"
+          aria-label="Foto machen"
+          startIcon={<PhotoCameraIcon sx={{ fontSize: "2rem !important" }} />}
+          sx={{
+            position: "absolute",
+            bottom: px(20),
+            left: "50%",
+            transform: "translateX(-50%)",
+            minHeight: px(72),
+            minWidth: px(300),
+            px: 4,
+            fontSize: "1.5rem",
+            borderRadius: 40,
+            boxShadow: "0 8px 22px rgba(0, 0, 0, 0.35)",
+          }}
+        >
+          Foto machen
+        </Button>
+      )}
       
       {flashActive && (
         <Box
@@ -193,26 +219,6 @@ export default function CustomCameraComponent({
       )}
       </Box>
 
-      {/* Directly under the live image so it is always in reach and never covers the controls.
-          Hidden (not removed) while counting down so the layout does not jump. */}
-      <Button
-        variant="contained"
-        onClick={startCountdown}
-        disabled={isCapturing}
-        startIcon={<PhotoCameraIcon sx={{ fontSize: "2.2rem !important" }} />}
-        sx={{
-          mt: 1.5,
-          minHeight: px(84),
-          minWidth: px(340),
-          px: 5,
-          fontSize: "1.7rem",
-          borderRadius: 42,
-          boxShadow: "0 10px 24px rgba(0, 117, 133, 0.35)",
-          visibility: isCapturing ? "hidden" : "visible",
-        }}
-      >
-        Foto machen
-      </Button>
     </Box>
   );
 }

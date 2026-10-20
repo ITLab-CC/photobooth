@@ -529,13 +529,6 @@ export default function PhotoBoxPage() {
                 gap: 2.5,
               }}
             >
-              <Box component="section" aria-label="Hintergrund wählen">
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                  Hintergrund wählen
-                </Typography>
-                <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
-              </Box>
-
               <Box component="section" aria-label="Magic">
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -609,6 +602,13 @@ export default function PhotoBoxPage() {
                   </Box>
                 )}
               </Box>
+              <Box component="section" aria-label="Hintergrund wählen">
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+                  Hintergrund wählen
+                </Typography>
+                <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
+              </Box>
+
             </Box>
           </>
         )}

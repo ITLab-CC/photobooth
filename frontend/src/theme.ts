@@ -7,7 +7,16 @@ export const KIOSK_SCALE = Math.min(
   1.25,
   Math.max(1, (typeof window !== "undefined" ? window.innerWidth : DESIGN_WIDTH) / DESIGN_WIDTH)
 );
-export const KIOSK_WIDTH = Math.round(680 * KIOSK_SCALE);
+
+// Height taken by everything except the camera image (title, Magic, backgrounds, margins), at scale 1.
+const OTHER_UI_HEIGHT = 560;
+// The camera image is square. It fills the width, but shrinks on screens too short to also show the controls.
+export const KIOSK_WIDTH = Math.round(
+  Math.min(
+    680 * KIOSK_SCALE,
+    Math.max(420, (typeof window !== "undefined" ? window.innerHeight : 1000) - OTHER_UI_HEIGHT * KIOSK_SCALE)
+  )
+);
 
 // Scale a pixel size for the kiosk screen.
 export const px = (value: number): number => Math.round(value * KIOSK_SCALE);
