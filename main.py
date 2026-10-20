@@ -716,34 +716,44 @@ class BackgroundListResponse(BaseModel):
 async def api_background_list(session: Session = Depends(auth(["boss", "photo_booth"]))) -> BackgroundListResponse:
     db = session.mongodb_connection
 
-    backgrounds = Background.db_find_all(db)
-    return_backgrounds: List[BackgroundResponse] = []
-    for img in backgrounds:
-        return_backgrounds.append(BackgroundResponse(
-            background_id=img._id
-        ))
+    return_backgrounds: List[BackgroundResponse] = [
+        BackgroundResponse(background_id=background_id)
+        for background_id in Background.db_find_ids(db)
+    ]
 
     return BackgroundListResponse(backgrounds=return_backgrounds)
 
 # get background
 @app.get(
     "/api/v1/background/{background_id}",
-    response_model=BackgroundResponse,
     dependencies=[Depends(RateLimiter(times=100, seconds=1))],
-    description="Retrieve a background image by its ID and return it as a streaming PNG response."
+    description="Retrieve a background image by its ID as PNG, or as a small WebP thumbnail with thumb=true. Responses are cacheable."
 )
-async def api_background_get(background_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:
+async def api_background_get(
+    background_id: str,
+    request: Request,
+    thumb: bool = False,
+    session: Session = Depends(auth(["boss", "photo_booth"]))
+) -> Response:
     db = session.mongodb_connection
 
-    img = Background.db_find(db, background_id)
-    if img is None:
-        raise HTTPException(status_code=404, detail="Background image not found")
-    
-    img_bytes_io = io.BytesIO()
-    img.img.save(img_bytes_io, format="PNG")
-    img_bytes_io.seek(0)
+    # Backgrounds never change after upload, so the id is a valid ETag.
+    etag = f'"{background_id}-{"thumb" if thumb else "full"}"'
+    cache_headers = {"ETag": etag, "Cache-Control": "private, max-age=86400, immutable"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
 
-    return StreamingResponse(content=img_bytes_io, media_type="image/png")
+    if thumb:
+        content = Background.db_find_thumbnail_bytes(db, background_id)
+        media_type = "image/webp"
+    else:
+        content = Background.db_find_png_bytes(db, background_id)
+        media_type = "image/png"
+
+    if content is None:
+        raise HTTPException(status_code=404, detail="Background image not found")
+
+    return Response(content=content, media_type=media_type, headers=cache_headers)
 
 # delete background
 @app.delete(
@@ -1097,11 +1107,13 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
         # get the size of the first background image
         # get any background image
-        back_images = Background.db_find_all(db)
-        if len(back_images) == 0:
+        back_image_ids = Background.db_find_ids(db)
+        if len(back_image_ids) == 0:
             raise HTTPException(status_code=404, detail="No background images found")
 
-        first_background_img = back_images[0]
+        first_background_img = Background.db_find(db, back_image_ids[0])
+        if first_background_img is None:
+            raise HTTPException(status_code=404, detail="No background images found")
         x_size, y_size = first_background_img.img.size
 
         # resize the image

@@ -1,7 +1,7 @@
 import base64
 from dataclasses import dataclass, field
 import io
-from typing import Optional, List
+from typing import Dict, Optional, List
 from PIL import Image
 import uuid
 import json
@@ -13,6 +13,10 @@ from db_connection import MongoDBConnection, MongoDBPermissions, mongodb_permiss
 
 # Define a module-level constant for the collection name.
 BACKGROUND_COLLECTION = "backgrounds"
+
+# Thumbnails are small and derived from immutable originals, so they are kept in memory.
+THUMBNAIL_MAX_SIZE = 480
+_thumbnail_cache: Dict[str, bytes] = {}
 
 @dataclass
 class Background:
@@ -207,6 +211,7 @@ class Background:
         """
         collection: Collection = db_c.db[self.COLLECTION_NAME]
         collection.delete_one({"_id": self._id})
+        _thumbnail_cache.pop(self._id, None)
     
     @classmethod
     @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer"])
@@ -218,3 +223,47 @@ class Background:
         collection: Collection = db_c.db[cls.COLLECTION_NAME]
         docs = collection.find()
         return [cls._db_load(doc) for doc in docs]
+
+    @classmethod
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer"])
+    def db_find_ids(cls, db_c: MongoDBConnection) -> List[str]:
+        """
+        Return only the ids of all backgrounds, without loading or decoding any image data.
+        """
+        collection: Collection = db_c.db[cls.COLLECTION_NAME]
+        return [str(doc["_id"]) for doc in collection.find({}, {"_id": 1})]
+
+    @classmethod
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer"])
+    def db_find_png_bytes(cls, db_c: MongoDBConnection, _id: str) -> Optional[bytes]:
+        """
+        Return the stored PNG bytes of a background without decoding or re-encoding them.
+        """
+        collection: Collection = db_c.db[cls.COLLECTION_NAME]
+        data = collection.find_one({"_id": _id}, {"img": 1})
+        if not data or data.get("img") is None:
+            return None
+        return bytes(data["img"])
+
+    @classmethod
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer"])
+    def db_find_thumbnail_bytes(cls, db_c: MongoDBConnection, _id: str) -> Optional[bytes]:
+        """
+        Return a small WebP thumbnail (keeps transparency). Generated on first use, then cached in memory.
+        """
+        cached = _thumbnail_cache.get(_id)
+        if cached is not None:
+            return cached
+
+        png_bytes = cls.db_find_png_bytes(db_c, _id)
+        if png_bytes is None:
+            return None
+
+        with Image.open(BytesIO(png_bytes)) as img:
+            img.thumbnail((THUMBNAIL_MAX_SIZE, THUMBNAIL_MAX_SIZE), Image.Resampling.LANCZOS)
+            with BytesIO() as output:
+                img.save(output, format="WEBP", quality=80)
+                thumbnail = output.getvalue()
+
+        _thumbnail_cache[_id] = thumbnail
+        return thumbnail

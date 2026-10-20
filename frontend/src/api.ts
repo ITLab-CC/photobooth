@@ -309,12 +309,15 @@ export async function listBackgrounds(
 }
 
 // 4.3) GET /api/v1/background/{background_id}
-// Gibt ein PNG-Stream zurück
+// Gibt das Original (PNG) zurück, mit thumb=true ein kleines WebP-Vorschaubild.
+// Der Server liefert Cache-Header, der Browser behält die Bilder selbst.
 export async function getBackground(
   token: string,
-  backgroundId: string
+  backgroundId: string,
+  thumb = false
 ): Promise<Blob> {
-  const res = await fetch(`${BASE_URL}/api/v1/background/${backgroundId}`, {
+  const query = thumb ? "?thumb=true" : "";
+  const res = await fetch(`${BASE_URL}/api/v1/background/${backgroundId}${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
