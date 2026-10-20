@@ -276,9 +276,12 @@ export async function getImage(token: string, imageId: string): Promise<Blob> {
 // =============== 4) Background-Interfaces & Funktionen ===============
 export interface BackgroundRequest {
   image_base64: string;
+  name?: string;
 }
 export interface BackgroundResponse {
   background_id: string;
+  name: string;
+  active: boolean;
 }
 export interface BackgroundListResponse {
   backgrounds: BackgroundResponse[];
@@ -287,23 +290,39 @@ export interface BackgroundListResponse {
 // 4.1) POST /api/v1/background
 export async function createBackground(
   token: string,
-  base64: string
+  base64: string,
+  name = ""
 ): Promise<BackgroundResponse> {
   return await request<BackgroundResponse>(
     "POST",
     "/api/v1/background",
     token,
-    { image_base64: base64 }
+    { image_base64: base64, name }
+  );
+}
+
+// 4.1b) PATCH /api/v1/background/{background_id}
+export async function updateBackground(
+  token: string,
+  backgroundId: string,
+  patch: { name?: string; active?: boolean }
+): Promise<BackgroundResponse> {
+  return await request<BackgroundResponse>(
+    "PATCH",
+    `/api/v1/background/${backgroundId}`,
+    token,
+    patch
   );
 }
 
 // 4.2) GET /api/v1/backgrounds
 export async function listBackgrounds(
-  token: string
+  token: string,
+  onlyActive = false
 ): Promise<BackgroundListResponse> {
   return await request<BackgroundListResponse>(
     "GET",
-    "/api/v1/backgrounds",
+    `/api/v1/backgrounds${onlyActive ? "?only_active=true" : ""}`,
     token
   );
 }
@@ -538,4 +557,27 @@ export async function updateEventConfig(
     token,
     payload
   );
+}
+
+// =============== 9) Health ===============
+// GET /api/v1/health
+export interface HealthCheck {
+  ok: boolean;
+  detail: string;
+}
+export interface HealthResponse {
+  database: HealthCheck;
+  gpu: HealthCheck;
+  model: HealthCheck;
+  disk: HealthCheck;
+  print_queue: HealthCheck;
+  backgrounds_total: number;
+  backgrounds_active: number;
+  photos_today: number;
+  magic_photos_today: number;
+  avg_processing_seconds: number | null;
+}
+
+export async function getHealth(token: string): Promise<HealthResponse> {
+  return await request<HealthResponse>("GET", "/api/v1/health", token);
 }

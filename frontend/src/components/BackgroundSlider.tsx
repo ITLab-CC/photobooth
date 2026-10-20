@@ -27,7 +27,7 @@ const BackgroundSlider: React.FC<BackgroundSliderProps> = ({ token, onSelect }) 
 
   useEffect(() => {
     // Hintergrundbilder laden
-    listBackgrounds(token)
+    listBackgrounds(token, true)
       .then((data: BackgroundListResponse) => {
         if (data.backgrounds && data.backgrounds.length > 0) {
           setBackgrounds(data.backgrounds);

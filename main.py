@@ -1,7 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+import shutil
+import torch
 import time
+from collections import deque
 import io
 from math import ceil
 import os
@@ -681,9 +684,16 @@ async def api_image_get(image_id: str, session: Session = Depends(auth(["boss", 
 # Background models
 class BackgroundRequest(BaseModel):
     image_base64: str
+    name: str = ""
 
 class BackgroundResponse(BaseModel):
     background_id: str
+    name: str = ""
+    active: bool = True
+
+class BackgroundPatchRequest(BaseModel):
+    name: Optional[str] = None
+    active: Optional[bool] = None
 
 @app.post(
     "/api/v1/background",
@@ -698,10 +708,11 @@ async def api_background_add(background_img: BackgroundRequest, session: Session
         img = Background.from_base64(background_img.image_base64)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
+    img.name = background_img.name.strip()
     img.db_save(db)
 
-    return BackgroundResponse(background_id=img._id)
+    return BackgroundResponse(background_id=img._id, name=img.name, active=img.active)
 
 class BackgroundListResponse(BaseModel):
     backgrounds: List[BackgroundResponse]
@@ -711,14 +722,14 @@ class BackgroundListResponse(BaseModel):
     "/api/v1/backgrounds",
     response_model=BackgroundListResponse,
     dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Retrieve a list of all background images available in the database."
+    description="Retrieve all backgrounds (id, name, active flag). With only_active=true, hidden backgrounds are left out."
 )
-async def api_background_list(session: Session = Depends(auth(["boss", "photo_booth"]))) -> BackgroundListResponse:
+async def api_background_list(only_active: bool = False, session: Session = Depends(auth(["boss", "photo_booth"]))) -> BackgroundListResponse:
     db = session.mongodb_connection
 
     return_backgrounds: List[BackgroundResponse] = [
-        BackgroundResponse(background_id=background_id)
-        for background_id in Background.db_find_ids(db)
+        BackgroundResponse(**meta)
+        for meta in Background.db_find_meta(db, only_active=only_active)
     ]
 
     return BackgroundListResponse(backgrounds=return_backgrounds)
@@ -754,6 +765,25 @@ async def api_background_get(
         raise HTTPException(status_code=404, detail="Background image not found")
 
     return Response(content=content, media_type=media_type, headers=cache_headers)
+
+# rename or (de)activate a background
+@app.patch(
+    "/api/v1/background/{background_id}",
+    response_model=BackgroundResponse,
+    dependencies=[Depends(RateLimiter(times=5, seconds=1))],
+    description="Change the name or the active flag of a background. Inactive backgrounds are not offered to guests but stay in the archive."
+)
+async def api_background_patch(background_id: str, patch: BackgroundPatchRequest, session: Session = Depends(auth(["boss"]))) -> BackgroundResponse:
+    db = session.mongodb_connection
+
+    name = patch.name.strip() if patch.name is not None else None
+    if not Background.db_set_meta(db, background_id, name=name, active=patch.active):
+        raise HTTPException(status_code=404, detail="Background image not found")
+
+    for meta in Background.db_find_meta(db):
+        if meta["background_id"] == background_id:
+            return BackgroundResponse(**meta)
+    raise HTTPException(status_code=404, detail="Background image not found")
 
 # delete background
 @app.delete(
@@ -1042,6 +1072,25 @@ class ImageProcessRequest(BaseModel):
     refine_foreground: bool = False
     random_stuff: bool = False
 
+class ProcessingStats:
+    """In-memory counters for the dashboard. Nothing about the photos is stored."""
+    day: str = ""
+    photos: int = 0
+    magic_photos: int = 0
+    durations: "deque[float]" = deque(maxlen=50)
+
+    @classmethod
+    def record(cls, seconds: float, magic: bool) -> None:
+        today = datetime.now().strftime("%Y-%m-%d")
+        if cls.day != today:
+            cls.day = today
+            cls.photos = 0
+            cls.magic_photos = 0
+        cls.photos += 1
+        if magic:
+            cls.magic_photos += 1
+        cls.durations.append(seconds)
+
 class ImageProcessResponse(BaseModel):
     img_no_background: Optional[ImageResponse] = None
     img_new_background: ImageResponse
@@ -1058,6 +1107,7 @@ Replacer = IMGReplacer()
 )
 async def api_image_process(image: ImageProcessRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> ImageProcessResponse:
     db = session.mongodb_connection
+    started_at = time.perf_counter()
 
     # get the image
     img = IMG.db_find(db, image.image_id)
@@ -1162,6 +1212,8 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     img_with_frame_for_db = IMG(img=img_with_frame, type="with-frame", gallery=img.gallery)
     img_with_frame_for_db.db_save(db)
     g.db_add_image(db, img_with_frame_for_db._id)
+
+    ProcessingStats.record(time.perf_counter() - started_at, magic=image.random_stuff)
 
     # retrun new img id
     return ImageProcessResponse(
@@ -1282,6 +1334,81 @@ async def api_print_clear(session: Session = Depends(auth(["boss"]))) -> OK:
 
 
 
+
+
+# ---------------------------
+# Health Endpoint
+# ---------------------------
+class HealthCheck(BaseModel):
+    ok: bool
+    detail: str
+
+class HealthResponse(BaseModel):
+    database: HealthCheck
+    gpu: HealthCheck
+    model: HealthCheck
+    disk: HealthCheck
+    print_queue: HealthCheck
+    backgrounds_total: int
+    backgrounds_active: int
+    photos_today: int
+    magic_photos_today: int
+    avg_processing_seconds: Optional[float] = None
+
+@app.get(
+    "/api/v1/health",
+    response_model=HealthResponse,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="Status of database, GPU, AI model, disk and print queue plus simple counters for the admin dashboard."
+)
+async def api_health(session: Session = Depends(auth(["boss"]))) -> HealthResponse:
+    db = session.mongodb_connection
+
+    try:
+        db.db.command("ping")
+        database = HealthCheck(ok=True, detail="Verbunden")
+    except Exception as e:
+        database = HealthCheck(ok=False, detail=f"Nicht erreichbar: {e}")
+
+    cuda = torch.cuda.is_available()
+    gpu = HealthCheck(ok=cuda, detail=torch.cuda.get_device_name(0) if cuda else "Keine GPU, KI läuft langsam auf der CPU")
+    model = HealthCheck(ok=Replacer.model is not None, detail="Geladen" if Replacer.model is not None else "Nicht geladen")
+
+    free_gb = shutil.disk_usage("/").free / 1024**3
+    disk = HealthCheck(ok=free_gb >= 5, detail=f"{free_gb:.1f} GB frei")
+
+    try:
+        jobs = PrinterQueueItem.db_find_all(db)
+        if jobs:
+            oldest = min(job.created_at for job in jobs)
+            waiting_minutes = (datetime.now() - oldest.replace(tzinfo=None)).total_seconds() / 60
+            print_queue = HealthCheck(
+                ok=waiting_minutes < 10,
+                detail=f"{len(jobs)} Auftrag/Aufträge, ältester wartet {waiting_minutes:.0f} min"
+            )
+        else:
+            print_queue = HealthCheck(ok=True, detail="Warteschlange leer")
+    except Exception as e:
+        print_queue = HealthCheck(ok=False, detail=f"Nicht lesbar: {e}")
+
+    try:
+        metas = Background.db_find_meta(db)
+    except Exception:
+        metas = []
+
+    durations = list(ProcessingStats.durations)
+    return HealthResponse(
+        database=database,
+        gpu=gpu,
+        model=model,
+        disk=disk,
+        print_queue=print_queue,
+        backgrounds_total=len(metas),
+        backgrounds_active=sum(1 for m in metas if m["active"]),
+        photos_today=ProcessingStats.photos if ProcessingStats.day == datetime.now().strftime("%Y-%m-%d") else 0,
+        magic_photos_today=ProcessingStats.magic_photos if ProcessingStats.day == datetime.now().strftime("%Y-%m-%d") else 0,
+        avg_processing_seconds=round(sum(durations) / len(durations), 1) if durations else None,
+    )
 
 # ---------------------------
 # Webpage

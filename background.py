@@ -22,6 +22,8 @@ _thumbnail_cache: Dict[str, bytes] = {}
 class Background:
     img: Image.Image
     _id: str = field(default_factory=lambda: f"Back-{uuid.uuid4()}")
+    name: str = ""
+    active: bool = True
 
     # Collection name for MongoDB
     COLLECTION_NAME: str = BACKGROUND_COLLECTION
@@ -39,6 +41,8 @@ class Background:
         return {
             "_id": self._id,  # MongoDB uses _id as the primary key.
             "img": self.img,  # Convert to binary data before saving.
+            "name": self.name,
+            "active": self.active,
         }
 
     def __str__(self) -> str:
@@ -167,7 +171,9 @@ class Background:
         
         return cls(
             img=image,
-            _id=str(data.get("_id"))
+            _id=str(data.get("_id")),
+            name=str(data.get("name", "")),
+            active=bool(data.get("active", True))
         )
 
     @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.INSERT], roles=["boss"])
@@ -267,3 +273,38 @@ class Background:
 
         _thumbnail_cache[_id] = thumbnail
         return thumbnail
+
+    @classmethod
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "photo_booth", "img_viewer"])
+    def db_find_meta(cls, db_c: MongoDBConnection, only_active: bool = False) -> List[dict]:
+        """
+        Return id, name and active flag of all backgrounds without loading image data.
+        Backgrounds created before these fields existed count as active and unnamed.
+        """
+        collection: Collection = db_c.db[cls.COLLECTION_NAME]
+        query = {"active": {"$ne": False}} if only_active else {}
+        return [
+            {
+                "background_id": str(doc["_id"]),
+                "name": str(doc.get("name", "")),
+                "active": bool(doc.get("active", True)),
+            }
+            for doc in collection.find(query, {"_id": 1, "name": 1, "active": 1})
+        ]
+
+    @classmethod
+    @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
+    def db_set_meta(cls, db_c: MongoDBConnection, _id: str, name: Optional[str] = None, active: Optional[bool] = None) -> bool:
+        """
+        Update name and/or active flag without touching the image data.
+        Returns False if the background does not exist.
+        """
+        changes: dict = {}
+        if name is not None:
+            changes["name"] = name
+        if active is not None:
+            changes["active"] = active
+        if not changes:
+            return cls.db_find_png_bytes(db_c, _id) is not None
+        collection: Collection = db_c.db[cls.COLLECTION_NAME]
+        return collection.update_one({"_id": _id}, {"$set": changes}).matched_count > 0
