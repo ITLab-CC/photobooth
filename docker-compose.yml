@@ -34,6 +34,9 @@ services:
       - redis
     env_file:
       - .env
+    volumes:
+      # The BEN2 model is downloaded on first start; keep it so restarts do not fetch it again.
+      - ./data/hf-cache:/root/.cache/huggingface
     networks:
       - default
     deploy:

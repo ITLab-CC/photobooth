@@ -2,7 +2,8 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm install
+# Cache mounts keep downloads between builds, even when a layer has to be rebuilt.
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY frontend ./
 RUN npm run build
 
@@ -19,7 +20,8 @@ WORKDIR /app
 
 # Copy backend requirements and install dependencies
 COPY requirements.txt .
-RUN pip install --upgrade pip \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
     && pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 \
     && pip install -r requirements.txt \
     # Other packages can pull in opencv-python-headless or -contrib. Mixed OpenCV wheels
