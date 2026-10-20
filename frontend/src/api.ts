@@ -386,6 +386,7 @@ export interface ImageProcessRequest {
   magic_style?: MagicStyle;
   face_swap_id?: string;
   swap_guest_faces?: boolean;
+  swap_guest_faces?: boolean;
   skip_frame?: boolean;
   light_match?: boolean;
 }
@@ -625,6 +626,26 @@ export async function getEventLogo(token: string): Promise<Blob> {
   return await res.blob();
 }
 
+// =============== 11) Paper and foil counter ===============
+export interface MediaResponse {
+  count: number;
+  capacity: number;
+  remaining: number;
+  low: boolean;
+}
+
+export async function getMedia(token: string): Promise<MediaResponse> {
+  return await request<MediaResponse>("GET", "/api/v1/print/stats", token);
+}
+
+export async function setMediaCapacity(token: string, capacity: number): Promise<MediaResponse> {
+  return await request<MediaResponse>("PUT", "/api/v1/print/stats", token, { capacity });
+}
+
+export async function resetMedia(token: string): Promise<MediaResponse> {
+  return await request<MediaResponse>("POST", "/api/v1/print/stats/reset", token);
+}
+
 // =============== 10) Face swap ===============
 export interface FaceResponse {
   face_id: string;
@@ -688,6 +709,7 @@ export interface HealthResponse {
   model: HealthCheck;
   disk: HealthCheck;
   print_queue: HealthCheck;
+  media: HealthCheck;
   backgrounds_total: number;
   backgrounds_active: number;
   photos_today: number;

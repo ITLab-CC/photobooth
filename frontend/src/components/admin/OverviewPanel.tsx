@@ -81,6 +81,7 @@ const OverviewPanel: React.FC<OverviewPanelProps> = ({ token, showMessage }) => 
         <StatusCard title="KI-Modell" check={health.model} />
         <StatusCard title="Speicherplatz" check={health.disk} />
         <StatusCard title="Druckwarteschlange" check={health.print_queue} />
+        <StatusCard title="Papier und Folie" check={health.media} />
       </Box>
 
       <Typography variant="h6" sx={{ mb: 1 }}>

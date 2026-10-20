@@ -40,6 +40,8 @@ services:
       # Face swap: the downloaded models and the stored faces (numbers and thumbnails, no photos).
       - ./data/face-models:/app/face-models
       - ./data/faces:/app/faces
+      # Small state files such as the paper counter and the event profiles.
+      - ./data/state:/app/state
     networks:
       - default
     deploy:

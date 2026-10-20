@@ -45,6 +45,7 @@ from process_img import IMGReplacer, resize_with_crop_or_pad
 from face_smiley_replacer import replace_faces_with_smileys_dnn
 from face_props import PROP_STYLES, apply_face_props
 import faceswap
+import printstate
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -1381,6 +1382,53 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
 
 # ---------------------------
+# Paper / foil counter
+# ---------------------------
+class MediaResponse(BaseModel):
+    count: int
+    capacity: int
+    remaining: int
+    low: bool
+
+class MediaCapacityRequest(BaseModel):
+    capacity: int = Field(..., ge=10, le=5000)
+
+
+def _media_response(status: printstate.MediaStatus) -> MediaResponse:
+    return MediaResponse(count=status.count, capacity=status.capacity, remaining=status.remaining, low=status.low)
+
+
+@app.get(
+    "/api/v1/print/stats",
+    response_model=MediaResponse,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="Prints since the last roll change and the roll's capacity."
+)
+async def api_media_status(session: Session = Depends(auth(["boss"]))) -> MediaResponse:
+    return _media_response(printstate.status())
+
+
+@app.put(
+    "/api/v1/print/stats",
+    response_model=MediaResponse,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="Set how many prints one roll of paper and foil holds."
+)
+async def api_media_capacity(req: MediaCapacityRequest, session: Session = Depends(auth(["boss"]))) -> MediaResponse:
+    return _media_response(printstate.set_capacity(req.capacity))
+
+
+@app.post(
+    "/api/v1/print/stats/reset",
+    response_model=MediaResponse,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="A new roll was inserted: start counting from zero."
+)
+async def api_media_reset(session: Session = Depends(auth(["boss"]))) -> MediaResponse:
+    return _media_response(printstate.reset())
+
+
+# ---------------------------
 # Photo strip
 # ---------------------------
 class StripRequest(BaseModel):
@@ -1494,6 +1542,8 @@ async def api_print_image(print_req: PrintRequest, session: Session = Depends(au
     max_prints = config.max_prints if config is not None else DEFAULT_MAX_PRINTS
     if not 1 <= print_req.amount <= max_prints:
         raise HTTPException(status_code=400, detail=f"Between 1 and {max_prints} copies are allowed")
+
+    printstate.add_prints(print_req.amount)
 
     # create a printer queue item
     for _ in range(print_req.amount):
@@ -1696,6 +1746,7 @@ class HealthResponse(BaseModel):
     model: HealthCheck
     disk: HealthCheck
     print_queue: HealthCheck
+    media: HealthCheck
     backgrounds_total: int
     backgrounds_active: int
     photos_today: int
@@ -1738,6 +1789,12 @@ async def api_health(session: Session = Depends(auth(["boss"]))) -> HealthRespon
     except Exception as e:
         print_queue = HealthCheck(ok=False, detail=f"Nicht lesbar: {e}")
 
+    roll = printstate.status()
+    media = HealthCheck(
+        ok=not roll.low,
+        detail=f"Noch etwa {roll.remaining} von {roll.capacity} Drucken auf der Rolle",
+    )
+
     try:
         metas = Background.db_find_meta(db)
     except Exception:
@@ -1750,6 +1807,7 @@ async def api_health(session: Session = Depends(auth(["boss"]))) -> HealthRespon
         model=model,
         disk=disk,
         print_queue=print_queue,
+        media=media,
         backgrounds_total=len(metas),
         backgrounds_active=sum(1 for m in metas if m["active"]),
         photos_today=ProcessingStats.photos if ProcessingStats.day == datetime.now().strftime("%Y-%m-%d") else 0,
