@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Box, Paper, Typography, AlertColor } from "@mui/material";
+import { Box, Button, CircularProgress, Paper, Typography, AlertColor } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
-import { getHealth, HealthCheck, HealthResponse } from "../../api";
+import { getHealth, runSelfTest, HealthCheck, HealthResponse, SelfTestResponse } from "../../api";
 
 interface OverviewPanelProps {
   token: string;
@@ -35,6 +35,20 @@ const Counter: React.FC<{ label: string; value: string }> = ({ label, value }) =
 const OverviewPanel: React.FC<OverviewPanelProps> = ({ token, showMessage }) => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [failed, setFailed] = useState(false);
+  const [selfTest, setSelfTest] = useState<SelfTestResponse | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const handleSelfTest = async () => {
+    setTesting(true);
+    setSelfTest(null);
+    try {
+      setSelfTest(await runSelfTest(token));
+    } catch {
+      showMessage("Der Selbsttest konnte nicht ausgeführt werden", "error");
+    } finally {
+      setTesting(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +97,29 @@ const OverviewPanel: React.FC<OverviewPanelProps> = ({ token, showMessage }) => 
         <StatusCard title="Druckwarteschlange" check={health.print_queue} />
         <StatusCard title="Papier und Folie" check={health.media} />
       </Box>
+
+      <Typography variant="h6" sx={{ mb: 1 }}>
+        Selbsttest
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        Prüft vor dem Event die ganze Kette mit einem erzeugten Testbild: Datenbank, Freisteller, Gesichtserkennung,
+        Rahmen, Hintergründe und Papier. Dauert einige Sekunden.
+      </Typography>
+      <Button variant="contained" onClick={handleSelfTest} disabled={testing} sx={{ mb: 2 }}>
+        {testing ? <CircularProgress size={22} color="inherit" /> : "Selbsttest starten"}
+      </Button>
+      {selfTest && (
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 2, mb: 4 }}>
+          {selfTest.checks.map((check) => (
+            <StatusCard
+              key={check.name}
+              title={`${check.name} (${check.seconds} s)`}
+              check={{ ok: check.ok, detail: check.detail }}
+            />
+          ))}
+        </Box>
+      )}
+      {!selfTest && <Box sx={{ mb: 4 }} />}
 
       <Typography variant="h6" sx={{ mb: 1 }}>
         Heute

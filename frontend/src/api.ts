@@ -625,6 +625,22 @@ export async function getEventLogo(token: string): Promise<Blob> {
   return await res.blob();
 }
 
+// =============== 13) Self test ===============
+export interface SelfTestCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+  seconds: number;
+}
+export interface SelfTestResponse {
+  ok: boolean;
+  checks: SelfTestCheck[];
+}
+
+export async function runSelfTest(token: string): Promise<SelfTestResponse> {
+  return await request<SelfTestResponse>("POST", "/api/v1/selftest", token);
+}
+
 // =============== 12) Event profiles ===============
 export interface ProfileResponse {
   profile_id: string;

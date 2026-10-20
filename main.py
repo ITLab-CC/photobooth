@@ -27,7 +27,9 @@ from fastapi_limiter.depends import RateLimiter
 import uvicorn
 
 from background import Background
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
+import numpy as np
+import face_props
 from thumbnails import png_to_webp_thumbnail
 from gallery import Gallery
 from img import IMG
@@ -1922,6 +1924,100 @@ async def api_health(session: Session = Depends(auth(["boss"]))) -> HealthRespon
         magic_photos_today=ProcessingStats.magic_photos if ProcessingStats.day == datetime.now().strftime("%Y-%m-%d") else 0,
         avg_processing_seconds=round(sum(durations) / len(durations), 1) if durations else None,
     )
+
+# ---------------------------
+# Self test
+# ---------------------------
+class SelfTestCheck(BaseModel):
+    name: str
+    ok: bool
+    detail: str
+    seconds: float
+
+class SelfTestResponse(BaseModel):
+    ok: bool
+    checks: List[SelfTestCheck]
+
+
+def _timed(name: str, check: Callable[[], str]) -> SelfTestCheck:
+    """Run one check; it returns a detail text, or raises to fail."""
+    started = time.perf_counter()
+    try:
+        detail, ok = check(), True
+    except Exception as e:
+        detail, ok = str(e) or e.__class__.__name__, False
+    return SelfTestCheck(name=name, ok=ok, detail=detail, seconds=round(time.perf_counter() - started, 2))
+
+
+@app.post(
+    "/api/v1/selftest",
+    response_model=SelfTestResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=5))],
+    description="Run the whole chain once with a generated test image (database, cut-out model, face detection, face swap models, frame, backgrounds, paper) and report what works and how long it takes."
+)
+async def api_selftest(session: Session = Depends(auth(["boss"]))) -> SelfTestResponse:
+    db = session.mongodb_connection
+
+    def database() -> str:
+        db.db.command("ping")
+        return "Verbunden"
+
+    def cutout() -> str:
+        # a bright oval on a dark background: the cut-out model must return something with transparency
+        test = Image.new("RGB", (640, 640), (30, 30, 40))
+        ImageDraw.Draw(test).ellipse([160, 80, 480, 600], fill=(220, 180, 150))
+        result = Replacer.remove_background(test)
+        alpha_values = result.convert("RGBA").getchannel("A").getextrema()
+        if alpha_values[0] == alpha_values[1]:
+            raise RuntimeError("Der Freisteller hat nichts freigestellt")
+        return f"Läuft auf {'der Grafikkarte' if torch.cuda.is_available() else 'der CPU (langsam)'}"
+
+    def detection() -> str:
+        face_props.detect_faces(np.full((480, 640, 3), 128, dtype=np.uint8))
+        return "Modell geladen"
+
+    def swap_models() -> str:
+        if not faceswap.models_ready():
+            raise RuntimeError(faceswap.download_error() or "Modelle werden noch geladen")
+        faceswap._load()
+        return "Modelle bereit"
+
+    def frame() -> str:
+        found = db.db[FRAME.COLLECTION_NAME].count_documents({"is_active": True})
+        if found == 0:
+            raise RuntimeError("Kein aktiver Rahmen")
+        return "Aktiver Rahmen vorhanden"
+
+    def backgrounds() -> str:
+        visible = sum(1 for meta in Background.db_find_meta(db) if meta["active"])
+        if visible == 0:
+            raise RuntimeError("Kein sichtbarer Hintergrund")
+        return f"{visible} sichtbar"
+
+    def paper() -> str:
+        roll = printstate.status()
+        if roll.low:
+            raise RuntimeError(f"Rolle fast leer: noch etwa {roll.remaining} Drucke")
+        return f"Noch etwa {roll.remaining} Drucke"
+
+    def disk() -> str:
+        free_gb = shutil.disk_usage("/").free / 1024**3
+        if free_gb < 5:
+            raise RuntimeError(f"Nur {free_gb:.1f} GB frei")
+        return f"{free_gb:.1f} GB frei"
+
+    checks = [
+        _timed("Datenbank", database),
+        _timed("Freisteller (KI)", cutout),
+        _timed("Gesichtserkennung", detection),
+        _timed("Gesichtstausch-Modelle", swap_models),
+        _timed("Rahmen", frame),
+        _timed("Hintergründe", backgrounds),
+        _timed("Papier und Folie", paper),
+        _timed("Speicherplatz", disk),
+    ]
+    return SelfTestResponse(ok=all(c.ok for c in checks), checks=checks)
+
 
 # ---------------------------
 # Webpage
