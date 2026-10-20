@@ -5,6 +5,8 @@ import CameraPreview from "./CameraPreview";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import confetti from "canvas-confetti";
 import { KIOSK_WIDTH, brand, px } from "../theme";
+import { runtimeConfig } from "../config/event";
+import { playChime, playGo, playShutter, playTick } from "../utils/sound";
 
 const countPop = keyframes`
   from { opacity: 0; transform: scale(0.7); }
@@ -49,6 +51,10 @@ export default function CustomCameraComponent({
   const countDown = async (from: number) => {
     for (let n = from; n >= 0; n--) {
       setCountdown(n);
+      if (runtimeConfig.soundEnabled) {
+        if (n === 0) playGo();
+        else playTick();
+      }
       if (n === 0) {
         videoRef.current?.pause();
       }
@@ -86,12 +92,14 @@ export default function CustomCameraComponent({
           setSeriesLabel(`Foto ${i + 1} von ${seriesCount}`);
         }
         if (i > 0) {
+          if (runtimeConfig.soundEnabled) playChime();
           setMessage("Super! Gleich kommt das nächste.");
           await sleep(1500);
           setMessage(null);
         }
         await countDown(i === 0 ? 3 : 2);
         const shot = grabFrame();
+        if (runtimeConfig.soundEnabled) playShutter();
         setCountdown(null);
         videoRef.current?.play();
         if (!shot) {

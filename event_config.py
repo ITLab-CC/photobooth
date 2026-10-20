@@ -26,6 +26,7 @@ class EventConfig:
     start_text: str = DEFAULT_START_TEXT
     max_prints: int = DEFAULT_MAX_PRINTS
     series_count: int = DEFAULT_SERIES_COUNT
+    sound_enabled: bool = True
     _id: str = field(default=EVENT_CONFIG_ID)
 
     # Collection name for MongoDB.
@@ -46,6 +47,7 @@ class EventConfig:
             "start_text": self.start_text,
             "max_prints": self.max_prints,
             "series_count": self.series_count,
+            "sound_enabled": self.sound_enabled,
         }
 
     def __str__(self) -> str:
@@ -159,6 +161,7 @@ class EventConfig:
             start_text=data.get("start_text", DEFAULT_START_TEXT),
             max_prints=int(data.get("max_prints", DEFAULT_MAX_PRINTS)),
             series_count=int(data.get("series_count", DEFAULT_SERIES_COUNT)),
+            sound_enabled=bool(data.get("sound_enabled", True)),
             _id=str(data.get("_id", EVENT_CONFIG_ID)),
         )
 

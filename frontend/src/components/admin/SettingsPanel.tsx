@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Box, TextField, Button, AlertColor, Stack, Typography } from "@mui/material";
+import { Box, TextField, Button, AlertColor, Stack, Typography, Switch, FormControlLabel } from "@mui/material";
 import {
   getEventConfig,
   updateEventConfig,
@@ -143,6 +143,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
           slotProps={{ htmlInput: { min: 1, max: 10 } }}
           helperText="So viele Exemplare eines Fotos können Gäste höchstens drucken. Bei 1 entfällt die Auswahl."
           fullWidth
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={config.sound_enabled}
+              onChange={(e) => setConfig((prev) => (prev ? { ...prev, sound_enabled: e.target.checked } : prev))}
+            />
+          }
+          label="Töne (Countdown und Auslöser)"
         />
         <Box>
           <Button variant="contained" onClick={handleSave} disabled={saving}>

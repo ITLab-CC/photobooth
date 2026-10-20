@@ -575,6 +575,7 @@ export interface EventConfigResponse {
   start_text: string;
   max_prints: number;
   series_count: number;
+  sound_enabled: boolean;
   has_logo: boolean;
 }
 

@@ -1026,6 +1026,7 @@ SETTINGS_DEFAULTS = {
     "start_text": DEFAULT_START_TEXT,
     "max_prints": DEFAULT_MAX_PRINTS,
     "series_count": DEFAULT_SERIES_COUNT,
+    "sound_enabled": True,
     "has_logo": False,
 }
 
@@ -1040,6 +1041,7 @@ class SettingsRequest(BaseModel):
     start_text: str = DEFAULT_START_TEXT
     max_prints: int = Field(DEFAULT_MAX_PRINTS, ge=1, le=MAX_PRINTS_LIMIT)
     series_count: int = Field(DEFAULT_SERIES_COUNT, ge=1, le=MAX_SERIES_COUNT)
+    sound_enabled: bool = True
 
 
 class SettingsResponse(BaseModel):
@@ -1050,6 +1052,7 @@ class SettingsResponse(BaseModel):
     start_text: str = DEFAULT_START_TEXT
     max_prints: int = DEFAULT_MAX_PRINTS
     series_count: int = DEFAULT_SERIES_COUNT
+    sound_enabled: bool = True
     has_logo: bool = False
 
 
@@ -1062,6 +1065,7 @@ def _settings_response(config: EventConfig, has_logo: bool) -> SettingsResponse:
         start_text=config.start_text,
         max_prints=config.max_prints,
         series_count=config.series_count,
+        sound_enabled=config.sound_enabled,
         has_logo=has_logo,
     )
 
@@ -1100,6 +1104,7 @@ async def api_settings_update(settings: SettingsRequest, session: Session = Depe
         start_text=settings.start_text.strip() or DEFAULT_START_TEXT,
         max_prints=settings.max_prints,
         series_count=settings.series_count,
+        sound_enabled=settings.sound_enabled,
     )
     if existing is None:
         config.db_save(db)
