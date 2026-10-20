@@ -12,15 +12,9 @@
       - POST   /api/v1/gallery
       - GET    /api/v1/galleries
       - PUT    /api/v1/gallery/{gallery_id}/expiration
-      - PUT    /api/v1/gallery/{gallery_id}/pin
-      - PUT    /api/v1/gallery/{gallery_id}/pin/set
       - POST   /api/v1/gallery/{gallery_id}/image
-      - GET    /api/v1/gallery/{gallery_id}/qr
-      - GET    /api/v1/gallery/{gallery_id}/images/pin/{pin}
-      - GET    /api/v1/gallery/{gallery_id}/image/{image_id}/pin/{pin}
       - DELETE /api/v1/gallery/{gallery_id}/image/{image_id}
       - DELETE /api/v1/gallery/{gallery_id}
-      - DELETE /api/v1/gallery/{gallery_id}/pin/{pin}
 
    3) Image:
       - GET    /api/v1/images
@@ -146,7 +140,6 @@ export async function logoutSession(
 export interface GalleryRequest {
   expiration_time?: string; // ISO-String
   images?: string[];
-  pin?: string;
 }
 
 export interface GalleryResponse {
@@ -159,10 +152,6 @@ export interface GalleryResponse {
 
 export interface GalleryListResponse {
   galleries: GalleryResponse[];
-}
-
-export interface GalleryPinRequest {
-  pin?: string | null;
 }
 
 export interface ResponseImage {
@@ -212,36 +201,6 @@ export async function updateGalleryExpiration(
   );
 }
 
-// 2.4) PUT /api/v1/gallery/{gallery_id}/pin
-export async function updateGalleryPin(
-  token: string,
-  galleryId: string,
-  newPin: string
-): Promise<GalleryResponse> {
-  const body: GalleryPinRequest = { pin: newPin };
-  return await request<GalleryResponse>(
-    "PUT",
-    `/api/v1/gallery/${galleryId}/pin`,
-    token,
-    body
-  );
-}
-
-// 2.5) PUT /api/v1/gallery/{gallery_id}/pin/set
-export async function setGalleryPin(
-  token: string,
-  galleryId: string,
-  pin: string
-): Promise<GalleryResponse> {
-  const body: GalleryPinRequest = { pin };
-  return await request<GalleryResponse>(
-    "PUT",
-    `/api/v1/gallery/${galleryId}/pin/set`,
-    token,
-    body
-  );
-}
-
 // 2.6) POST /api/v1/gallery/{gallery_id}/image
 export interface GalleryImageRequest {
   image_base64: string;
@@ -253,70 +212,15 @@ export interface GalleryImageResponse {
 export async function addGalleryImage(
   token: string,
   galleryId: string,
-  base64: string,
-  pin?: string // optional, wenn euer Endpoint es zulässt
+  base64: string
 ): Promise<GalleryImageResponse> {
-  // Evtl. muss der pin in den Body oder Query-Param?
-  // Im Code oben sieht man, dass der pin in den Body kommt,
-  // aber es kann je nach Implementierung variieren.
-  const body: any = { image_base64: base64 };
-  if (pin) {
-    body.pin = pin;
-  }
+  const body = { image_base64: base64 };
   return await request<GalleryImageResponse>(
     "POST",
     `/api/v1/gallery/${galleryId}/image`,
     token,
     body
   );
-}
-
-// 2.7) GET /api/v1/gallery/{gallery_id}/qr
-// Gibt ein StreamingResponse (PNG) zurück – hier ein Blob
-export async function getGalleryQR(
-  token: string,
-  galleryId: string
-): Promise<Blob> {
-  const res = await fetch(`${BASE_URL}/api/v1/gallery/${galleryId}/qr`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    throw new Error(`Fehler beim Laden des QR-Codes`);
-  }
-  return await res.blob();
-}
-
-// 2.8) GET /api/v1/gallery/{gallery_id}/images/pin/{pin}
-export async function getGalleryImagesByPin(
-  galleryId: string,
-  pin: string
-): Promise<GalleryImageListResponse> {
-  // Hier kein Token nötig, da laut Code "img_viewer" oder Public?
-  // Dein Python-Code nutzt "img_viewer", also nur Basic-Call:
-  const res = await fetch(
-    `${BASE_URL}/api/v1/gallery/${galleryId}/images/pin/${pin}`
-  );
-  if (!res.ok) {
-    throw new Error(`Fehler beim Laden der Galerie-Bilder (PIN)`);
-  }
-  return await res.json();
-}
-
-// 2.9) GET /api/v1/gallery/{gallery_id}/image/{image_id}/pin/{pin}
-// Gibt ein PNG-Stream zurück
-export async function getGalleryImageByPin(
-  galleryId: string,
-  imageId: string,
-  pin: string
-): Promise<Blob> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/gallery/${galleryId}/image/${imageId}/pin/${pin}`
-  );
-  if (!res.ok) {
-    throw new Error(`Fehler beim Laden eines Bildes (PIN)`);
-  }
-  return await res.blob();
 }
 
 // 2.10) DELETE /api/v1/gallery/{gallery_id}/image/{image_id}
@@ -342,23 +246,6 @@ export async function deleteGallery(
     `/api/v1/gallery/${galleryId}`,
     token
   );
-}
-
-// 2.12) DELETE /api/v1/gallery/{gallery_id}/pin/{pin}
-export async function deleteGalleryWithPin(
-  galleryId: string,
-  pin: string
-): Promise<{ ok: boolean }> {
-  // Laut Backend kein Token nötig, da es nur den Pin prüft
-  const res = await fetch(
-    `${BASE_URL}/api/v1/gallery/${galleryId}/pin/${pin}`,
-    { method: "DELETE" }
-  );
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Fehler bei Galerie-Löschung mit PIN: ${errorText}`);
-  }
-  return await res.json();
 }
 
 // =============== 3) Image-Interfaces & Funktionen ===============
@@ -455,7 +342,6 @@ export interface ImageProcessRequest {
   image_background_id: string;
   img_frame_id?: string;
   refine_foreground?: boolean;
-  qr_code?: boolean;
   random_stuff?: boolean;
 }
 export interface ImageProcessResponse {

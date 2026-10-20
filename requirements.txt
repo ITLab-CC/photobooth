@@ -9,8 +9,6 @@ uvicorn[standard]
 fastapi-limiter
 bcrypt
 redis
-qrcode
-types-qrcode
-dotenv
+types-dotenv
 opencv-python
 numpy

@@ -59,12 +59,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
           onChange={(e) => updateField("brand_name", e.target.value)}
           fullWidth
         />
-        <TextField
-          label="Redirect-URL bei falscher PIN"
-          value={config.pin_fail_redirect_url}
-          onChange={(e) => updateField("pin_fail_redirect_url", e.target.value)}
-          fullWidth
-        />
         <Box>
           <Button variant="contained" onClick={handleSave} disabled={saving}>
             Speichern

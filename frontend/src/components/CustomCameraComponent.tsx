@@ -78,7 +78,7 @@ export default function CustomCameraComponent({
         // Entferne den Daten-URL-Präfix
         const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
         try {
-          const response = await addGalleryImage(token, galleryId, base64Data, "");
+          const response = await addGalleryImage(token, galleryId, base64Data);
           logDebug("Foto erfolgreich hochgeladen, Bild ID:", response.image_id);
           if (onImageUpload) {
             onImageUpload(response.image_id);

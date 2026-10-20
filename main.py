@@ -18,7 +18,6 @@ from starlette.datastructures import Headers
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
-import qrcode
 import uvicorn
 
 from background import Background
@@ -445,74 +444,6 @@ async def api_gallery_change_expiration(gallery_id: str, expiration: GalleryExpi
         pin_set=True if g.pin_hash is not None else False
     )
 
-# change pin
-class GalleryPinRequest(BaseModel):
-    pin: Optional[str] = None
-
-@app.put(
-    "/api/v1/gallery/{gallery_id}/pin",
-    response_model=GalleryResponse,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Change the pin of an existing gallery. The endpoint validates that the gallery has not expired before updating."
-)
-async def api_gallery_change_pin(gallery_id: str, pin: Optional[GalleryPinRequest] = None, session: Session = Depends(auth(["boss"]))) -> GalleryResponse:
-    db = session.mongodb_connection
-
-
-    g = Gallery.db_find(db, gallery_id)
-    if g is None:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-
-    # Ensure expiration time is timezone-aware before comparing
-    exp_time = g.expiration_time if g.expiration_time.tzinfo else g.expiration_time.replace(tzinfo=timezone.utc)
-    if exp_time < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Gallery has already expired")
-
-    if pin is None:
-        pin = GalleryPinRequest()
-
-    g.db_set_pin(db, pin.pin)
-
-    return GalleryResponse(
-        gallery_id=g._id,
-        creation_time=g.creation_time,
-        expiration_time=g.expiration_time,
-        images=g.images,
-        pin_set=True if g.pin_hash is not None else False
-    )
-
-# set pin only if not set
-@app.put(
-    "/api/v1/gallery/{gallery_id}/pin/set",
-    response_model=GalleryResponse,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Set a pin for a gallery that does not already have one. This endpoint is used when a gallery’s pin needs to be initialized."
-)
-async def api_gallery_set_pin(gallery_id: str, pin: GalleryPinRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> GalleryResponse:
-    db = session.mongodb_connection
-
-    g = Gallery.db_find(db, gallery_id)
-    if g is None:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-
-    # Ensure expiration time is timezone-aware before comparing
-    exp_time = g.expiration_time if g.expiration_time.tzinfo else g.expiration_time.replace(tzinfo=timezone.utc)
-    if exp_time < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Gallery has already expired")
-
-    if g.pin_hash is not None:
-        raise HTTPException(status_code=400, detail="Gallery already has a pin")
-
-    g.db_set_pin(db, pin.pin)
-
-    return GalleryResponse(
-        gallery_id=g._id,
-        creation_time=g.creation_time,
-        expiration_time=g.expiration_time,
-        images=g.images,
-        pin_set=True if g.pin_hash is not None else False
-    )
-
 # add image to gallery
 class GalleryImageRequest(BaseModel):
     image_base64: str # base64 encoded image
@@ -557,29 +488,6 @@ async def api_gallery_add_image(gallery_id: str, image: GalleryImageRequest, ses
 
     return ResponseImage(image_id=img._id, type=img.type, gallery=img.gallery)
 
-# get qr-code url to gallery
-@app.get(
-    "/api/v1/gallery/{gallery_id}/qr",
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Retrieve a QR code URL that links to the specified gallery."
-)
-async def api_gallery_qr(gallery_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:
-    # find gallery
-    db = session.mongodb_connection
-
-    g = Gallery.db_find(db, gallery_id)
-    if g is None:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-
-    img_url = f"{URL}/gallery/?id={gallery_id}"
-    qr_img = qrcode.make(img_url)
-
-    img_bytes_io = io.BytesIO()
-    qr_img.save(img_bytes_io)
-    img_bytes_io.seek(0)
-
-    return StreamingResponse(content=img_bytes_io, media_type="image/png")
-
 class GalleryImageListResponse(BaseModel):
     images: List[ResponseImage]
 
@@ -610,96 +518,6 @@ async def api_gallery_get_images(gallery_id: str, session: Session = Depends(aut
             return_images.append(ResponseImage(image_id=img._id, type=img.type, gallery=img.gallery))
 
     return GalleryImageListResponse(images=return_images)
-
-# check if gallery exists with pin
-class GalleryCheckResponse(BaseModel):
-    exists: bool
-
-@app.get(
-    "/api/v1/gallery/{gallery_id}",
-    response_model=GalleryCheckResponse,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Check if a gallery exists and if this gallery has a pin set."
-)
-async def api_gallery_check(gallery_id: str) -> GalleryCheckResponse:
-    db = System["img_viewer"]
-
-    g = Gallery.db_find(db, gallery_id)
-    if g is None:
-        return GalleryCheckResponse(exists=False)
-    
-    return GalleryCheckResponse(exists=True if g.pin_hash is not None else False)
-
-# get all images of a gallery with pin
-@app.get(
-    "/api/v1/gallery/{gallery_id}/images/pin/{pin}",
-    response_model=GalleryImageListResponse,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Retrieve all images from a gallery using a valid gallery pin. The gallery must have a pin and not be expired."
-)
-async def api_gallery_get_images_with_pin(gallery_id: str, pin: str) -> GalleryImageListResponse:
-    db = System["img_viewer"]
-
-    g = Gallery.db_find(db, gallery_id)
-    if g is None:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-
-    # Ensure expiration time is timezone-aware before comparing
-    exp_time = g.expiration_time if g.expiration_time.tzinfo else g.expiration_time.replace(tzinfo=timezone.utc)
-    if exp_time < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Gallery has already expired")
-
-    if g.pin_hash is None:
-        raise HTTPException(status_code=400, detail="Gallery has no pin")
-
-    if not g.validate_pin(pin):
-        raise HTTPException(status_code=403, detail="Invalid pin")
-
-    images = g.images
-    return_images: List[ResponseImage] = []
-    for img_id in images:
-        img = IMG.db_find(db, img_id)
-        if img is not None:
-            return_images.append(ResponseImage(image_id=img._id, type=img.type, gallery=img.gallery))
-
-    return GalleryImageListResponse(images=return_images)
-
-# get image with pin
-@app.get(
-    "/api/v1/gallery/{gallery_id}/image/{image_id}/pin/{pin}",
-    dependencies=[Depends(RateLimiter(times=50, seconds=1))],
-    description="Retrieve a specific image from a gallery using a valid pin. Verifies that the image belongs to the specified gallery."
-)
-async def api_gallery_get_image_with_pin(gallery_id: str, image_id: str, pin: str) -> StreamingResponse:
-    db = System["img_viewer"]
-
-    g = Gallery.db_find(db, gallery_id)
-    if g is None:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-
-    # Ensure expiration time is timezone-aware before comparing
-    exp_time = g.expiration_time if g.expiration_time.tzinfo else g.expiration_time.replace(tzinfo=timezone.utc)
-    if exp_time < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Gallery has already expired")
-
-    if g.pin_hash is None:
-        raise HTTPException(status_code=400, detail="Gallery has no pin")
-
-    if not g.validate_pin(pin):
-        raise HTTPException(status_code=403, detail="Invalid pin")
-
-    img = IMG.db_find(db, image_id)
-    if img is None:
-        raise HTTPException(status_code=404, detail="Image not found")
-
-    if img.gallery != gallery_id:
-        raise HTTPException(status_code=400, detail="Image does not belong to this gallery")
-
-    img_bytes_io = io.BytesIO()
-    img.img.save(img_bytes_io, format="PNG")
-    img_bytes_io.seek(0)
-
-    return StreamingResponse(content=img_bytes_io, media_type="image/png")
 
 # get image without pin (photo booth)
 @app.get(
@@ -800,39 +618,6 @@ async def api_gallery_delete(gallery_id: str, session: Session = Depends(auth(["
         except Exception as e:
             print(f"Error deleting print job: {e}")
 
-    g.db_delete(db)
-
-    return OK(ok=True)
-
-
-# remove gallery with pin and all img in it
-@app.delete(
-    "/api/v1/gallery/{gallery_id}/pin/{pin}",
-    response_model=OK,
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
-    description="Remove a gallery and all of its associated images using a valid pin."
-)
-async def api_gallery_delete_with_pin(gallery_id: str, pin: str) -> OK:
-    db = System["img_viewer"]
-
-    g = Gallery.db_find(db, gallery_id)
-    if g is None:
-        raise HTTPException(status_code=404, detail="Gallery not found")
-    
-    # validate pin
-    if not g.validate_pin(pin):
-        raise HTTPException(status_code=403, detail="Invalid pin")
-
-    # delete all images
-    IMG.db_delete_by_gallery(db, gallery_id)
-
-    # delete all print jobs
-    for img_id in g.images:
-        try:
-            PrinterQueueItem.db_delete_by_img_id(db, img_id)
-        except Exception as e:
-            print(f"Error deleting print job: {e}")
-    
     g.db_delete(db)
 
     return OK(ok=True)
@@ -1245,7 +1030,6 @@ class ImageProcessRequest(BaseModel):
     image_background_id: Optional[str] = None
     img_frame_id: str
     refine_foreground: bool = False
-    qr_code: bool = False
     random_stuff: bool = False
 
 class ImageProcessResponse(BaseModel):
@@ -1288,26 +1072,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     if frame_img is None:
         raise HTTPException(status_code=404, detail="Frame image not found")
 
-    # generate qr code
-    try:
-        gallery_id = g.id
-        img_url = f"{URL}/gallery/?id={gallery_id}"
-        qr_img = qrcode.make(img_url)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error generating QR code: " + str(e))
-
-    # add qr code to the frame
     frame_with_qr = frame_img.frame
-    if image.qr_code:
-        try:
-            frame_with_qr = Replacer.add_qr_code(
-                frame_img.frame,
-                qr_img, # type: ignore
-                frame_img.qr_position,
-                frame_img.qr_scale
-                )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail="Error adding QR code to frame: " + str(e))
 
     # remove background
     if background_img is not None:
