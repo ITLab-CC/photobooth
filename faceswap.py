@@ -212,7 +212,11 @@ def _load_embedding(face_id: str) -> np.ndarray:
 
 
 # ---------------------------------------------------------------- the swap
-def _swap_one(frame: np.ndarray, kps: np.ndarray, latent: np.ndarray) -> np.ndarray:
+def _swap_one(frame: np.ndarray, canvas: np.ndarray, kps: np.ndarray, latent: np.ndarray) -> np.ndarray:
+    """
+    Take pose and expression from the face at kps in `frame`, give it the identity in `latent` and paste the
+    result onto `canvas` (a copy of the frame that may already contain other swapped faces).
+    """
     assert _swapper is not None
     crop, matrix = _align(frame, kps, SWAP_SIZE)
     blob = cv2.dnn.blobFromImage(crop, 1.0 / 255.0, (SWAP_SIZE, SWAP_SIZE), (0, 0, 0), swapRB=True)
@@ -231,7 +235,7 @@ def _swap_one(frame: np.ndarray, kps: np.ndarray, latent: np.ndarray) -> np.ndar
     height, width = frame.shape[:2]
     warped = cv2.warpAffine(swapped, inverse, (width, height), flags=cv2.INTER_CUBIC, borderValue=0.0)
     warped_mask = cv2.warpAffine(mask, inverse, (width, height), flags=cv2.INTER_LINEAR, borderValue=0.0)[..., None]
-    return (warped.astype(np.float32) * warped_mask + frame.astype(np.float32) * (1.0 - warped_mask)).astype(np.uint8)
+    return (warped.astype(np.float32) * warped_mask + canvas.astype(np.float32) * (1.0 - warped_mask)).astype(np.uint8)
 
 
 def _face_mask() -> np.ndarray:
@@ -274,5 +278,29 @@ def swap_faces(photo: Image.Image, face_id: str) -> Image.Image:
         return photo
     result = frame
     for face in faces:
-        result = _swap_one(result, face.kps, latent)
+        result = _swap_one(frame, result, face.kps, latent)
+    return Image.fromarray(cv2.cvtColor(result, cv2.COLOR_BGR2RGB))
+
+
+def _latent_for(embedding: np.ndarray) -> np.ndarray:
+    assert _emap is not None
+    latent = np.dot(embedding.reshape(1, -1), _emap)
+    return (latent / np.linalg.norm(latent)).astype(np.float32)
+
+
+def swap_guest_faces(photo: Image.Image) -> Image.Image:
+    """
+    The people in the photo trade faces with each other: everyone gets the next person's face, and the last
+    one gets the first's. Nothing is stored. Needs at least two faces, otherwise the photo is returned unchanged.
+    """
+    _load()
+    frame = _to_bgr(photo)
+    faces = detect_faces(frame)
+    if len(faces) < 2:
+        return photo
+    # Identities are read from the untouched photo, so a face is never swapped twice.
+    latents = [_latent_for(_embedding(frame, face.kps)) for face in faces]
+    result = frame
+    for index, face in enumerate(faces):
+        result = _swap_one(frame, result, face.kps, latents[(index + 1) % len(faces)])
     return Image.fromarray(cv2.cvtColor(result, cv2.COLOR_BGR2RGB))

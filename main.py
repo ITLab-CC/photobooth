@@ -1178,6 +1178,7 @@ class ImageProcessRequest(BaseModel):
     random_stuff: bool = False
     light_match: bool = True  # adapt the person's light to the new background
     face_swap_id: Optional[str] = None  # replace all faces with this stored face (see /api/v1/faces)
+    swap_guest_faces: bool = False  # the people in the photo trade faces with each other (needs two or more)
     magic_style: str = "smileys"  # "smileys" or one of face_props.PROP_STYLES
 
 class ProcessingStats:
@@ -1247,7 +1248,14 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
     # face swap works on the camera photo itself, before the person is cut out
     source_img = img.img
-    if image.face_swap_id:
+    if image.swap_guest_faces:
+        try:
+            source_img = faceswap.swap_guest_faces(source_img)
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error swapping faces in image: " + str(e))
+    elif image.face_swap_id:
         try:
             source_img = faceswap.swap_faces(source_img, image.face_swap_id)
         except (KeyError, ValueError):

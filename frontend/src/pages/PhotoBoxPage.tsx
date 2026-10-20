@@ -122,6 +122,9 @@ export default function PhotoBoxPage() {
   // Faces from the admin dashboard that can replace the guests' faces (face swap).
   const [faces, setFaces] = useState<FaceResponse[]>([]);
   const [faceSwapId, setFaceSwapId] = useState<string | null>(null);
+  // "Gesichter tauschen": the guests in the photo trade faces; offered once the face models are ready.
+  const [guestSwap, setGuestSwap] = useState(false);
+  const [swapReady, setSwapReady] = useState(false);
   // Photos of a series while the guests pick the best one (base64 PNG).
   const [candidates, setCandidates] = useState<string[] | null>(null);
   const [frameId, setFrameId] = useState<string | null>(null);
@@ -162,7 +165,10 @@ export default function PhotoBoxPage() {
   useEffect(() => {
     if (token) {
       listFaces(token)
-        .then((res) => setFaces(res.models_ready ? res.faces : []))
+        .then((res) => {
+          setFaces(res.models_ready ? res.faces : []);
+          setSwapReady(res.models_ready);
+        })
         .catch((err) => console.error("Fehler beim Laden der Gesichter:", err));
     }
   }, [token]);
@@ -229,10 +235,11 @@ export default function PhotoBoxPage() {
 
   // Schritte, die der Gast während der KI-Verarbeitung sieht
   const processingSteps = [
-    ...(magicEnabled && faceSwapId ? ["Die Gesichter werden getauscht 🎭"] : []),
+    ...(magicEnabled && guestSwap ? ["Ihr tauscht die Gesichter 🔄"] : []),
+    ...(magicEnabled && faceSwapId && !guestSwap ? ["Die Gesichter werden getauscht 🎭"] : []),
     selectedBackgroundId !== null ? "Ich schneide euch aus…" : "Euer Foto wird angepasst…",
     ...(selectedBackgroundId !== null ? ["Euer Hintergrund wird gebaut…"] : []),
-    ...(magicEnabled && !faceSwapId ? ["Magic wird gestreut ✨"] : []),
+    ...(magicEnabled && !faceSwapId && !guestSwap ? ["Magic wird gestreut ✨"] : []),
     "Der Rahmen wird gesetzt…",
   ];
 
@@ -311,9 +318,10 @@ export default function PhotoBoxPage() {
       image_id: imageId,
       img_frame_id: frameId ? frameId : "",
       refine_foreground: false,
-      random_stuff: magicEnabled && !faceSwapId,
+      random_stuff: magicEnabled && !faceSwapId && !guestSwap,
       magic_style: magicStyle,
-      ...(magicEnabled && faceSwapId ? { face_swap_id: faceSwapId } : {}),
+      ...(magicEnabled && faceSwapId && !guestSwap ? { face_swap_id: faceSwapId } : {}),
+      ...(magicEnabled && guestSwap ? { swap_guest_faces: true } : {}),
     };
     
     // image_background_id nur hinzufügen, wenn ein Hintergrund ausgewählt wurde
@@ -607,10 +615,17 @@ export default function PhotoBoxPage() {
                 <Box data-scroll-x role="radiogroup" aria-label="Magic-Stil" sx={chipRowSx}>
                   {[
                     { value: "off", label: "Aus" },
+                    ...(swapReady ? [{ value: "guest_swap", label: "🔄 Gesichter tauschen" }] : []),
                     ...faces.map((face) => ({ value: `face:${face.face_id}`, label: `🎭 ${face.name}` })),
                     ...MAGIC_STYLES,
                   ].map((style) => {
-                    const current = !magicEnabled ? "off" : faceSwapId ? `face:${faceSwapId}` : magicStyle;
+                    const current = !magicEnabled
+                      ? "off"
+                      : guestSwap
+                        ? "guest_swap"
+                        : faceSwapId
+                          ? `face:${faceSwapId}`
+                          : magicStyle;
                     const selected = current === style.value;
                     return (
                       <Button
@@ -619,8 +634,12 @@ export default function PhotoBoxPage() {
                         aria-checked={selected}
                         variant={selected ? "contained" : "outlined"}
                         onClick={() => {
+                          setGuestSwap(style.value === "guest_swap");
                           if (style.value === "off") {
                             setMagicEnabled(false);
+                          } else if (style.value === "guest_swap") {
+                            setMagicEnabled(true);
+                            setFaceSwapId(null);
                           } else if (style.value.startsWith("face:")) {
                             setMagicEnabled(true);
                             setFaceSwapId(style.value.slice("face:".length));

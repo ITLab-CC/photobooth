@@ -385,6 +385,7 @@ export interface ImageProcessRequest {
   random_stuff?: boolean;
   magic_style?: MagicStyle;
   face_swap_id?: string;
+  swap_guest_faces?: boolean;
   light_match?: boolean;
 }
 export interface ImageProcessResponse {
