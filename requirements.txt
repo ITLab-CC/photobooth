@@ -2,7 +2,7 @@ mypy
 torch
 Pillow
 git+https://github.com/PramaLLC/BEN2.git#egg=ben2
-opencv-python
+opencv-python<5
 pymongo
 fastapi[standard]
 uvicorn[standard]
@@ -10,5 +10,4 @@ fastapi-limiter<0.2
 bcrypt
 redis
 dotenv
-opencv-python
 numpy

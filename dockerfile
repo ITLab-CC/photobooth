@@ -26,8 +26,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && pip install -r requirements.txt \
     # Other packages can pull in opencv-python-headless or -contrib. Mixed OpenCV wheels
     # overwrite each other and leave cv2.dnn empty, so end with exactly one clean install.
+    # OpenCV 5 dropped the Caffe loader that face detection uses, so stay below it.
     && pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python \
-    && pip install opencv-python
+    && pip install "opencv-python<5"
 
 # Stage 3: Final runtime environment
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
