@@ -16,8 +16,8 @@ SUPERSAMPLE = 2
 # A face box is (x, y, w, h). Props are drawn on a layer that starts half a face width
 # left of the box and one face height above it, so hats and crowns have room.
 LAYER_LEFT = 0.5
-LAYER_TOP = 1.0
-LAYER_HEIGHT = 1.6
+LAYER_TOP = 1.6
+LAYER_HEIGHT = 2.2
 
 _net: Optional[Any] = None
 
@@ -39,9 +39,18 @@ class _Canvas:
         self.size = (int(w * 2 * SUPERSAMPLE), int(h * LAYER_HEIGHT * SUPERSAMPLE))
         self.image = Image.new("RGBA", self.size, (0, 0, 0, 0))
         self.draw = ImageDraw.Draw(self.image)
+        self.set_scale()
+
+    def set_scale(self, sx: float = 1.0, sy: float = 1.0, base: float = 0.0) -> None:
+        """Enlarge what is drawn next: sx widens around the face center, sy grows away from the line at base."""
+        self.sx = sx
+        self.sy = sy
+        self.base = base
 
     def p(self, fx: float, fy: float) -> Tuple[float, float]:
         """Face-relative fractions (of width and height) to layer pixels."""
+        fx = 0.5 + (fx - 0.5) * self.sx
+        fy = self.base + (fy - self.base) * self.sy
         return ((LAYER_LEFT + fx) * self.w * SUPERSAMPLE, (LAYER_TOP + fy) * self.h * SUPERSAMPLE)
 
     def length(self, value: float) -> float:
@@ -54,6 +63,7 @@ class _Canvas:
 
 
 def _sunglasses(c: _Canvas) -> None:
+    c.set_scale(1.1)
     lens_w, lens_h, eye_y = 0.38, 0.24, 0.40
     dark, rim = (18, 18, 24, 240), (0, 0, 0, 255)
     arm_width = max(2, int(c.length(c.h * 0.03)))
@@ -76,6 +86,7 @@ def _sunglasses(c: _Canvas) -> None:
 
 
 def _party_hat(c: _Canvas) -> None:
+    c.set_scale(1.5, 1.45, 0.02)
     base_y, half_base, height = 0.06, 0.36, 0.95
     tip = c.p(0.5 + 0.04, base_y - height)
     left, right = c.p(0.5 - half_base, base_y), c.p(0.5 + half_base, base_y)
@@ -95,12 +106,13 @@ def _party_hat(c: _Canvas) -> None:
     c.image.paste(stripes, (0, 0), mask)
 
     c.draw.line([left, right], fill=(255, 255, 255, 255), width=max(2, int(c.length(c.h * 0.03))))
-    radius = c.w * 0.09 * SUPERSAMPLE
+    radius = c.w * 0.09 * c.sx * SUPERSAMPLE
     tx, ty = tip
     c.draw.ellipse([tx - radius, ty - radius, tx + radius, ty + radius], fill=(255, 230, 80, 255), outline=(255, 255, 255, 255))
 
 
 def _crown(c: _Canvas) -> None:
+    c.set_scale(1.45, 1.4, 0.02)
     gold, edge = (255, 200, 40, 255), (170, 110, 0, 255)
     peaks = [(0.12, -0.42), (0.31, -0.52), (0.50, -0.60), (0.69, -0.52), (0.88, -0.42)]
     valleys = [(0.215, -0.25), (0.405, -0.25), (0.595, -0.25), (0.785, -0.25)]
@@ -117,11 +129,11 @@ def _crown(c: _Canvas) -> None:
 
     for fx, color in ((0.25, (220, 40, 60, 255)), (0.5, (50, 110, 230, 255)), (0.75, (40, 190, 90, 255))):
         cx, cy = c.p(fx, -0.01)
-        radius = c.w * 0.045 * SUPERSAMPLE
+        radius = c.w * 0.045 * c.sx * SUPERSAMPLE
         c.draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=color, outline=edge)
     for peak in peaks:
         cx, cy = c.p(*peak)
-        radius = c.w * 0.03 * SUPERSAMPLE
+        radius = c.w * 0.03 * c.sx * SUPERSAMPLE
         c.draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=(255, 245, 200, 255), outline=edge)
 
 
