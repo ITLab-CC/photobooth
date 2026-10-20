@@ -4,6 +4,7 @@ import { logout } from "../api";
 import { useSnackbar } from "./admin/useSnackbar";
 import OverviewPanel from "./admin/OverviewPanel";
 import BackgroundsPanel from "./admin/BackgroundsPanel";
+import FacesPanel from "./admin/FacesPanel";
 import FramesPanel from "./admin/FramesPanel";
 import SettingsPanel from "./admin/SettingsPanel";
 import PrintQueuePanel from "./admin/PrintQueuePanel";
@@ -12,7 +13,7 @@ interface AdminDashboardProps {
   token: string;
 }
 
-const TABS = ["Übersicht", "Hintergründe", "Frames", "Druckwarteschlange", "Einstellungen"] as const;
+const TABS = ["Übersicht", "Hintergründe", "Gesichter", "Frames", "Druckwarteschlange", "Einstellungen"] as const;
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
   const [activeTab, setActiveTab] = useState(0);
@@ -51,9 +52,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
       <Box sx={{ backgroundColor: "#ffffff", borderRadius: 2, p: 3 }}>
         {activeTab === 0 && <OverviewPanel token={token} showMessage={showMessage} />}
         {activeTab === 1 && <BackgroundsPanel token={token} showMessage={showMessage} />}
-        {activeTab === 2 && <FramesPanel token={token} showMessage={showMessage} />}
-        {activeTab === 3 && <PrintQueuePanel token={token} showMessage={showMessage} />}
-        {activeTab === 4 && <SettingsPanel token={token} showMessage={showMessage} />}
+        {activeTab === 2 && <FacesPanel token={token} showMessage={showMessage} />}
+        {activeTab === 3 && <FramesPanel token={token} showMessage={showMessage} />}
+        {activeTab === 4 && <PrintQueuePanel token={token} showMessage={showMessage} />}
+        {activeTab === 5 && <SettingsPanel token={token} showMessage={showMessage} />}
       </Box>
 
       <SnackbarHost />

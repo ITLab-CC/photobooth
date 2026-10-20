@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import base64
 import hashlib
 import shutil
+import threading
 import torch
 import time
 from collections import deque
@@ -37,6 +38,7 @@ from process_img import IMGReplacer, resize_with_crop_or_pad
 from face_smiley_replacer import replace_faces_with_smileys_dnn
 from face_props import PROP_STYLES, apply_face_props
 from looks import LOOKS, apply_look
+import faceswap
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -145,6 +147,8 @@ async def rate_limit_exceeded_callback(request: Request, response: Response, pex
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # The face swap models are large; fetch them in the background so the server starts at once.
+    threading.Thread(target=faceswap.ensure_models, daemon=True).start()
     redis_connection = redis.from_url(REDIS_URL, encoding="utf8", decode_responses=True)
     await FastAPILimiter.init(
         redis_connection,
@@ -1155,6 +1159,7 @@ class ImageProcessRequest(BaseModel):
     refine_foreground: bool = False
     random_stuff: bool = False
     light_match: bool = True  # adapt the person's light to the new background
+    face_swap_id: Optional[str] = None  # replace all faces with this stored face (see /api/v1/faces)
     look: str = "none"  # one of looks.LOOKS: filters or neural styles applied to the whole photo
     magic_style: str = "smileys"  # "smileys" or one of face_props.PROP_STYLES
 
@@ -1225,10 +1230,22 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
     frame_with_qr = frame_img.frame
 
+    # face swap works on the camera photo itself, before the person is cut out
+    source_img = img.img
+    if image.face_swap_id:
+        try:
+            source_img = faceswap.swap_faces(source_img, image.face_swap_id)
+        except (KeyError, ValueError):
+            raise HTTPException(status_code=404, detail="Face not found")
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error swapping faces in image: " + str(e))
+
     # remove background
     if background_img is not None:
         try:
-            img_no_background = Replacer.remove_background(img.img)
+            img_no_background = Replacer.remove_background(source_img)
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
 
@@ -1259,7 +1276,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         x_size, y_size = first_background_img.img.size
 
         # resize the image
-        img_with_new_background = resize_with_crop_or_pad(img.img, (x_size, y_size))
+        img_with_new_background = resize_with_crop_or_pad(source_img, (x_size, y_size))
 
 
     # magic: replace faces with smileys or put props (sunglasses, hats, crowns) on them
@@ -1440,6 +1457,111 @@ async def api_print_clear(session: Session = Depends(auth(["boss"]))) -> OK:
 
 
 
+
+
+# ---------------------------
+# Face swap Endpoints
+# ---------------------------
+class FaceRequest(BaseModel):
+    name: str
+    image_base64: str
+    consent: bool = False  # the person in the photo agreed to appear on guests
+
+class FacePatchRequest(BaseModel):
+    name: str
+
+class FaceResponse(BaseModel):
+    face_id: str
+    name: str
+
+class FaceListResponse(BaseModel):
+    faces: List[FaceResponse]
+    models_ready: bool
+    download_error: Optional[str] = None
+
+
+@app.post(
+    "/api/v1/faces",
+    response_model=FaceResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=2))],
+    description="Add a face for the face swap. Only the face's numeric description and a small thumbnail are stored, not the photo. Needs the person's consent."
+)
+async def api_face_add(face: FaceRequest, session: Session = Depends(auth(["boss"]))) -> FaceResponse:
+    if not face.consent:
+        raise HTTPException(status_code=400, detail="The person in the photo must agree.")
+    name = face.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="A name is required.")
+    try:
+        photo = Image.open(io.BytesIO(base64.b64decode(face.image_base64)))
+        stored = faceswap.add_face(photo, name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return FaceResponse(face_id=stored.face_id, name=stored.name)
+
+
+@app.get(
+    "/api/v1/faces",
+    response_model=FaceListResponse,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="The faces available for the face swap, and whether the models needed for it are downloaded."
+)
+async def api_face_list(session: Session = Depends(auth(["boss", "photo_booth"]))) -> FaceListResponse:
+    return FaceListResponse(
+        faces=[FaceResponse(face_id=f.face_id, name=f.name) for f in faceswap.list_faces()],
+        models_ready=faceswap.models_ready(),
+        download_error=faceswap.download_error(),
+    )
+
+
+@app.patch(
+    "/api/v1/faces/{face_id}",
+    response_model=FaceResponse,
+    dependencies=[Depends(RateLimiter(times=5, seconds=1))],
+    description="Rename a stored face (the name shown on the photo booth)."
+)
+async def api_face_rename(face_id: str, patch: FacePatchRequest, session: Session = Depends(auth(["boss"]))) -> FaceResponse:
+    name = patch.name.strip()
+    try:
+        found = bool(name) and faceswap.rename_face(face_id, name)
+    except ValueError:
+        found = False
+    if not found:
+        raise HTTPException(status_code=404, detail="Face not found")
+    return FaceResponse(face_id=face_id, name=name)
+
+
+@app.delete(
+    "/api/v1/faces/{face_id}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=5, seconds=1))],
+    description="Delete a stored face for good."
+)
+async def api_face_delete(face_id: str, session: Session = Depends(auth(["boss"]))) -> OK:
+    try:
+        found = faceswap.delete_face(face_id)
+    except ValueError:
+        found = False
+    if not found:
+        raise HTTPException(status_code=404, detail="Face not found")
+    return OK(ok=True)
+
+
+@app.get(
+    "/api/v1/faces/{face_id}/thumb",
+    dependencies=[Depends(RateLimiter(times=20, seconds=1))],
+    description="Small thumbnail of a stored face."
+)
+async def api_face_thumb(face_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> Response:
+    try:
+        png = faceswap.face_thumbnail(face_id)
+    except ValueError:
+        png = None
+    if png is None:
+        raise HTTPException(status_code=404, detail="Face not found")
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 # ---------------------------
 # Health Endpoint

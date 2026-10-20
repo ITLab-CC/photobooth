@@ -387,6 +387,7 @@ export interface ImageProcessRequest {
   random_stuff?: boolean;
   magic_style?: MagicStyle;
   look?: Look;
+  face_swap_id?: string;
   light_match?: boolean;
 }
 export interface ImageProcessResponse {
@@ -606,6 +607,57 @@ export async function getEventLogo(token: string): Promise<Blob> {
   });
   if (!res.ok) {
     throw new Error("Kein Logo vorhanden");
+  }
+  return await res.blob();
+}
+
+// =============== 10) Face swap ===============
+export interface FaceResponse {
+  face_id: string;
+  name: string;
+}
+export interface FaceListResponse {
+  faces: FaceResponse[];
+  models_ready: boolean;
+  download_error: string | null;
+}
+
+// GET /api/v1/faces
+export async function listFaces(token: string): Promise<FaceListResponse> {
+  return await request<FaceListResponse>("GET", "/api/v1/faces", token);
+}
+
+// POST /api/v1/faces
+export async function addFace(
+  token: string,
+  name: string,
+  base64: string,
+  consent: boolean
+): Promise<FaceResponse> {
+  return await request<FaceResponse>("POST", "/api/v1/faces", token, {
+    name,
+    image_base64: base64,
+    consent,
+  });
+}
+
+// PATCH /api/v1/faces/{face_id}
+export async function renameFace(token: string, faceId: string, name: string): Promise<FaceResponse> {
+  return await request<FaceResponse>("PATCH", `/api/v1/faces/${faceId}`, token, { name });
+}
+
+// DELETE /api/v1/faces/{face_id}
+export async function deleteFace(token: string, faceId: string): Promise<{ ok: boolean }> {
+  return await request<{ ok: boolean }>("DELETE", `/api/v1/faces/${faceId}`, token);
+}
+
+// GET /api/v1/faces/{face_id}/thumb
+export async function getFaceThumb(token: string, faceId: string): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/api/v1/faces/${faceId}/thumb`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error("Kein Vorschaubild");
   }
   return await res.blob();
 }

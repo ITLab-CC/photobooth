@@ -23,6 +23,8 @@ import {
   processImage,
   MagicStyle,
   Look,
+  FaceResponse,
+  listFaces,
   listFrames,
   getImage,
   printImage,
@@ -127,6 +129,9 @@ export default function PhotoBoxPage() {
   const [magicEnabled, setMagicEnabled] = useState<boolean>(false);
   const [magicStyle, setMagicStyle] = useState<MagicStyle>("smileys");
   const [look, setLook] = useState<Look>("none");
+  // Faces from the admin dashboard that can replace the guests' faces (face swap).
+  const [faces, setFaces] = useState<FaceResponse[]>([]);
+  const [faceSwapId, setFaceSwapId] = useState<string | null>(null);
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("Eure Erinnerung wird gedruckt!");
@@ -158,6 +163,15 @@ export default function PhotoBoxPage() {
   useEffect(() => {
     if (token) {
       initEventConfig(token).then(() => setEventConfigLoaded(true));
+    }
+  }, [token]);
+
+  // Gesichter für den Gesichtstausch laden (leer, solange die Modelle noch nicht bereit sind)
+  useEffect(() => {
+    if (token) {
+      listFaces(token)
+        .then((res) => setFaces(res.models_ready ? res.faces : []))
+        .catch((err) => console.error("Fehler beim Laden der Gesichter:", err));
     }
   }, [token]);
 
@@ -223,9 +237,10 @@ export default function PhotoBoxPage() {
 
   // Schritte, die der Gast während der KI-Verarbeitung sieht
   const processingSteps = [
+    ...(magicEnabled && faceSwapId ? ["Die Gesichter werden getauscht 🎭"] : []),
     selectedBackgroundId !== null ? "Ich schneide euch aus…" : "Euer Foto wird angepasst…",
     ...(selectedBackgroundId !== null ? ["Euer Hintergrund wird gebaut…"] : []),
-    ...(magicEnabled ? ["Magic wird gestreut ✨"] : []),
+    ...(magicEnabled && !faceSwapId ? ["Magic wird gestreut ✨"] : []),
     ...(look !== "none" ? ["Euer Look wird gemalt…"] : []),
     "Der Rahmen wird gesetzt…",
   ];
@@ -279,9 +294,10 @@ export default function PhotoBoxPage() {
       image_id: imageId,
       img_frame_id: frameId ? frameId : "",
       refine_foreground: false,
-      random_stuff: magicEnabled,
+      random_stuff: magicEnabled && !faceSwapId,
       magic_style: magicStyle,
       look,
+      ...(magicEnabled && faceSwapId ? { face_swap_id: faceSwapId } : {}),
     };
     
     // image_background_id nur hinzufügen, wenn ein Hintergrund ausgewählt wurde
@@ -569,8 +585,13 @@ export default function PhotoBoxPage() {
                   Magic
                 </Typography>
                 <Box data-scroll-x role="radiogroup" aria-label="Magic-Stil" sx={chipRowSx}>
-                  {[{ value: "off", label: "Aus" }, ...MAGIC_STYLES].map((style) => {
-                    const selected = (magicEnabled ? magicStyle : "off") === style.value;
+                  {[
+                    { value: "off", label: "Aus" },
+                    ...faces.map((face) => ({ value: `face:${face.face_id}`, label: `🎭 ${face.name}` })),
+                    ...MAGIC_STYLES,
+                  ].map((style) => {
+                    const current = !magicEnabled ? "off" : faceSwapId ? `face:${faceSwapId}` : magicStyle;
+                    const selected = current === style.value;
                     return (
                       <Button
                         key={style.value}
@@ -580,8 +601,12 @@ export default function PhotoBoxPage() {
                         onClick={() => {
                           if (style.value === "off") {
                             setMagicEnabled(false);
+                          } else if (style.value.startsWith("face:")) {
+                            setMagicEnabled(true);
+                            setFaceSwapId(style.value.slice("face:".length));
                           } else {
                             setMagicEnabled(true);
+                            setFaceSwapId(null);
                             setMagicStyle(style.value as MagicStyle);
                           }
                         }}

@@ -38,6 +38,10 @@ FACE_ASPECT = 1.4  # face height / face width
 class Face(NamedTuple):
     eye_left: Tuple[float, float]   # the eye that is left in the image
     eye_right: Tuple[float, float]  # the eye that is right in the image
+    # Five landmarks in the order face recognition expects: left eye, right eye, nose tip,
+    # left mouth corner, right mouth corner (all "left/right" as seen in the image).
+    kps: np.ndarray
+    box: Tuple[float, float, float, float]  # x, y, width, height
 
 
 _detector: Optional[Any] = None
@@ -63,7 +67,16 @@ def detect_faces(img_bgr: np.ndarray) -> List[Face]:
     for row in (rows if rows is not None else []):
         # YuNet names the eyes from the person's point of view, so sort them by image position.
         eyes = sorted([(float(row[4]), float(row[5])), (float(row[6]), float(row[7]))])
-        faces.append(Face(eye_left=eyes[0], eye_right=eyes[1]))
+        mouth = sorted([(float(row[10]), float(row[11])), (float(row[12]), float(row[13]))])
+        kps = np.array([eyes[0], eyes[1], (float(row[8]), float(row[9])), mouth[0], mouth[1]], dtype=np.float32)
+        faces.append(
+            Face(
+                eye_left=eyes[0],
+                eye_right=eyes[1],
+                kps=kps,
+                box=(float(row[0]), float(row[1]), float(row[2]), float(row[3])),
+            )
+        )
     return faces
 
 
