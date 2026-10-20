@@ -58,26 +58,45 @@ def _load_detector() -> Any:
     return _detector
 
 
-def detect_faces(img_bgr: np.ndarray) -> List[Face]:
+# YuNet only finds faces up to a limited size relative to its input, so a close-up portrait or a large
+# camera frame can come back empty at full resolution. Detection therefore runs on a shrunken copy, first
+# at 640 px and, if nothing is found, at 320 px for very large faces.
+DETECT_SIDES = (640, 320)
+
+
+def _detect_rows(img_bgr: np.ndarray) -> Any:
     height, width = img_bgr.shape[:2]
     detector = _load_detector()
     detector.setInputSize((width, height))
     _, rows = detector.detect(img_bgr)
-    faces: List[Face] = []
-    for row in (rows if rows is not None else []):
-        # YuNet names the eyes from the person's point of view, so sort them by image position.
-        eyes = sorted([(float(row[4]), float(row[5])), (float(row[6]), float(row[7]))])
-        mouth = sorted([(float(row[10]), float(row[11])), (float(row[12]), float(row[13]))])
-        kps = np.array([eyes[0], eyes[1], (float(row[8]), float(row[9])), mouth[0], mouth[1]], dtype=np.float32)
-        faces.append(
-            Face(
-                eye_left=eyes[0],
-                eye_right=eyes[1],
-                kps=kps,
-                box=(float(row[0]), float(row[1]), float(row[2]), float(row[3])),
+    return rows
+
+
+def detect_faces(img_bgr: np.ndarray) -> List[Face]:
+    height, width = img_bgr.shape[:2]
+    for side in DETECT_SIDES:
+        scale = min(1.0, side / max(height, width))
+        small = img_bgr if scale == 1.0 else cv2.resize(img_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        rows = _detect_rows(small)
+        if rows is None or len(rows) == 0:
+            continue
+        faces: List[Face] = []
+        for row in rows:
+            values = row[:14] / scale  # positions back in the original image's pixels
+            # YuNet names the eyes from the person's point of view, so sort them by image position.
+            eyes = sorted([(float(values[4]), float(values[5])), (float(values[6]), float(values[7]))])
+            mouth = sorted([(float(values[10]), float(values[11])), (float(values[12]), float(values[13]))])
+            kps = np.array([eyes[0], eyes[1], (float(values[8]), float(values[9])), mouth[0], mouth[1]], dtype=np.float32)
+            faces.append(
+                Face(
+                    eye_left=eyes[0],
+                    eye_right=eyes[1],
+                    kps=kps,
+                    box=(float(values[0]), float(values[1]), float(values[2]), float(values[3])),
+                )
             )
-        )
-    return faces
+        return faces
+    return []
 
 
 class _Canvas:

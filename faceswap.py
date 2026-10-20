@@ -235,9 +235,10 @@ def _swap_one(frame: np.ndarray, kps: np.ndarray, latent: np.ndarray) -> np.ndar
 
 
 def _face_mask() -> np.ndarray:
-    """Soft oval over forehead, cheeks and chin in the 128 px crop (eyes, nose and mouth sit in the middle)."""
+    """Soft oval over forehead, cheeks and chin in the 128 px crop. It must stop at the chin: below it the
+    crop shows the stored photo's neck and collar, which must not end up on the guest."""
     mask = np.zeros((SWAP_SIZE, SWAP_SIZE), dtype=np.float32)
-    cv2.ellipse(mask, (SWAP_SIZE // 2, int(SWAP_SIZE * 0.52)), (int(SWAP_SIZE * 0.40), int(SWAP_SIZE * 0.44)), 0, 0, 360, 1.0, -1)
+    cv2.ellipse(mask, (SWAP_SIZE // 2, int(SWAP_SIZE * 0.49)), (int(SWAP_SIZE * 0.39), int(SWAP_SIZE * 0.38)), 0, 0, 360, 1.0, -1)
     return cv2.GaussianBlur(mask, (0, 0), SWAP_SIZE * 0.05)
 
 
