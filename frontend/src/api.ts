@@ -386,11 +386,24 @@ export interface ImageProcessRequest {
   magic_style?: MagicStyle;
   face_swap_id?: string;
   swap_guest_faces?: boolean;
+  skip_frame?: boolean;
   light_match?: boolean;
 }
 export interface ImageProcessResponse {
   image_id: string;
   gallery?: string;
+}
+
+// POST /api/v1/image/strip: several finished photos on one paper, without a frame
+export async function createStrip(
+  token: string,
+  imageIds: string[],
+  frameId: string
+): Promise<{ image_id: string }> {
+  return await request<{ image_id: string }>("POST", "/api/v1/image/strip", token, {
+    image_ids: imageIds,
+    img_frame_id: frameId,
+  });
 }
 
 export async function processImage(

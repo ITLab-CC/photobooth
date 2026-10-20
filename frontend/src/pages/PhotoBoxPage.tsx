@@ -22,6 +22,7 @@ import {
   deleteGallery,
   GalleryResponse,
   processImage,
+  createStrip,
   MagicStyle,
   FaceResponse,
   listFaces,
@@ -127,6 +128,8 @@ export default function PhotoBoxPage() {
   const [swapReady, setSwapReady] = useState(false);
   // Photos of a series while the guests pick the best one (base64 PNG).
   const [candidates, setCandidates] = useState<string[] | null>(null);
+  // Progress text while a photo strip is made from the whole series.
+  const [stripNote, setStripNote] = useState<{ text: string; done: number; total: number } | null>(null);
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("Eure Erinnerung wird gedruckt!");
@@ -309,26 +312,62 @@ export default function PhotoBoxPage() {
   };
 
   // Bild hochladen und verarbeiten
-  const handleImageUpload = (imageId: string) => {
-    setCapturedImage(imageId);
-    setProcessing(true);
-    setShowResultModal(true);
-    // Basis-Payload erstellen
+  // The same choices (background, Magic) apply to every photo; photos of a strip come without frame.
+  const buildProcessPayload = (imageId: string, skipFrame = false) => {
     const payload: any = {
       image_id: imageId,
       img_frame_id: frameId ? frameId : "",
+      skip_frame: skipFrame,
       refine_foreground: false,
       random_stuff: magicEnabled && !faceSwapId && !guestSwap,
       magic_style: magicStyle,
       ...(magicEnabled && faceSwapId && !guestSwap ? { face_swap_id: faceSwapId } : {}),
       ...(magicEnabled && guestSwap ? { swap_guest_faces: true } : {}),
     };
-    
     // image_background_id nur hinzufügen, wenn ein Hintergrund ausgewählt wurde
     if (selectedBackgroundId !== null) {
       payload.image_background_id = selectedBackgroundId;
     }
-    processImage(token!, payload)
+    return payload;
+  };
+
+  // All photos of the series become one strip on the paper, without a frame.
+  const handleStrip = async () => {
+    const photos = candidates;
+    if (!photos || !token || !galleryId) return;
+    setCandidates(null);
+    setCapturedImage(null);
+    setProcessing(true);
+    setShowResultModal(true);
+    try {
+      const processedIds: string[] = [];
+      for (let i = 0; i < photos.length; i++) {
+        setStripNote({ text: `Foto ${i + 1} von ${photos.length} wird verarbeitet…`, done: i, total: photos.length });
+        const uploaded = await addGalleryImage(token, galleryId, photos[i]);
+        const resp = await processImage(token, buildProcessPayload(uploaded.image_id, true));
+        processedIds.push((resp as unknown as ExtendedImageProcessResponse).img_new_background.image_id);
+      }
+      setStripNote({ text: "Der Fotostreifen wird gelegt…", done: photos.length, total: photos.length });
+      const strip = await createStrip(token, processedIds, frameId ?? "");
+      const blob = await getImage(token, strip.image_id);
+      setProcessedImageId(strip.image_id);
+      setCapturedImage(URL.createObjectURL(blob));
+      setProcessing(false);
+    } catch (err) {
+      console.error("Fehler beim Fotostreifen:", err);
+      setProcessing(false);
+      setShowResultModal(false);
+      showNotice("Das hat nicht geklappt. Versucht es bitte noch einmal.");
+    } finally {
+      setStripNote(null);
+    }
+  };
+
+  const handleImageUpload = (imageId: string) => {
+    setCapturedImage(imageId);
+    setProcessing(true);
+    setShowResultModal(true);
+    processImage(token!, buildProcessPayload(imageId))
       .then((resp) => {
         const extendedResp = resp as unknown as ExtendedImageProcessResponse;
         setProcessedImageId(extendedResp.img_with_frame.image_id);
@@ -704,15 +743,19 @@ export default function PhotoBoxPage() {
             {processing ? (
               <Box sx={{ py: 4 }}>
                 <Typography
-                  key={processingStep}
+                  key={stripNote ? stripNote.text : processingStep}
                   variant="h5"
                   sx={{ mb: 3, minHeight: "2em", animation: `${fadeInAnimation} 0.5s ease` }}
                 >
-                  {processingSteps[Math.min(processingStep, processingSteps.length - 1)]}
+                  {stripNote ? stripNote.text : processingSteps[Math.min(processingStep, processingSteps.length - 1)]}
                 </Typography>
                 <LinearProgress
                   variant="determinate"
-                  value={((Math.min(processingStep, processingSteps.length - 1) + 1) / processingSteps.length) * 100}
+                  value={
+                    stripNote
+                      ? (stripNote.done / stripNote.total) * 100
+                      : ((Math.min(processingStep, processingSteps.length - 1) + 1) / processingSteps.length) * 100
+                  }
                   sx={{ height: 10, borderRadius: 5, "& .MuiLinearProgress-bar": { backgroundColor: brand.teal } }}
                 />
               </Box>
@@ -816,7 +859,10 @@ export default function PhotoBoxPage() {
               ))}
             </Box>
           </DialogContent>
-          <DialogActions sx={{ justifyContent: "center", p: 2 }}>
+          <DialogActions sx={{ justifyContent: "center", p: 2, gap: 1.5, flexWrap: "wrap" }}>
+            <Button variant="contained" onClick={handleStrip} sx={{ minHeight: px(64), minWidth: px(200) }}>
+              🎞️ Fotostreifen aus allen (ohne Rahmen)
+            </Button>
             <Button variant="outlined" onClick={() => setCandidates(null)} sx={{ minHeight: px(64), minWidth: px(200) }}>
               Alle neu aufnehmen
             </Button>

@@ -27,7 +27,7 @@ from fastapi_limiter.depends import RateLimiter
 import uvicorn
 
 from background import Background
-from PIL import Image
+from PIL import Image, ImageOps
 from thumbnails import png_to_webp_thumbnail
 from gallery import Gallery
 from img import IMG
@@ -1173,7 +1173,8 @@ async def api_settings_logo_get(session: Session = Depends(auth(["boss", "photo_
 class ImageProcessRequest(BaseModel):
     image_id: str
     image_background_id: Optional[str] = None
-    img_frame_id: str
+    img_frame_id: str = ""
+    skip_frame: bool = False  # for photo strips: return the finished photo without a frame
     refine_foreground: bool = False
     random_stuff: bool = False
     light_match: bool = True  # adapt the person's light to the new background
@@ -1239,12 +1240,12 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     else:
         background_img = None
 
-    # get the frame
-    frame_img = FRAME.db_find(db, image.img_frame_id)
-    if frame_img is None:
-        raise HTTPException(status_code=404, detail="Frame image not found")
-
-    frame_with_qr = frame_img.frame
+    # get the frame (not needed when the photo becomes part of a strip)
+    frame_img = None
+    if not image.skip_frame:
+        frame_img = FRAME.db_find(db, image.img_frame_id)
+        if frame_img is None:
+            raise HTTPException(status_code=404, detail="Frame image not found")
 
     # face swap works on the camera photo itself, before the person is cut out
     source_img = img.img
@@ -1318,20 +1319,22 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             raise HTTPException(status_code=500, detail="Error applying magic to image: " + str(e))
 
     # Add a Frame to the image
-    try:
-        img_with_frame = Replacer.add_frame(
-            img_with_new_background,
-            frame_with_qr,
-            frame_img.background_scale,
-            frame_img.background_offset,
-            frame_img.background_crop
-            )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error adding frame to image: " + str(e))
+    img_with_frame = None
+    if frame_img is not None:
+        try:
+            img_with_frame = Replacer.add_frame(
+                img_with_new_background,
+                frame_img.frame,
+                frame_img.background_scale,
+                frame_img.background_offset,
+                frame_img.background_crop
+                )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error adding frame to image: " + str(e))
 
     # save img_no_background
     img_no_background_return = None
-    if background_img is not None:
+    if background_img is not None and not image.skip_frame:
         img_no_background_for_db = IMG(img=img_no_background, type="no-background", gallery=img.gallery)
         img_no_background_for_db.db_save(db)
         g.db_add_image(db, img_no_background_for_db._id)
@@ -1346,10 +1349,13 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     img_with_new_background_for_db.db_save(db)
     g.db_add_image(db, img_with_new_background_for_db._id)
 
-    # save the processed image
-    img_with_frame_for_db = IMG(img=img_with_frame, type="with-frame", gallery=img.gallery)
-    img_with_frame_for_db.db_save(db)
-    g.db_add_image(db, img_with_frame_for_db._id)
+    # save the processed image (for a strip the unframed photo is the result)
+    if img_with_frame is not None:
+        img_with_frame_for_db = IMG(img=img_with_frame, type="with-frame", gallery=img.gallery)
+        img_with_frame_for_db.db_save(db)
+        g.db_add_image(db, img_with_frame_for_db._id)
+    else:
+        img_with_frame_for_db = img_with_new_background_for_db
 
     ProcessingStats.record(time.perf_counter() - started_at, magic=image.random_stuff)
 
@@ -1367,6 +1373,68 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             gallery=img_with_frame_for_db.gallery
             )
     )
+
+
+# ---------------------------
+# Photo strip
+# ---------------------------
+class StripRequest(BaseModel):
+    image_ids: List[str] = Field(..., min_length=2, max_length=MAX_SERIES_COUNT)
+    img_frame_id: str = ""  # only used for the paper size; the frame itself is not drawn
+
+STRIP_DEFAULT_SIZE = (1200, 1800)
+STRIP_MARGIN_RATIO = 0.04
+
+
+def compose_strip(photos: List[Image.Image], paper_size: Tuple[int, int]) -> Image.Image:
+    """White paper with the photos in a row: stacked on portrait paper, side by side on landscape paper."""
+    width, height = paper_size
+    margin = int(min(width, height) * STRIP_MARGIN_RATIO)
+    count = len(photos)
+    paper = Image.new("RGB", paper_size, (255, 255, 255))
+    if height >= width:
+        cell = (width - 2 * margin, (height - margin * (count + 1)) // count)
+        positions = [(margin, margin + i * (cell[1] + margin)) for i in range(count)]
+    else:
+        cell = ((width - margin * (count + 1)) // count, height - 2 * margin)
+        positions = [(margin + i * (cell[0] + margin), margin) for i in range(count)]
+    for photo, position in zip(photos, positions):
+        paper.paste(ImageOps.fit(photo.convert("RGB"), cell, Image.Resampling.LANCZOS, centering=(0.5, 0.4)), position)
+    return paper
+
+
+@app.post(
+    "/api/v1/image/strip",
+    response_model=ImageResponse,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="Arrange several finished photos into one photo strip (no frame), sized like the active frame's paper."
+)
+async def api_image_strip(strip: StripRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> ImageResponse:
+    db = session.mongodb_connection
+
+    photos: List[Image.Image] = []
+    gallery_id: Optional[str] = None
+    for image_id in strip.image_ids:
+        found = IMG.db_find(db, image_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Image not found")
+        photos.append(found.img)
+        gallery_id = gallery_id or found.gallery
+    if gallery_id is None:
+        raise HTTPException(status_code=400, detail="The photos do not belong to a gallery")
+    gallery = Gallery.db_find(db, gallery_id)
+    if gallery is None:
+        raise HTTPException(status_code=404, detail="Gallery not found")
+
+    paper_size = STRIP_DEFAULT_SIZE
+    frame_img = FRAME.db_find(db, strip.img_frame_id) if strip.img_frame_id else None
+    if frame_img is not None:
+        paper_size = frame_img.frame.size
+
+    result = IMG(img=compose_strip(photos, paper_size), type="strip", gallery=gallery_id)
+    result.db_save(db)
+    gallery.db_add_image(db, result._id)
+    return ImageResponse(image_id=result._id, type=result.type, gallery=result.gallery)
 
 
 # ---------------------------
