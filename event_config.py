@@ -11,6 +11,10 @@ EVENT_CONFIG_COLLECTION = "event_config"
 EVENT_CONFIG_ID = "CONFIG-default"
 
 DEFAULT_START_TEXT = "Erschaffe eine Erinnerung"
+DEFAULT_MAX_PRINTS = 3  # copies of one photo a guest can print
+MAX_PRINTS_LIMIT = 10
+DEFAULT_SERIES_COUNT = 3  # photos taken in a row, the guests pick the best one (1 = single photo)
+MAX_SERIES_COUNT = 5
 
 
 @dataclass
@@ -20,6 +24,8 @@ class EventConfig:
     brand_name: str
     pin_fail_redirect_url: str
     start_text: str = DEFAULT_START_TEXT
+    max_prints: int = DEFAULT_MAX_PRINTS
+    series_count: int = DEFAULT_SERIES_COUNT
     _id: str = field(default=EVENT_CONFIG_ID)
 
     # Collection name for MongoDB.
@@ -38,6 +44,8 @@ class EventConfig:
             "brand_name": self.brand_name,
             "pin_fail_redirect_url": self.pin_fail_redirect_url,
             "start_text": self.start_text,
+            "max_prints": self.max_prints,
+            "series_count": self.series_count,
         }
 
     def __str__(self) -> str:
@@ -149,6 +157,8 @@ class EventConfig:
             brand_name=data["brand_name"],
             pin_fail_redirect_url=data["pin_fail_redirect_url"],
             start_text=data.get("start_text", DEFAULT_START_TEXT),
+            max_prints=int(data.get("max_prints", DEFAULT_MAX_PRINTS)),
+            series_count=int(data.get("series_count", DEFAULT_SERIES_COUNT)),
             _id=str(data.get("_id", EVENT_CONFIG_ID)),
         )
 

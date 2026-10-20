@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.datastructures import Headers
 
 import redis.asyncio as redis
@@ -33,11 +33,17 @@ from gallery import Gallery
 from img import IMG
 from frame import FRAME
 from printer import PrinterQueueItem
-from event_config import DEFAULT_START_TEXT, EventConfig
+from event_config import (
+    DEFAULT_MAX_PRINTS,
+    DEFAULT_SERIES_COUNT,
+    DEFAULT_START_TEXT,
+    MAX_PRINTS_LIMIT,
+    MAX_SERIES_COUNT,
+    EventConfig,
+)
 from process_img import IMGReplacer, resize_with_crop_or_pad
 from face_smiley_replacer import replace_faces_with_smileys_dnn
 from face_props import PROP_STYLES, apply_face_props
-from looks import LOOKS, apply_look
 import faceswap
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
@@ -1016,6 +1022,8 @@ SETTINGS_DEFAULTS = {
     "brand_name": "ENTEGA",
     "pin_fail_redirect_url": "https://www.entega.ag/karriere/ausbildung-duales-studium-berufsorientierung/ausbildung/",
     "start_text": DEFAULT_START_TEXT,
+    "max_prints": DEFAULT_MAX_PRINTS,
+    "series_count": DEFAULT_SERIES_COUNT,
     "has_logo": False,
 }
 
@@ -1028,6 +1036,8 @@ class SettingsRequest(BaseModel):
     brand_name: str
     pin_fail_redirect_url: str
     start_text: str = DEFAULT_START_TEXT
+    max_prints: int = Field(DEFAULT_MAX_PRINTS, ge=1, le=MAX_PRINTS_LIMIT)
+    series_count: int = Field(DEFAULT_SERIES_COUNT, ge=1, le=MAX_SERIES_COUNT)
 
 
 class SettingsResponse(BaseModel):
@@ -1036,6 +1046,8 @@ class SettingsResponse(BaseModel):
     brand_name: str
     pin_fail_redirect_url: str
     start_text: str = DEFAULT_START_TEXT
+    max_prints: int = DEFAULT_MAX_PRINTS
+    series_count: int = DEFAULT_SERIES_COUNT
     has_logo: bool = False
 
 
@@ -1046,6 +1058,8 @@ def _settings_response(config: EventConfig, has_logo: bool) -> SettingsResponse:
         brand_name=config.brand_name,
         pin_fail_redirect_url=config.pin_fail_redirect_url,
         start_text=config.start_text,
+        max_prints=config.max_prints,
+        series_count=config.series_count,
         has_logo=has_logo,
     )
 
@@ -1082,6 +1096,8 @@ async def api_settings_update(settings: SettingsRequest, session: Session = Depe
         brand_name=settings.brand_name,
         pin_fail_redirect_url=settings.pin_fail_redirect_url,
         start_text=settings.start_text.strip() or DEFAULT_START_TEXT,
+        max_prints=settings.max_prints,
+        series_count=settings.series_count,
     )
     if existing is None:
         config.db_save(db)
@@ -1160,7 +1176,6 @@ class ImageProcessRequest(BaseModel):
     random_stuff: bool = False
     light_match: bool = True  # adapt the person's light to the new background
     face_swap_id: Optional[str] = None  # replace all faces with this stored face (see /api/v1/faces)
-    look: str = "none"  # one of looks.LOOKS: filters or neural styles applied to the whole photo
     magic_style: str = "smileys"  # "smileys" or one of face_props.PROP_STYLES
 
 class ProcessingStats:
@@ -1202,8 +1217,6 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
     if image.magic_style != "smileys" and image.magic_style not in PROP_STYLES:
         raise HTTPException(status_code=400, detail=f"Unknown magic_style: {image.magic_style}")
-    if image.look not in LOOKS:
-        raise HTTPException(status_code=400, detail=f"Unknown look: {image.look}")
 
     # get the image
     img = IMG.db_find(db, image.image_id)
@@ -1294,13 +1307,6 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error applying magic to image: " + str(e))
 
-    # look: artistic filter or neural style over the whole photo, before the frame is added
-    if image.look != "none":
-        try:
-            img_with_new_background = apply_look(img_with_new_background, image.look)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail="Error applying look to image: " + str(e))
-
     # Add a Frame to the image
     try:
         img_with_frame = Replacer.add_frame(
@@ -1380,6 +1386,12 @@ async def api_print_image(print_req: PrintRequest, session: Session = Depends(au
     img = IMG.db_find(db, print_req.image_id)
     if img is None:
         raise HTTPException(status_code=404, detail="Image not found")
+
+    # the admin sets how many copies of one photo are allowed
+    config = EventConfig.db_find(db)
+    max_prints = config.max_prints if config is not None else DEFAULT_MAX_PRINTS
+    if not 1 <= print_req.amount <= max_prints:
+        raise HTTPException(status_code=400, detail=f"Between 1 and {max_prints} copies are allowed")
 
     # create a printer queue item
     for _ in range(print_req.amount):

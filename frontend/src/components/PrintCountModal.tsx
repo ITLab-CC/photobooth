@@ -16,11 +16,13 @@ import ImageIcon from "@mui/icons-material/Image";
 
 interface PrintCountModalProps {
   open: boolean;
+  /** Highest number of copies a guest can choose (set by the admin). */
+  maxCount: number;
   onSubmit: (count: number) => Promise<void> | void;
   onCancel: () => void;
 }
 
-const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCancel }) => {
+const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, maxCount, onSubmit, onCancel }) => {
   const [selectedCount, setSelectedCount] = useState<number>(1);
 
   const handleCountSelect = (count: number) => {
@@ -61,8 +63,9 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
         </Typography>
         <Box sx={{ width: "100%", mx: "auto" }}>
           <Grid container spacing={3} justifyContent="center">
-            {[1, 2, 3].map((count) => (
-              <Grid item xs={4} key={count}>
+            {Array.from({ length: maxCount }, (_, i) => i + 1).map((count) => (
+              // up to four tiles per row
+              <Grid item xs={Math.floor(12 / Math.min(maxCount, 4))} key={count}>
                 <Paper 
                   elevation={selectedCount === count ? 8 : 2}
                   onClick={() => handleCountSelect(count)}
@@ -84,7 +87,7 @@ const PrintCountModal: React.FC<PrintCountModalProps> = ({ open, onSubmit, onCan
                   }}
                 >
                   <Box sx={{ position: "relative", mb: 1 }}>
-                    {Array(count).fill(0).map((_, i) => (
+                    {Array(Math.min(count, 3)).fill(0).map((_, i) => (
                       <ImageIcon 
                         key={i} 
                         sx={{ 

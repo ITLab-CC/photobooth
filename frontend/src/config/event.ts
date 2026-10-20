@@ -7,6 +7,8 @@ export const EVENT_TITLE = import.meta.env.VITE_EVENT_TITLE ?? "IT-Lab 2026";
 export const EVENT_SUBTITLE = import.meta.env.VITE_EVENT_SUBTITLE ?? "ENTEGA • Darmstadt";
 export const BRAND_NAME = import.meta.env.VITE_BRAND_NAME ?? "ENTEGA";
 export const START_TEXT = "Erschaffe eine Erinnerung";
+export const MAX_PRINTS = 3;
+export const SERIES_COUNT = 3;
 export const PIN_FAIL_REDIRECT_URL =
   import.meta.env.VITE_PIN_FAIL_REDIRECT_URL ??
   "https://www.entega.ag/karriere/ausbildung-duales-studium-berufsorientierung/ausbildung/";
@@ -22,6 +24,8 @@ export const runtimeConfig = {
   brandName: BRAND_NAME,
   pinFailRedirectUrl: PIN_FAIL_REDIRECT_URL,
   startText: START_TEXT,
+  maxPrints: MAX_PRINTS, // copies of one photo a guest may print
+  seriesCount: SERIES_COUNT, // photos taken in a row before the guests pick one (1 = single photo)
   // Object URL of the logo uploaded in the admin dashboard; null = use the built-in logo.
   logoUrl: null as string | null,
 };
@@ -41,6 +45,8 @@ export async function initEventConfig(token: string): Promise<void> {
     runtimeConfig.brandName = config.brand_name;
     runtimeConfig.pinFailRedirectUrl = config.pin_fail_redirect_url;
     runtimeConfig.startText = config.start_text;
+    runtimeConfig.maxPrints = config.max_prints;
+    runtimeConfig.seriesCount = config.series_count;
     if (config.has_logo) {
       runtimeConfig.logoUrl = URL.createObjectURL(await getEventLogo(token));
     }

@@ -48,6 +48,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
     setConfig((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
+  // Number fields keep the last valid value while the admin is typing.
+  const updateNumber = (field: "max_prints" | "series_count", value: string, min: number, max: number) => {
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed)) return;
+    setConfig((prev) => (prev ? { ...prev, [field]: Math.min(max, Math.max(min, parsed)) } : prev));
+  };
+
   const handleSave = async () => {
     if (!config) return;
     setSaving(true);
@@ -117,6 +124,24 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
           value={config.start_text}
           onChange={(e) => updateField("start_text", e.target.value)}
           helperText="Steht unter dem Tipp-Symbol, bevor ein Gast startet."
+          fullWidth
+        />
+        <TextField
+          label="Fotos pro Serie"
+          type="number"
+          value={config.series_count}
+          onChange={(e) => updateNumber("series_count", e.target.value, 1, 5)}
+          slotProps={{ htmlInput: { min: 1, max: 5 } }}
+          helperText="So viele Fotos nimmt die Fotobox hintereinander auf, die Gäste wählen das beste. Bei 1 gibt es keine Auswahl."
+          fullWidth
+        />
+        <TextField
+          label="Abzüge pro Foto (Maximum)"
+          type="number"
+          value={config.max_prints}
+          onChange={(e) => updateNumber("max_prints", e.target.value, 1, 10)}
+          slotProps={{ htmlInput: { min: 1, max: 10 } }}
+          helperText="So viele Exemplare eines Fotos können Gäste höchstens drucken. Bei 1 entfällt die Auswahl."
           fullWidth
         />
         <Box>

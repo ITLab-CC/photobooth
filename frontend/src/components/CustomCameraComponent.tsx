@@ -1,11 +1,9 @@
 import { useRef, useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import { keyframes } from "@mui/system";
-import { addGalleryImage } from "../api";
 import CameraPreview from "./CameraPreview";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import confetti from "canvas-confetti";
-import { logDebug } from "../utils/logger";
 import { KIOSK_WIDTH, brand, px } from "../theme";
 
 const countPop = keyframes`
@@ -19,16 +17,18 @@ const flashAnimation = keyframes`
 `;
 
 interface CustomCameraComponentProps {
-  galleryId: string;
-  token: string;
-  onImageUpload?: (imageId: string) => void;
+  /** Photos taken in a row. With more than one, the guests pick the best afterwards. */
+  seriesCount: number;
+  /** Called with the base64 PNG of every photo of a complete series. */
+  onPhotosCaptured: (photosBase64: string[]) => void;
   onError?: (message: string) => void;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default function CustomCameraComponent({
-  galleryId,
-  token,
-  onImageUpload,
+  seriesCount,
+  onPhotosCaptured,
   onError,
 }: CustomCameraComponentProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -37,80 +37,82 @@ export default function CustomCameraComponent({
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
   const [videoReady, setVideoReady] = useState<boolean>(false);
   const [flashActive, setFlashActive] = useState<boolean>(false);
+  const [seriesLabel, setSeriesLabel] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-  const reportError = (message: string) => {
-    console.error(message);
-    onError?.(message);
+  const reportError = (text: string) => {
+    console.error(text);
+    onError?.(text);
   };
 
-  const startCountdown = () => {
-    if (!galleryId) {
-      reportError("Die Fotobox ist noch nicht bereit. Bitte kurz warten.");
-      return;
+  // Counts down to 0 ("Los!"); the picture freezes at 0 so everyone holds the pose for the shot.
+  const countDown = async (from: number) => {
+    for (let n = from; n >= 0; n--) {
+      setCountdown(n);
+      if (n === 0) {
+        videoRef.current?.pause();
+      }
+      await sleep(1000);
     }
+  };
+
+  // The current video frame as base64 PNG, or null if the camera has no picture yet.
+  const grabFrame = (): string | null => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.videoWidth === 0 || video.videoHeight === 0) {
+      return null;
+    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/, "");
+  };
+
+  const startSeries = async () => {
     if (!videoReady) {
       reportError("Die Kamera startet noch. Bitte kurz warten.");
       return;
     }
     setIsCapturing(true);
-    let counter = 3;
-    setCountdown(counter);
-    const interval = setInterval(() => {
-      counter -= 1;
-      setCountdown(counter);
-      if (counter === 0) {
-        videoRef.current?.pause();
-      }
-      if (counter < 0) {
-        clearInterval(interval);
-        capturePhoto();
-      }
-    }, 1000);
-  };
-
-  const capturePhoto = async () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const width = video.videoWidth;
-      const height = video.videoHeight;
-      if (width === 0 || height === 0) {
-        reportError("Die Kamera liefert noch kein Bild. Bitte kurz warten.");
-        setCountdown(null);
-        setIsCapturing(false);
-        videoRef.current?.play();
-        return;
-      }
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d");
-      if (context) {
-        context.drawImage(video, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/png");
-        // Entferne den Daten-URL-Präfix
-        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
-        try {
-          const response = await addGalleryImage(token, galleryId, base64Data);
-          logDebug("Foto erfolgreich hochgeladen, Bild ID:", response.image_id);
-          if (onImageUpload) {
-            onImageUpload(response.image_id);
-          }
-          setFlashActive(true);
-          setTimeout(() => setFlashActive(false), 600);
-          confetti({
-            particleCount: 150,
-            spread: 70,
-            origin: { y: 0.6 },
-          });
-        } catch (uploadError) {
-          console.error("Fehler beim Upload:", uploadError);
-          reportError("Das Foto konnte nicht gespeichert werden. Bitte noch einmal versuchen.");
+    const shots: string[] = [];
+    try {
+      for (let i = 0; i < seriesCount; i++) {
+        if (seriesCount > 1) {
+          setSeriesLabel(`Foto ${i + 1} von ${seriesCount}`);
         }
+        if (i > 0) {
+          setMessage("Super! Gleich kommt das nächste.");
+          await sleep(1500);
+          setMessage(null);
+        }
+        await countDown(i === 0 ? 3 : 2);
+        const shot = grabFrame();
+        setCountdown(null);
+        videoRef.current?.play();
+        if (!shot) {
+          reportError("Die Kamera liefert noch kein Bild. Bitte kurz warten.");
+          break;
+        }
+        shots.push(shot);
+        setFlashActive(true);
+        setTimeout(() => setFlashActive(false), 600);
       }
+    } finally {
+      setCountdown(null);
+      setSeriesLabel(null);
+      setMessage(null);
+      setIsCapturing(false);
+      videoRef.current?.play();
     }
-    setCountdown(null);
-    setIsCapturing(false);
-    videoRef.current?.play();
+    if (shots.length === seriesCount) {
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+      onPhotosCaptured(shots);
+    }
   };
 
   return (
@@ -133,16 +135,11 @@ export default function CustomCameraComponent({
           margin: "8px auto",
           cursor: isCapturing ? "default" : "pointer",
         }}
-        onClick={() => !isCapturing && startCountdown()}
+        onClick={() => !isCapturing && startSeries()}
       >
       <CameraPreview
         videoRef={videoRef}
         onLoadedMetadata={() => {
-          logDebug(
-            "loadedmetadata fired:",
-            videoRef.current?.videoWidth,
-            videoRef.current?.videoHeight
-          );
           setVideoReady(true);
         }}
       />
@@ -186,6 +183,39 @@ export default function CustomCameraComponent({
         />
       )}
  
+      {seriesLabel && (
+        <Typography
+          variant="h5"
+          sx={{
+            position: "absolute",
+            top: px(16),
+            left: 0,
+            right: 0,
+            textAlign: "center",
+            color: "#ffffff",
+            fontWeight: 600,
+            textShadow: "0 2px 12px rgba(37, 43, 63, 0.7)",
+            pointerEvents: "none",
+          }}
+        >
+          {seriesLabel}
+        </Typography>
+      )}
+
+      {message && (
+        <Box
+          position="absolute"
+          sx={{ inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}
+        >
+          <Typography
+            variant="h4"
+            sx={{ color: "#ffffff", fontWeight: 600, textAlign: "center", px: 3, textShadow: "0 3px 18px rgba(37, 43, 63, 0.7)" }}
+          >
+            {message}
+          </Typography>
+        </Box>
+      )}
+
       {countdown !== null && (
         <Box
           position="absolute"

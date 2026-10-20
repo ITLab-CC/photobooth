@@ -9,7 +9,7 @@ export const KIOSK_SCALE = Math.min(
 );
 
 // Height taken by everything except the camera image (title, Magic, backgrounds, margins), at scale 1.
-const OTHER_UI_HEIGHT = 600;
+const OTHER_UI_HEIGHT = 560;
 // The camera image is square. It fills the width, but shrinks on screens too short to also show the controls.
 export const KIOSK_WIDTH = Math.round(
   Math.min(

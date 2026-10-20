@@ -3,6 +3,7 @@ import {
   Box,
   Typography,
   Button,
+  ButtonBase,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -22,9 +23,9 @@ import {
   GalleryResponse,
   processImage,
   MagicStyle,
-  Look,
   FaceResponse,
   listFaces,
+  addGalleryImage,
   listFrames,
   getImage,
   printImage,
@@ -66,16 +67,6 @@ const MAGIC_STYLES: { value: MagicStyle; label: string }[] = [
   { value: "mix", label: "🎲 Überraschung" },
 ];
 
-const LOOKS: { value: Look; label: string }[] = [
-  { value: "none", label: "Original" },
-  { value: "comic", label: "💥 Comic" },
-  { value: "sketch", label: "✏️ Skizze" },
-  { value: "watercolor", label: "🎨 Aquarell" },
-  { value: "popart", label: "🟣 Pop-Art" },
-  { value: "anime", label: "🌸 Anime (KI)" },
-  { value: "painting", label: "🖼️ Gemälde (KI)" },
-];
-
 // Soft ring that invites the first tap on the start screen.
 const pulseRing = keyframes`
   0% { transform: scale(1); opacity: 0.55; }
@@ -95,7 +86,7 @@ const fadeInAnimation = keyframes`
   100% { opacity: 1; transform: translateY(0); }
 `;
 
-// Horizontally scrolling rows of large touch chips (Magic styles, looks).
+// Horizontally scrolling row of large touch chips (Magic styles).
 const chipRowSx = {
   display: "flex",
   gap: 1,
@@ -128,10 +119,11 @@ export default function PhotoBoxPage() {
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
   const [magicEnabled, setMagicEnabled] = useState<boolean>(false);
   const [magicStyle, setMagicStyle] = useState<MagicStyle>("smileys");
-  const [look, setLook] = useState<Look>("none");
   // Faces from the admin dashboard that can replace the guests' faces (face swap).
   const [faces, setFaces] = useState<FaceResponse[]>([]);
   const [faceSwapId, setFaceSwapId] = useState<string | null>(null);
+  // Photos of a series while the guests pick the best one (base64 PNG).
+  const [candidates, setCandidates] = useState<string[] | null>(null);
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("Eure Erinnerung wird gedruckt!");
@@ -241,7 +233,6 @@ export default function PhotoBoxPage() {
     selectedBackgroundId !== null ? "Ich schneide euch aus…" : "Euer Foto wird angepasst…",
     ...(selectedBackgroundId !== null ? ["Euer Hintergrund wird gebaut…"] : []),
     ...(magicEnabled && !faceSwapId ? ["Magic wird gestreut ✨"] : []),
-    ...(look !== "none" ? ["Euer Look wird gemalt…"] : []),
     "Der Rahmen wird gesetzt…",
   ];
 
@@ -284,6 +275,32 @@ export default function PhotoBoxPage() {
     setSelectedBackgroundId(bgId);
   };
 
+  const uploadAndProcess = async (photoBase64: string) => {
+    if (!token || !galleryId) return;
+    try {
+      const response = await addGalleryImage(token, galleryId, photoBase64);
+      handleImageUpload(response.image_id);
+    } catch (err) {
+      console.error("Fehler beim Upload:", err);
+      showNotice("Das Foto konnte nicht gespeichert werden. Bitte noch einmal versuchen.");
+    }
+  };
+
+  // One photo goes straight to processing; a series first asks which one the guests like best.
+  const handlePhotos = (photos: string[]) => {
+    if (photos.length === 1) {
+      uploadAndProcess(photos[0]);
+    } else {
+      setCandidates(photos);
+    }
+  };
+
+  const handleChoosePhoto = (index: number) => {
+    const chosen = candidates?.[index];
+    setCandidates(null);
+    if (chosen) uploadAndProcess(chosen);
+  };
+
   // Bild hochladen und verarbeiten
   const handleImageUpload = (imageId: string) => {
     setCapturedImage(imageId);
@@ -296,7 +313,6 @@ export default function PhotoBoxPage() {
       refine_foreground: false,
       random_stuff: magicEnabled && !faceSwapId,
       magic_style: magicStyle,
-      look,
       ...(magicEnabled && faceSwapId ? { face_swap_id: faceSwapId } : {}),
     };
     
@@ -353,7 +369,12 @@ export default function PhotoBoxPage() {
 
   // Klick auf Fertigstellen: Öffnet die Druckauswahl-Modal
   const handleFinish = () => {
-    setShowPrintCountModal(true);
+    // With a limit of one copy there is nothing to choose.
+    if (runtimeConfig.maxPrints <= 1) {
+      handlePrintCountSubmit(1);
+    } else {
+      setShowPrintCountModal(true);
+    }
   };
 
   // Nach Auswahl der Druckanzahl: Einen einzelnen Druckauftrag mit der angegebenen Anzahl senden
@@ -559,9 +580,8 @@ export default function PhotoBoxPage() {
         {token && galleryId && !showResultModal && showMainContent && (
           <>
             <CustomCameraComponent
-              galleryId={galleryId}
-              token={token}
-              onImageUpload={handleImageUpload}
+              seriesCount={runtimeConfig.seriesCount}
+              onPhotosCaptured={handlePhotos}
               onError={showNotice}
             />
 
@@ -579,7 +599,7 @@ export default function PhotoBoxPage() {
                 gap: 2.5,
               }}
             >
-              {/* Two calm rows of choices, each with "off" first; Magic uses the orange, looks the teal. */}
+              {/* "Aus" comes first; Magic uses the orange so it stays distinct from the teal actions. */}
               <Box component="section" aria-label="Magic">
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
                   Magic
@@ -617,29 +637,6 @@ export default function PhotoBoxPage() {
                         }}
                       >
                         {style.label}
-                      </Button>
-                    );
-                  })}
-                </Box>
-              </Box>
-
-              <Box component="section" aria-label="Look">
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                  Look
-                </Typography>
-                <Box data-scroll-x role="radiogroup" aria-label="Look" sx={chipRowSx}>
-                  {LOOKS.map((option) => {
-                    const selected = look === option.value;
-                    return (
-                      <Button
-                        key={option.value}
-                        role="radio"
-                        aria-checked={selected}
-                        variant={selected ? "contained" : "outlined"}
-                        onClick={() => setLook(option.value)}
-                        sx={{ ...chipSx, ...(!selected && { color: "text.primary", borderColor: brand.line, backgroundColor: "background.paper" }) }}
-                      >
-                        {option.label}
                       </Button>
                     );
                   })}
@@ -761,8 +758,55 @@ export default function PhotoBoxPage() {
           )}
         </Dialog>
 
+        <Dialog
+          open={candidates !== null}
+          disableEscapeKeyDown
+          fullWidth
+          maxWidth={false}
+          PaperProps={{ sx: { width: "95%", maxWidth: px(900), borderRadius: 3 } }}
+        >
+          <DialogTitle sx={{ textAlign: "center", fontWeight: 600 }}>Welches Foto gefällt euch am besten?</DialogTitle>
+          <DialogContent>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: `repeat(auto-fit, minmax(${px(240)}px, 1fr))`,
+                gap: 2,
+                pt: 1,
+              }}
+            >
+              {candidates?.map((photo, index) => (
+                <ButtonBase
+                  key={index}
+                  onClick={() => handleChoosePhoto(index)}
+                  aria-label={`Foto ${index + 1} auswählen`}
+                  sx={{
+                    borderRadius: 2,
+                    overflow: "hidden",
+                    border: `3px solid ${brand.line}`,
+                    "&:hover, &:focus-visible": { borderColor: brand.teal },
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={`data:image/png;base64,${photo}`}
+                    alt={`Foto ${index + 1}`}
+                    sx={{ width: "100%", display: "block" }}
+                  />
+                </ButtonBase>
+              ))}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ justifyContent: "center", p: 2 }}>
+            <Button variant="outlined" onClick={() => setCandidates(null)} sx={{ minHeight: px(64), minWidth: px(200) }}>
+              Alle neu aufnehmen
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         <PrintCountModal
           open={showPrintCountModal}
+          maxCount={runtimeConfig.maxPrints}
           onSubmit={handlePrintCountSubmit}
           onCancel={() => {
             setShowPrintCountModal(false);
