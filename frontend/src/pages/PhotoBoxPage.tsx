@@ -577,6 +577,9 @@ export default function PhotoBoxPage() {
                       pb: 1,
                       scrollSnapType: "x proximity",
                       WebkitOverflowScrolling: "touch",
+                      // Touch scrolling only: no scrollbar, the half-visible last chip is the cue.
+                      scrollbarWidth: "none",
+                      "&::-webkit-scrollbar": { display: "none" },
                     }}
                   >
                     {MAGIC_STYLES.map((style) => (
