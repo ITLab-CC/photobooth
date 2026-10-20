@@ -13,8 +13,8 @@ interface BackgroundSliderProps {
   onSelect?: (backgroundId: string | null) => void;
 }
 
-const SIDE_SIZE = px(132);
-const CENTER_SIZE = px(190);
+const SIDE_SIZE = px(120);
+const CENTER_SIZE = px(170);
 
 const arrowSx = {
   width: px(64),

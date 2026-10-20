@@ -336,7 +336,8 @@ export default function PhotoBoxPage() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center', // Vertikale Zentrierung
+          justifyContent: showMainContent && !showResultModal ? 'flex-start' : 'center',
+          pt: showMainContent && !showResultModal ? 2 : 0,
           position: 'relative',
           overflow: 'hidden',
           overscrollBehavior: 'none',
@@ -514,21 +515,22 @@ export default function PhotoBoxPage() {
               onError={showNotice}
             />
 
-            {/* Space below keeps the controls clear of the fixed shutter button. */}
+            {/* Bottom padding keeps the controls clear of the fixed logos. */}
             <Box
               sx={{
                 width: "100%",
                 maxWidth: KIOSK_WIDTH,
                 px: 2,
-                pb: "140px",
+                pt: 1.5,
+                pb: `${px(120)}px`,
                 boxSizing: "border-box",
                 display: "flex",
                 flexDirection: "column",
-                gap: 3,
+                gap: 2.5,
               }}
             >
               <Box component="section" aria-label="Hintergrund wählen">
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
                   Hintergrund wählen
                 </Typography>
                 <BackgroundSlider token={token} onSelect={handleBackgroundSelect} />
@@ -536,7 +538,7 @@ export default function PhotoBoxPage() {
 
               <Box component="section" aria-label="Magic">
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     Magic
                   </Typography>
                   <ToggleButtonGroup

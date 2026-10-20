@@ -117,7 +117,8 @@ export default function CustomCameraComponent({
     <Box
       sx={{
         display: "flex",
-        justifyContent: "center",
+        flexDirection: "column",
+        alignItems: "center",
         width: "100%",
         padding: "0 5%",
         boxSizing: "border-box",
@@ -129,7 +130,7 @@ export default function CustomCameraComponent({
           width: "100%",
           maxWidth: `${KIOSK_WIDTH}px`,
           height: `${KIOSK_WIDTH}px`,
-          margin: "20px auto",
+          margin: "8px auto",
         }}
       >
       <CameraPreview
@@ -192,28 +193,26 @@ export default function CustomCameraComponent({
       )}
       </Box>
 
-      {!isCapturing && (
-        <Button
-          variant="contained"
-          onClick={startCountdown}
-          startIcon={<PhotoCameraIcon sx={{ fontSize: "2.2rem !important" }} />}
-          sx={{
-            position: "fixed",
-            bottom: px(28),
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 20,
-            minHeight: px(84),
-            minWidth: px(320),
-            px: 5,
-            fontSize: "1.7rem",
-            borderRadius: 42,
-            boxShadow: "0 10px 24px rgba(0, 117, 133, 0.35)",
-          }}
-        >
-          Foto machen
-        </Button>
-      )}
+      {/* Directly under the live image so it is always in reach and never covers the controls.
+          Hidden (not removed) while counting down so the layout does not jump. */}
+      <Button
+        variant="contained"
+        onClick={startCountdown}
+        disabled={isCapturing}
+        startIcon={<PhotoCameraIcon sx={{ fontSize: "2.2rem !important" }} />}
+        sx={{
+          mt: 1.5,
+          minHeight: px(84),
+          minWidth: px(340),
+          px: 5,
+          fontSize: "1.7rem",
+          borderRadius: 42,
+          boxShadow: "0 10px 24px rgba(0, 117, 133, 0.35)",
+          visibility: isCapturing ? "hidden" : "visible",
+        }}
+      >
+        Foto machen
+      </Button>
     </Box>
   );
 }

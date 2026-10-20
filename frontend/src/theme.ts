@@ -4,7 +4,7 @@ import { createTheme } from "@mui/material";
 // drawn for 760 px, so everything on the kiosk page is scaled by this factor (1 on small windows).
 const DESIGN_WIDTH = 760;
 export const KIOSK_SCALE = Math.min(
-  1.5,
+  1.25,
   Math.max(1, (typeof window !== "undefined" ? window.innerWidth : DESIGN_WIDTH) / DESIGN_WIDTH)
 );
 export const KIOSK_WIDTH = Math.round(680 * KIOSK_SCALE);
