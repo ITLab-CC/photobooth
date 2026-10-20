@@ -12,18 +12,21 @@ YUNET_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection
 YUNET_PATH = "models/face_detection_yunet_2023mar.onnx"
 
 # Styles a guest can pick. "smileys" is handled by face_smiley_replacer.
-PROP_STYLES: Tuple[str, ...] = ("sunglasses", "party_hat", "crown", "party", "mix")
+PROP_STYLES: Tuple[str, ...] = (
+    "sunglasses", "party_hat", "crown", "party",
+    "moustache", "clown_nose", "bunny_ears", "halo", "hearts", "mix",
+)
 
 # Props are drawn at this multiple of their final size and scaled down for smooth edges.
 SUPERSAMPLE = 2
 
 # Props are drawn upright for a face of w x h pixels on a layer that reaches one face width
-# to each side and 1.6 face heights above the face, so hats and crowns have room even when
+# to each side, 1.6 face heights above the face and 0.3 below it, so hats and crowns have room even when
 # the layer is rotated to follow a tilted head.
 LAYER_LEFT = 1.0
 LAYER_WIDTH = 3.0
 LAYER_TOP = 1.6
-LAYER_HEIGHT = 2.2
+LAYER_HEIGHT = 2.9
 
 # Where the eyes sit on the upright face: the pivot the layer is rotated around and placed at.
 EYE_LINE = 0.40
@@ -171,10 +174,91 @@ def _crown(c: _Canvas) -> None:
         c.draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=(255, 245, 200, 255), outline=edge)
 
 
+# Where nose tip and upper lip sit on the upright face (eyes are at EYE_LINE). Measured on
+# YuNet landmarks: the nose is ~0.7 and the mouth ~1.25 eye distances below the eye line.
+NOSE_LINE = 0.60
+UPPER_LIP_LINE = 0.69
+
+
+def _ellipse_points(
+    c: _Canvas, fx: float, fy: float, rx: float, ry: float, angle_deg: float = 0.0, steps: int = 48
+) -> List[Tuple[float, float]]:
+    """Polygon of an ellipse centered at the face fraction (fx, fy); rx is a fraction of the width, ry of the height."""
+    cx, cy = c.p(fx, fy)
+    a = math.radians(angle_deg)
+    points = []
+    for i in range(steps):
+        t = 2 * math.pi * i / steps
+        x = rx * c.w * c.sx * SUPERSAMPLE * math.cos(t)
+        y = ry * c.h * c.sy * SUPERSAMPLE * math.sin(t)
+        points.append((cx + x * math.cos(a) - y * math.sin(a), cy + x * math.sin(a) + y * math.cos(a)))
+    return points
+
+
+def _moustache(c: _Canvas) -> None:
+    c.set_scale(1.0)
+    brown, edge = (62, 38, 22, 255), (30, 16, 8, 255)
+    y = UPPER_LIP_LINE
+    # two lobes whose outer ends curl up, a bump in the middle and curled tips
+    for side, angle in ((-1, 14), (1, -14)):
+        lobe = _ellipse_points(c, 0.5 + side * 0.15, y, 0.16, 0.05, angle)
+        c.draw.polygon(lobe, fill=brown, outline=edge)
+        tip = _ellipse_points(c, 0.5 + side * 0.285, y - 0.035, 0.035, 0.035)
+        c.draw.polygon(tip, fill=brown, outline=edge)
+    c.draw.polygon(_ellipse_points(c, 0.5, y - 0.012, 0.08, 0.045), fill=brown, outline=edge)
+
+
+def _clown_nose(c: _Canvas) -> None:
+    c.set_scale(1.0)
+    c.draw.polygon(_ellipse_points(c, 0.5, NOSE_LINE, 0.115, 0.082), fill=(225, 30, 45, 255), outline=(130, 10, 20, 255))
+    c.draw.polygon(_ellipse_points(c, 0.47, NOSE_LINE - 0.02, 0.03, 0.02, -25), fill=(255, 255, 255, 120))
+
+
+def _bunny_ears(c: _Canvas) -> None:
+    c.set_scale(1.3, 1.2, 0.0)
+    for side, angle in ((-1, -12), (1, 12)):
+        outer = _ellipse_points(c, 0.5 + side * 0.20, -0.40, 0.11, 0.40, angle)
+        c.draw.polygon(outer, fill=(246, 246, 246, 255), outline=(150, 150, 160, 255))
+        inner = _ellipse_points(c, 0.5 + side * 0.20, -0.38, 0.062, 0.31, angle)
+        c.draw.polygon(inner, fill=(255, 175, 195, 255))
+
+
+def _halo(c: _Canvas) -> None:
+    c.set_scale(1.2, 1.2, 0.0)
+    cy, rx, ry = -0.30, 0.40, 0.085
+    box = [c.p(0.5 - rx, cy - ry), c.p(0.5 + rx, cy + ry)]
+    c.draw.ellipse(box, outline=(255, 235, 140, 90), width=max(2, int(c.length(c.h * 0.11))))
+    c.draw.ellipse(box, outline=(255, 205, 40, 255), width=max(2, int(c.length(c.h * 0.05))))
+
+
+def _heart_points(cx: float, cy: float, size: float) -> List[Tuple[float, float]]:
+    points = []
+    for i in range(64):
+        t = 2 * math.pi * i / 64
+        x = 16 * math.sin(t) ** 3
+        y = 13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)
+        points.append((cx + x / 17 * size, cy - y / 17 * size))
+    return points
+
+
+def _hearts(c: _Canvas) -> None:
+    c.set_scale(1.0)
+    size = c.w * 0.20 * SUPERSAMPLE
+    for fx in (0.30, 0.70):
+        cx, cy = c.p(fx, EYE_LINE)
+        c.draw.polygon(_heart_points(cx, cy, size), fill=(235, 40, 85, 240), outline=(140, 10, 40, 255))
+        c.draw.polygon(_ellipse_points(c, fx - 0.045, EYE_LINE - 0.045, 0.03, 0.02, -35), fill=(255, 255, 255, 140))
+
+
 _PROP_DRAWERS: Dict[str, Callable[[_Canvas], None]] = {
     "sunglasses": _sunglasses,
     "party_hat": _party_hat,
     "crown": _crown,
+    "moustache": _moustache,
+    "clown_nose": _clown_nose,
+    "bunny_ears": _bunny_ears,
+    "halo": _halo,
+    "hearts": _hearts,
 }
 
 

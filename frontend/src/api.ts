@@ -364,7 +364,18 @@ export async function deleteBackground(
 
 // =============== 5) Image Processing ===============
 // POST /api/v1/image/process
-export type MagicStyle = "smileys" | "sunglasses" | "party_hat" | "crown" | "party" | "mix";
+export type MagicStyle =
+  | "smileys"
+  | "sunglasses"
+  | "party_hat"
+  | "crown"
+  | "party"
+  | "moustache"
+  | "clown_nose"
+  | "bunny_ears"
+  | "halo"
+  | "hearts"
+  | "mix";
 
 export interface ImageProcessRequest {
   image_id: string;

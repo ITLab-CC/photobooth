@@ -55,6 +55,11 @@ const MAGIC_STYLES: { value: MagicStyle; label: string }[] = [
   { value: "party_hat", label: "🎉 Partyhut" },
   { value: "crown", label: "👑 Krone" },
   { value: "party", label: "🥳 Partylook" },
+  { value: "moustache", label: "🥸 Schnurrbart" },
+  { value: "clown_nose", label: "🤡 Clownsnase" },
+  { value: "bunny_ears", label: "🐰 Hasenohren" },
+  { value: "halo", label: "😇 Heiligenschein" },
+  { value: "hearts", label: "😍 Herzaugen" },
   { value: "mix", label: "🎲 Überraschung" },
 ];
 
