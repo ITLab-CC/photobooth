@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -7,7 +7,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  CircularProgress,
+  LinearProgress,
   Snackbar,
   Fade,
   Container,
@@ -28,6 +28,7 @@ import {
 } from "../api";
 import { runtimeConfig, initEventConfig } from "../config/event";
 import { logDebug } from "../utils/logger";
+import { useIdleTimeout } from "../utils/useIdleTimeout";
 import itlabImage from "../assets/itlab_logo.png";
 
 interface ImageResponse {
@@ -41,6 +42,11 @@ interface ExtendedImageProcessResponse {
   img_new_background: ImageResponse;
   img_with_frame: ImageResponse;
 }
+
+// Ohne Eingabe geht die Box nach dieser Zeit zurück zum Startbildschirm.
+const IDLE_TIMEOUT_MS = 60_000;
+// So lange wird ein Verarbeitungsschritt angezeigt, bevor der nächste erscheint.
+const PROCESSING_STEP_MS = 3500;
 
 // Decorative leaf animation
 const floatAnimation = keyframes`
@@ -67,6 +73,8 @@ export default function PhotoBoxPage() {
   const [magicEnabled, setMagicEnabled] = useState<boolean>(false);
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("Eure Erinnerung wird gedruckt!");
+  const [processingStep, setProcessingStep] = useState(0);
   
   // Animation states for start screen
   const [showStartScreen, setShowStartScreen] = useState(true);
@@ -144,6 +152,37 @@ export default function PhotoBoxPage() {
     };
   }, []);
   
+  // Schritte, die der Gast während der KI-Verarbeitung sieht
+  const processingSteps = [
+    selectedBackgroundId !== null ? "Ich schneide euch aus…" : "Euer Foto wird angepasst…",
+    ...(selectedBackgroundId !== null ? ["Euer Hintergrund wird gebaut…"] : []),
+    ...(magicEnabled ? ["Magic wird gestreut ✨"] : []),
+    "Der Rahmen wird gesetzt…",
+  ];
+
+  useEffect(() => {
+    if (!processing) {
+      setProcessingStep(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setProcessingStep((step) => Math.min(step + 1, processingSteps.length - 1));
+    }, PROCESSING_STEP_MS);
+    return () => clearInterval(timer);
+  }, [processing, processingSteps.length]);
+
+  // Zurück zum Start, wenn niemand mehr etwas tut. Die Galerie mit dem Foto wird dabei gelöscht.
+  const handleIdle = useCallback(() => {
+    const cleanup = token && galleryId ? deleteGallery(token, galleryId) : Promise.resolve({ ok: true });
+    cleanup.catch((err) => console.error("Fehler beim Aufräumen:", err)).finally(() => window.location.reload());
+  }, [token, galleryId]);
+
+  useIdleTimeout(
+    !showStartScreen && !processing && !showPrintCountModal && !!token,
+    IDLE_TIMEOUT_MS,
+    handleIdle
+  );
+
   // Handle the start animation sequence
   const handleStartClick = () => {
     setAnimationStarted(true);
@@ -191,6 +230,9 @@ export default function PhotoBoxPage() {
       .catch((err) => {
         console.error("Fehler bei der Bildverarbeitung:", err);
         setProcessing(false);
+        setShowResultModal(false);
+        setSnackbarMessage("Das hat nicht geklappt. Versucht es bitte noch einmal.");
+        setSnackbarOpen(true);
       });
   };
   
@@ -234,6 +276,7 @@ export default function PhotoBoxPage() {
   // Nach Auswahl der Druckanzahl: Einen einzelnen Druckauftrag mit der angegebenen Anzahl senden
   const handlePrintCountSubmit = async (count: number) => {
     setShowPrintCountModal(false);
+    setSnackbarMessage("Eure Erinnerung wird gedruckt!");
     setSnackbarOpen(true);
     
     try {
@@ -245,8 +288,9 @@ export default function PhotoBoxPage() {
       }, 3000);
     } catch (err) {
       console.error("Fehler beim Drucken:", err);
-      alert("Fehler beim Drucken. Bitte versuche es erneut.");
-      window.location.reload();
+      setSnackbarMessage("Das Drucken hat nicht geklappt. Bitte sagt kurz dem Team Bescheid.");
+      setSnackbarOpen(true);
+      setTimeout(() => window.location.reload(), 5000);
     }
   };
 
@@ -463,9 +507,9 @@ export default function PhotoBoxPage() {
                 <Box 
                   onClick={() => !processing && handleMagicToggle()}
                   sx={{
-                    width: '60px',
-                    height: '30px',
-                    borderRadius: '15px',
+                    width: '80px',
+                    height: '44px',
+                    borderRadius: '22px',
                     backgroundColor: magicEnabled ? '#000000' : '#e0e0e0',
                     position: 'relative',
                     transition: 'background-color 0.3s',
@@ -480,8 +524,8 @@ export default function PhotoBoxPage() {
                 >
                   <Box
                     sx={{
-                      width: '24px',
-                      height: '24px',
+                      width: '38px',
+                      height: '38px',
                       borderRadius: '50%',
                       backgroundColor: '#ffffff',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
@@ -526,11 +570,24 @@ export default function PhotoBoxPage() {
               pt: 3,
             }}
           >
-            {processing ? "Bild wird verarbeitet…" : "Euer Moment"}
+            {processing ? "Einen Moment, die KI arbeitet…" : "Euer Moment"}
           </DialogTitle>
           <DialogContent sx={{ textAlign: "center", px: 4, pb: 4 }}>
             {processing ? (
-              <CircularProgress sx={{ color: "#000000" }} />
+              <Box sx={{ py: 4 }}>
+                <Typography
+                  key={processingStep}
+                  variant="h5"
+                  sx={{ mb: 3, minHeight: "2em", animation: `${fadeInAnimation} 0.5s ease` }}
+                >
+                  {processingSteps[Math.min(processingStep, processingSteps.length - 1)]}
+                </Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={((Math.min(processingStep, processingSteps.length - 1) + 1) / processingSteps.length) * 100}
+                  sx={{ height: 10, borderRadius: 5, "& .MuiLinearProgress-bar": { backgroundColor: "#000000" } }}
+                />
+              </Box>
             ) : (
               <Box
                 sx={{
@@ -569,7 +626,9 @@ export default function PhotoBoxPage() {
                 onClick={handleRetry}
                 sx={{ 
                   borderWidth: 1.5,
-                  fontSize: "0.95rem",
+                  fontSize: "1.2rem",
+                  minHeight: 64,
+                  minWidth: 180,
                 }}
               >
                 Neues Foto
@@ -578,8 +637,10 @@ export default function PhotoBoxPage() {
                 variant="contained" 
                 onClick={handleFinish}
                 sx={{ 
-                  fontSize: "0.95rem",
+                  fontSize: "1.2rem",
                   fontWeight: 600,
+                  minHeight: 64,
+                  minWidth: 180,
                 }}
               >
                 ✨ Drucken
@@ -612,9 +673,9 @@ export default function PhotoBoxPage() {
 
         <Snackbar
           open={snackbarOpen}
-          autoHideDuration={3000}
+          autoHideDuration={5000}
           onClose={() => setSnackbarOpen(false)}
-          message="Eure Erinnerung wird gedruckt!"
+          message={snackbarMessage}
           anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
           ContentProps={{
             sx: {

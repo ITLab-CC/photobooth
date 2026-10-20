@@ -166,8 +166,11 @@ export default function CustomCameraComponent({
         >
           <Box sx={{ width: "100%", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
             <PhotoCameraIcon sx={{ fontSize: 64, color: "white" }} />
-            <Typography variant="h6" color="white" sx={{ mt: 1 }}>
+            <Typography variant="h5" color="white" sx={{ mt: 1 }}>
               Tippe um den Countdown zu starten
+            </Typography>
+            <Typography variant="body1" color="white" sx={{ mt: 1, opacity: 0.9 }}>
+              Rückt zusammen, damit alle ins Bild passen
             </Typography>
           </Box>
         </Box>
