@@ -219,16 +219,41 @@ def _swap_one(frame: np.ndarray, kps: np.ndarray, latent: np.ndarray) -> np.ndar
     output = _swapper.run([_swapper.get_outputs()[0].name], {_swapper.get_inputs()[0].name: blob, _swapper.get_inputs()[1].name: latent})[0]
     swapped = np.clip(255 * output.transpose((0, 2, 3, 1))[0], 0, 255).astype(np.uint8)[:, :, ::-1]
 
-    # Paste back: the swapped crop is warped to the original position and blended through a soft oval mask,
+    # The network only sees 128 px, so the result is soft: sharpen it a little, and bring its skin tone
+    # part of the way towards the guest's so the face does not look like a sticker.
+    mask = _face_mask()
+    swapped = _sharpen(swapped)
+    swapped = _match_skin(swapped, crop, mask)
+
+    # Paste back: the swapped crop is warped to the original position and blended through the soft oval mask,
     # so only the face area changes and the edge fades into the original skin.
     inverse = cv2.invertAffineTransform(matrix)
     height, width = frame.shape[:2]
-    mask = np.zeros((SWAP_SIZE, SWAP_SIZE), dtype=np.float32)
-    cv2.ellipse(mask, (SWAP_SIZE // 2, int(SWAP_SIZE * 0.52)), (int(SWAP_SIZE * 0.36), int(SWAP_SIZE * 0.44)), 0, 0, 360, 1.0, -1)
-    mask = cv2.GaussianBlur(mask, (0, 0), SWAP_SIZE * 0.045)
-    warped = cv2.warpAffine(swapped, inverse, (width, height), borderValue=0.0)
-    warped_mask = cv2.warpAffine(mask, inverse, (width, height), borderValue=0.0)[..., None]
+    warped = cv2.warpAffine(swapped, inverse, (width, height), flags=cv2.INTER_CUBIC, borderValue=0.0)
+    warped_mask = cv2.warpAffine(mask, inverse, (width, height), flags=cv2.INTER_LINEAR, borderValue=0.0)[..., None]
     return (warped.astype(np.float32) * warped_mask + frame.astype(np.float32) * (1.0 - warped_mask)).astype(np.uint8)
+
+
+def _face_mask() -> np.ndarray:
+    """Soft oval over forehead, cheeks and chin in the 128 px crop (eyes, nose and mouth sit in the middle)."""
+    mask = np.zeros((SWAP_SIZE, SWAP_SIZE), dtype=np.float32)
+    cv2.ellipse(mask, (SWAP_SIZE // 2, int(SWAP_SIZE * 0.52)), (int(SWAP_SIZE * 0.40), int(SWAP_SIZE * 0.44)), 0, 0, 360, 1.0, -1)
+    return cv2.GaussianBlur(mask, (0, 0), SWAP_SIZE * 0.05)
+
+
+def _sharpen(img: np.ndarray, amount: float = 0.7) -> np.ndarray:
+    blurred = cv2.GaussianBlur(img, (0, 0), 1.2)
+    return cv2.addWeighted(img, 1.0 + amount, blurred, -amount, 0)
+
+
+def _match_skin(swapped: np.ndarray, original: np.ndarray, mask: np.ndarray, strength: float = 0.6) -> np.ndarray:
+    """Move the swapped face's average Lab color towards the original face's inside the mask."""
+    inside = mask > 0.5
+    swapped_lab = cv2.cvtColor(swapped, cv2.COLOR_BGR2LAB).astype(np.float32)
+    original_lab = cv2.cvtColor(original, cv2.COLOR_BGR2LAB).astype(np.float32)
+    shift = (original_lab[inside].mean(axis=0) - swapped_lab[inside].mean(axis=0)) * strength
+    swapped_lab += shift
+    return cv2.cvtColor(np.clip(swapped_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
 
 
 def swap_faces(photo: Image.Image, face_id: str) -> Image.Image:
