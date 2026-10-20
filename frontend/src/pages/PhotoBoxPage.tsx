@@ -22,6 +22,7 @@ import {
   deleteGallery,
   GalleryResponse,
   processImage,
+  MagicStyle,
   listFrames,
   getImage,
   printImage,
@@ -48,6 +49,15 @@ const IDLE_TIMEOUT_MS = 60_000;
 // So lange wird ein Verarbeitungsschritt angezeigt, bevor der nächste erscheint.
 const PROCESSING_STEP_MS = 3500;
 
+const MAGIC_STYLES: { value: MagicStyle; label: string }[] = [
+  { value: "smileys", label: "😀 Smileys" },
+  { value: "sunglasses", label: "😎 Sonnenbrille" },
+  { value: "party_hat", label: "🎉 Partyhut" },
+  { value: "crown", label: "👑 Krone" },
+  { value: "party", label: "🥳 Partylook" },
+  { value: "mix", label: "🎲 Überraschung" },
+];
+
 // Decorative leaf animation
 const floatAnimation = keyframes`
   0% { transform: translateY(0px) rotate(0deg); }
@@ -71,6 +81,7 @@ export default function PhotoBoxPage() {
   const [processedImageId, setProcessedImageId] = useState<string | null>(null);
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
   const [magicEnabled, setMagicEnabled] = useState<boolean>(false);
+  const [magicStyle, setMagicStyle] = useState<MagicStyle>("smileys");
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("Eure Erinnerung wird gedruckt!");
@@ -210,6 +221,7 @@ export default function PhotoBoxPage() {
       img_frame_id: frameId ? frameId : "",
       refine_foreground: false,
       random_stuff: magicEnabled,
+      magic_style: magicStyle,
     };
     
     // image_background_id nur hinzufügen, wenn ein Hintergrund ausgewählt wurde
@@ -537,6 +549,20 @@ export default function PhotoBoxPage() {
                   {magicEnabled ? '✨ An' : 'Aus'}
                 </Typography>
               </Box>
+              {magicEnabled && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1, mt: 2 }}>
+                  {MAGIC_STYLES.map((style) => (
+                    <Button
+                      key={style.value}
+                      variant={magicStyle === style.value ? 'contained' : 'outlined'}
+                      onClick={() => setMagicStyle(style.value)}
+                      sx={{ minHeight: 52, fontSize: '1.05rem', borderRadius: 26 }}
+                    >
+                      {style.label}
+                    </Button>
+                  ))}
+                </Box>
+              )}
             </Container>
             
             <Box mt={4}>

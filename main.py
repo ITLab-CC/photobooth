@@ -33,6 +33,7 @@ from printer import PrinterQueueItem
 from event_config import EventConfig
 from process_img import IMGReplacer, resize_with_crop_or_pad
 from face_smiley_replacer import replace_faces_with_smileys_dnn
+from face_props import PROP_STYLES, apply_face_props
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -1084,6 +1085,7 @@ class ImageProcessRequest(BaseModel):
     img_frame_id: str
     refine_foreground: bool = False
     random_stuff: bool = False
+    magic_style: str = "smileys"  # "smileys" or one of face_props.PROP_STYLES
 
 class ProcessingStats:
     """In-memory counters for the dashboard. Nothing about the photos is stored."""
@@ -1121,6 +1123,9 @@ Replacer = IMGReplacer()
 async def api_image_process(image: ImageProcessRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> ImageProcessResponse:
     db = session.mongodb_connection
     started_at = time.perf_counter()
+
+    if image.magic_style != "smileys" and image.magic_style not in PROP_STYLES:
+        raise HTTPException(status_code=400, detail=f"Unknown magic_style: {image.magic_style}")
 
     # get the image
     img = IMG.db_find(db, image.image_id)
@@ -1183,14 +1188,20 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         img_with_new_background = resize_with_crop_or_pad(img.img, (x_size, y_size))
 
 
-    # replace faces with smileys
+    # magic: replace faces with smileys or put props (sunglasses, hats, crowns) on them
     if image.random_stuff:
         try:
-            img_with_new_background = replace_faces_with_smileys_dnn(
-                img_with_new_background
-                )
+            if image.magic_style == "smileys":
+                img_with_new_background = replace_faces_with_smileys_dnn(
+                    img_with_new_background
+                    )
+            else:
+                img_with_new_background = apply_face_props(
+                    img_with_new_background,
+                    image.magic_style
+                    )
         except Exception as e:
-            raise HTTPException(status_code=500, detail="Error replacing faces with smileys in image: " + str(e))
+            raise HTTPException(status_code=500, detail="Error applying magic to image: " + str(e))
 
     # Add a Frame to the image
     try:
