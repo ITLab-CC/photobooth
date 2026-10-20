@@ -36,6 +36,7 @@ from event_config import DEFAULT_START_TEXT, EventConfig
 from process_img import IMGReplacer, resize_with_crop_or_pad
 from face_smiley_replacer import replace_faces_with_smileys_dnn
 from face_props import PROP_STYLES, apply_face_props
+from looks import LOOKS, apply_look
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -1154,6 +1155,7 @@ class ImageProcessRequest(BaseModel):
     refine_foreground: bool = False
     random_stuff: bool = False
     light_match: bool = True  # adapt the person's light to the new background
+    look: str = "none"  # one of looks.LOOKS: filters or neural styles applied to the whole photo
     magic_style: str = "smileys"  # "smileys" or one of face_props.PROP_STYLES
 
 class ProcessingStats:
@@ -1195,6 +1197,8 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
     if image.magic_style != "smileys" and image.magic_style not in PROP_STYLES:
         raise HTTPException(status_code=400, detail=f"Unknown magic_style: {image.magic_style}")
+    if image.look not in LOOKS:
+        raise HTTPException(status_code=400, detail=f"Unknown look: {image.look}")
 
     # get the image
     img = IMG.db_find(db, image.image_id)
@@ -1272,6 +1276,13 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
                     )
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error applying magic to image: " + str(e))
+
+    # look: artistic filter or neural style over the whole photo, before the frame is added
+    if image.look != "none":
+        try:
+            img_with_new_background = apply_look(img_with_new_background, image.look)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Error applying look to image: " + str(e))
 
     # Add a Frame to the image
     try:

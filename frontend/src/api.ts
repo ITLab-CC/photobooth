@@ -364,6 +364,8 @@ export async function deleteBackground(
 
 // =============== 5) Image Processing ===============
 // POST /api/v1/image/process
+export type Look = "none" | "comic" | "sketch" | "watercolor" | "popart" | "anime" | "painting";
+
 export type MagicStyle =
   | "smileys"
   | "sunglasses"
@@ -384,6 +386,7 @@ export interface ImageProcessRequest {
   refine_foreground?: boolean;
   random_stuff?: boolean;
   magic_style?: MagicStyle;
+  look?: Look;
   light_match?: boolean;
 }
 export interface ImageProcessResponse {

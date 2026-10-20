@@ -10,8 +10,6 @@ import {
   LinearProgress,
   Snackbar,
   Fade,
-  ToggleButton,
-  ToggleButtonGroup,
 } from "@mui/material";
 import { keyframes } from "@mui/system";
 import AutoLogin from "../components/AutoLogin";
@@ -24,6 +22,7 @@ import {
   GalleryResponse,
   processImage,
   MagicStyle,
+  Look,
   listFrames,
   getImage,
   printImage,
@@ -65,6 +64,16 @@ const MAGIC_STYLES: { value: MagicStyle; label: string }[] = [
   { value: "mix", label: "🎲 Überraschung" },
 ];
 
+const LOOKS: { value: Look; label: string }[] = [
+  { value: "none", label: "Original" },
+  { value: "comic", label: "💥 Comic" },
+  { value: "sketch", label: "✏️ Skizze" },
+  { value: "watercolor", label: "🎨 Aquarell" },
+  { value: "popart", label: "🟣 Pop-Art" },
+  { value: "anime", label: "🌸 Anime (KI)" },
+  { value: "painting", label: "🖼️ Gemälde (KI)" },
+];
+
 // Soft ring that invites the first tap on the start screen.
 const pulseRing = keyframes`
   0% { transform: scale(1); opacity: 0.55; }
@@ -84,6 +93,28 @@ const fadeInAnimation = keyframes`
   100% { opacity: 1; transform: translateY(0); }
 `;
 
+// Horizontally scrolling rows of large touch chips (Magic styles, looks).
+const chipRowSx = {
+  display: "flex",
+  gap: 1,
+  overflowX: "auto",
+  pb: 1,
+  scrollSnapType: "x proximity",
+  WebkitOverflowScrolling: "touch",
+  // Touch scrolling only: no scrollbar, the half-visible last chip is the cue.
+  scrollbarWidth: "none",
+  "&::-webkit-scrollbar": { display: "none" },
+} as const;
+
+const chipSx = {
+  flex: "0 0 auto",
+  minHeight: px(56),
+  px: 2.5,
+  fontSize: "1.05rem",
+  whiteSpace: "nowrap",
+  scrollSnapAlign: "start",
+} as const;
+
 export default function PhotoBoxPage() {
   const [token, setToken] = useState<string | null>(null);
   const [galleryId, setGalleryId] = useState<string | null>(null);
@@ -95,6 +126,7 @@ export default function PhotoBoxPage() {
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
   const [magicEnabled, setMagicEnabled] = useState<boolean>(false);
   const [magicStyle, setMagicStyle] = useState<MagicStyle>("smileys");
+  const [look, setLook] = useState<Look>("none");
   const [frameId, setFrameId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("Eure Erinnerung wird gedruckt!");
@@ -194,6 +226,7 @@ export default function PhotoBoxPage() {
     selectedBackgroundId !== null ? "Ich schneide euch aus…" : "Euer Foto wird angepasst…",
     ...(selectedBackgroundId !== null ? ["Euer Hintergrund wird gebaut…"] : []),
     ...(magicEnabled ? ["Magic wird gestreut ✨"] : []),
+    ...(look !== "none" ? ["Euer Look wird gemalt…"] : []),
     "Der Rahmen wird gesetzt…",
   ];
 
@@ -248,6 +281,7 @@ export default function PhotoBoxPage() {
       refine_foreground: false,
       random_stuff: magicEnabled,
       magic_style: magicStyle,
+      look,
     };
     
     // image_background_id nur hinzufügen, wenn ein Hintergrund ausgewählt wurde
@@ -529,82 +563,64 @@ export default function PhotoBoxPage() {
                 gap: 2.5,
               }}
             >
+              {/* Two calm rows of choices, each with "off" first; Magic uses the orange, looks the teal. */}
               <Box component="section" aria-label="Magic">
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Magic
-                  </Typography>
-                  <ToggleButtonGroup
-                    exclusive
-                    value={magicEnabled ? "on" : "off"}
-                    onChange={(_event, value) => value && setMagicEnabled(value === "on")}
-                    aria-label="Magic ein oder aus"
-                  >
-                    <ToggleButton
-                      value="off"
-                      sx={{
-                        minHeight: px(56),
-                        px: 3,
-                        fontSize: "1.1rem",
-                        "&.Mui-selected, &.Mui-selected:hover": { backgroundColor: brand.navy, color: "#ffffff" },
-                      }}
-                    >
-                      Aus
-                    </ToggleButton>
-                    <ToggleButton
-                      value="on"
-                      sx={{
-                        minHeight: px(56),
-                        px: 3,
-                        fontSize: "1.1rem",
-                        "&.Mui-selected, &.Mui-selected:hover": { backgroundColor: brand.magic, color: "#ffffff" },
-                      }}
-                    >
-                      ✨ Mit Magic
-                    </ToggleButton>
-                  </ToggleButtonGroup>
-                </Box>
-
-                {magicEnabled && (
-                  <Box
-                    data-scroll-x
-                    role="radiogroup"
-                    aria-label="Magic-Stil"
-                    sx={{
-                      display: "flex",
-                      gap: 1,
-                      overflowX: "auto",
-                      pb: 1,
-                      scrollSnapType: "x proximity",
-                      WebkitOverflowScrolling: "touch",
-                      // Touch scrolling only: no scrollbar, the half-visible last chip is the cue.
-                      scrollbarWidth: "none",
-                      "&::-webkit-scrollbar": { display: "none" },
-                    }}
-                  >
-                    {MAGIC_STYLES.map((style) => (
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+                  Magic
+                </Typography>
+                <Box data-scroll-x role="radiogroup" aria-label="Magic-Stil" sx={chipRowSx}>
+                  {[{ value: "off", label: "Aus" }, ...MAGIC_STYLES].map((style) => {
+                    const selected = (magicEnabled ? magicStyle : "off") === style.value;
+                    return (
                       <Button
                         key={style.value}
                         role="radio"
-                        aria-checked={magicStyle === style.value}
-                        variant={magicStyle === style.value ? "contained" : "outlined"}
-                        onClick={() => setMagicStyle(style.value)}
+                        aria-checked={selected}
+                        variant={selected ? "contained" : "outlined"}
+                        onClick={() => {
+                          if (style.value === "off") {
+                            setMagicEnabled(false);
+                          } else {
+                            setMagicEnabled(true);
+                            setMagicStyle(style.value as MagicStyle);
+                          }
+                        }}
                         sx={{
-                          flex: "0 0 auto",
-                          minHeight: px(56),
-                          px: 2.5,
-                          fontSize: "1.05rem",
-                          whiteSpace: "nowrap",
-                          scrollSnapAlign: "start",
-                          backgroundColor: magicStyle === style.value ? undefined : "background.paper",
+                          ...chipSx,
+                          ...(selected && { backgroundColor: brand.magic, borderColor: brand.magic, "&:hover": { backgroundColor: brand.magic } }),
+                          ...(!selected && { color: "text.primary", borderColor: brand.line, backgroundColor: "background.paper" }),
                         }}
                       >
                         {style.label}
                       </Button>
-                    ))}
-                  </Box>
-                )}
+                    );
+                  })}
+                </Box>
               </Box>
+
+              <Box component="section" aria-label="Look">
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+                  Look
+                </Typography>
+                <Box data-scroll-x role="radiogroup" aria-label="Look" sx={chipRowSx}>
+                  {LOOKS.map((option) => {
+                    const selected = look === option.value;
+                    return (
+                      <Button
+                        key={option.value}
+                        role="radio"
+                        aria-checked={selected}
+                        variant={selected ? "contained" : "outlined"}
+                        onClick={() => setLook(option.value)}
+                        sx={{ ...chipSx, ...(!selected && { color: "text.primary", borderColor: brand.line, backgroundColor: "background.paper" }) }}
+                      >
+                        {option.label}
+                      </Button>
+                    );
+                  })}
+                </Box>
+              </Box>
+
               <Box component="section" aria-label="Hintergrund wählen">
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
                   Hintergrund wählen
