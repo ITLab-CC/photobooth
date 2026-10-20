@@ -28,6 +28,7 @@ import uvicorn
 
 from background import Background
 from PIL import Image, ImageDraw, ImageOps
+import cv2
 import numpy as np
 import face_props
 from thumbnails import png_to_webp_thumbnail
@@ -1549,8 +1550,35 @@ STRIP_DEFAULT_SIZE = (1200, 1800)
 STRIP_MARGIN_RATIO = 0.04
 
 
+def face_focus(photo: Image.Image) -> Tuple[float, float]:
+    """Where the crop of a strip photo should be centered, as fractions of its width and height."""
+    try:
+        faces = face_props.detect_faces(cv2.cvtColor(np.asarray(photo.convert("RGB")), cv2.COLOR_RGB2BGR))
+    except Exception:
+        faces = []
+    if not faces:
+        return (0.5, 0.4)
+    left = min(face.box[0] for face in faces)
+    top = min(face.box[1] for face in faces)
+    right = max(face.box[0] + face.box[2] for face in faces)
+    bottom = max(face.box[1] + face.box[3] for face in faces)
+    width, height = photo.size
+    return (((left + right) / 2) / width, ((top + bottom) / 2) / height)
+
+
+def crop_to_cell(photo: Image.Image, cell: Tuple[int, int], focus: Tuple[float, float]) -> Image.Image:
+    """Scale the photo to cover the cell and cut the overhang so that the focus point stays in the middle."""
+    photo = photo.convert("RGB")
+    scale = max(cell[0] / photo.width, cell[1] / photo.height)
+    resized = photo.resize((max(cell[0], round(photo.width * scale)), max(cell[1], round(photo.height * scale))), Image.Resampling.LANCZOS)
+    left = min(max(0, round(focus[0] * resized.width - cell[0] / 2)), resized.width - cell[0])
+    top = min(max(0, round(focus[1] * resized.height - cell[1] / 2)), resized.height - cell[1])
+    return resized.crop((left, top, left + cell[0], top + cell[1]))
+
+
 def compose_strip(photos: List[Image.Image], paper_size: Tuple[int, int]) -> Image.Image:
-    """White paper with the photos in a row: stacked on portrait paper, side by side on landscape paper."""
+    """White paper with the photos in a row: stacked on portrait paper, side by side on landscape paper.
+    Each photo is cropped around its faces so that nobody is cut off if the photo has to be trimmed."""
     width, height = paper_size
     margin = int(min(width, height) * STRIP_MARGIN_RATIO)
     count = len(photos)
@@ -1562,7 +1590,7 @@ def compose_strip(photos: List[Image.Image], paper_size: Tuple[int, int]) -> Ima
         cell = ((width - margin * (count + 1)) // count, height - 2 * margin)
         positions = [(margin + i * (cell[0] + margin), margin) for i in range(count)]
     for photo, position in zip(photos, positions):
-        paper.paste(ImageOps.fit(photo.convert("RGB"), cell, Image.Resampling.LANCZOS, centering=(0.5, 0.4)), position)
+        paper.paste(crop_to_cell(photo, cell, face_focus(photo)), position)
     return paper
 
 
