@@ -386,7 +386,6 @@ export interface ImageProcessRequest {
   magic_style?: MagicStyle;
   face_swap_id?: string;
   swap_guest_faces?: boolean;
-  swap_guest_faces?: boolean;
   skip_frame?: boolean;
   light_match?: boolean;
 }
@@ -624,6 +623,31 @@ export async function getEventLogo(token: string): Promise<Blob> {
     throw new Error("Kein Logo vorhanden");
   }
   return await res.blob();
+}
+
+// =============== 12) Event profiles ===============
+export interface ProfileResponse {
+  profile_id: string;
+  name: string;
+  title: string;
+  backgrounds: number;
+  has_frame: boolean;
+}
+
+export async function listProfiles(token: string): Promise<{ profiles: ProfileResponse[] }> {
+  return await request<{ profiles: ProfileResponse[] }>("GET", "/api/v1/profiles", token);
+}
+
+export async function saveProfile(token: string, name: string): Promise<ProfileResponse> {
+  return await request<ProfileResponse>("POST", "/api/v1/profiles", token, { name });
+}
+
+export async function applyProfile(token: string, profileId: string): Promise<{ ok: boolean }> {
+  return await request<{ ok: boolean }>("POST", `/api/v1/profiles/${profileId}/apply`, token);
+}
+
+export async function deleteProfile(token: string, profileId: string): Promise<{ ok: boolean }> {
+  return await request<{ ok: boolean }>("DELETE", `/api/v1/profiles/${profileId}`, token);
 }
 
 // =============== 11) Paper and foil counter ===============

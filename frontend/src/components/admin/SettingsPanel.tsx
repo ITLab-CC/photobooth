@@ -1,12 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Box, TextField, Button, AlertColor, Stack, Typography, Switch, FormControlLabel } from "@mui/material";
+import { Box, TextField, Button, AlertColor, Stack, Typography, Switch, FormControlLabel, Paper } from "@mui/material";
 import {
   getEventConfig,
   updateEventConfig,
   uploadEventLogo,
   deleteEventLogo,
   getEventLogo,
+  listProfiles,
+  saveProfile,
+  applyProfile,
+  deleteProfile,
   EventConfigResponse,
+  ProfileResponse,
 } from "../../api";
 
 interface SettingsPanelProps {
@@ -21,6 +26,53 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
   const [saving, setSaving] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [profiles, setProfiles] = useState<ProfileResponse[]>([]);
+  const [profileName, setProfileName] = useState("");
+
+  const loadProfiles = () =>
+    listProfiles(token)
+      .then((res) => setProfiles(res.profiles))
+      .catch(() => showMessage("Fehler beim Laden der Profile", "error"));
+
+  const reloadSettings = () =>
+    getEventConfig(token).then((res) => {
+      setConfig(res);
+      loadLogo(res.has_logo);
+    });
+
+  const handleSaveProfile = async () => {
+    const name = profileName.trim();
+    if (!name) return;
+    try {
+      await saveProfile(token, name);
+      setProfileName("");
+      showMessage(`Profil "${name}" gespeichert.`);
+      await loadProfiles();
+    } catch {
+      showMessage("Profil konnte nicht gespeichert werden", "error");
+    }
+  };
+
+  const handleApplyProfile = async (profile: ProfileResponse) => {
+    if (!window.confirm(`Profil "${profile.name}" anwenden? Texte, Limits, sichtbare Hintergründe und Rahmen werden umgestellt.`)) return;
+    try {
+      await applyProfile(token, profile.profile_id);
+      await reloadSettings();
+      showMessage(`Profil "${profile.name}" ist aktiv. Die Fotobox übernimmt es beim nächsten Neuladen.`);
+    } catch {
+      showMessage("Profil konnte nicht angewendet werden", "error");
+    }
+  };
+
+  const handleDeleteProfile = async (profile: ProfileResponse) => {
+    if (!window.confirm(`Profil "${profile.name}" löschen?`)) return;
+    try {
+      await deleteProfile(token, profile.profile_id);
+      await loadProfiles();
+    } catch {
+      showMessage("Löschen fehlgeschlagen", "error");
+    }
+  };
 
   const loadLogo = async (hasLogo: boolean) => {
     if (!hasLogo) {
@@ -42,6 +94,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
         loadLogo(res.has_logo);
       })
       .catch(() => showMessage("Fehler beim Laden der Einstellungen", "error"));
+    loadProfiles();
   }, [token]);
 
   const updateField = (field: TextField_, value: string) => {
@@ -157,6 +210,51 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
           <Button variant="contained" onClick={handleSave} disabled={saving}>
             Speichern
           </Button>
+        </Box>
+
+        <Box sx={{ pt: 2, borderTop: 1, borderColor: "divider" }}>
+          <Typography variant="subtitle1" sx={{ mb: 0.5 }}>
+            Event-Profile
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Ein Profil merkt sich Texte, Limits, die sichtbaren Hintergründe und den aktiven Rahmen. Einrichten, speichern,
+            beim nächsten Event mit einem Klick wieder anwenden. Das Logo gehört nicht zum Profil.
+          </Typography>
+          <Stack spacing={1} sx={{ mb: 1.5 }}>
+            {profiles.map((profile) => (
+              <Paper key={profile.profile_id} sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography variant="body1">{profile.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {profile.title}, {profile.backgrounds} Hintergründe{profile.has_frame ? ", mit Rahmen" : ""}
+                  </Typography>
+                </Box>
+                <Button variant="contained" size="small" onClick={() => handleApplyProfile(profile)}>
+                  Anwenden
+                </Button>
+                <Button variant="outlined" color="error" size="small" onClick={() => handleDeleteProfile(profile)}>
+                  Löschen
+                </Button>
+              </Paper>
+            ))}
+            {profiles.length === 0 && (
+              <Typography variant="body2" color="text.secondary">
+                Noch keine Profile gespeichert.
+              </Typography>
+            )}
+          </Stack>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <TextField
+              size="small"
+              label="Name für den aktuellen Stand"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              fullWidth
+            />
+            <Button variant="outlined" onClick={handleSaveProfile} disabled={!profileName.trim()}>
+              Speichern
+            </Button>
+          </Box>
         </Box>
 
         <Box sx={{ pt: 2, borderTop: 1, borderColor: "divider" }}>

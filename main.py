@@ -46,6 +46,7 @@ from face_smiley_replacer import replace_faces_with_smileys_dnn
 from face_props import PROP_STYLES, apply_face_props
 import faceswap
 import printstate
+import profiles
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -1379,6 +1380,113 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             gallery=img_with_frame_for_db.gallery
             )
     )
+
+
+# ---------------------------
+# Event profiles
+# ---------------------------
+class ProfileRequest(BaseModel):
+    name: str
+
+class ProfileResponse(BaseModel):
+    profile_id: str
+    name: str
+    title: str
+    backgrounds: int  # how many backgrounds the profile shows to guests
+    has_frame: bool
+
+class ProfileListResponse(BaseModel):
+    profiles: List[ProfileResponse]
+
+
+def _profile_response(profile: dict) -> ProfileResponse:
+    return ProfileResponse(
+        profile_id=profile["id"],
+        name=profile["name"],
+        title=profile["settings"].get("title", ""),
+        backgrounds=len(profile["active_background_ids"]),
+        has_frame=bool(profile.get("frame_id")),
+    )
+
+
+@app.get(
+    "/api/v1/profiles",
+    response_model=ProfileListResponse,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="Saved event profiles: texts, limits, visible backgrounds and the active frame."
+)
+async def api_profile_list(session: Session = Depends(auth(["boss"]))) -> ProfileListResponse:
+    return ProfileListResponse(profiles=[_profile_response(p) for p in profiles.list_profiles()])
+
+
+@app.post(
+    "/api/v1/profiles",
+    response_model=ProfileResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Save the current settings, the visible backgrounds and the active frame as a profile."
+)
+async def api_profile_add(req: ProfileRequest, session: Session = Depends(auth(["boss"]))) -> ProfileResponse:
+    db = session.mongodb_connection
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="A name is required.")
+
+    config = EventConfig.db_find(db)
+    settings = {
+        key: value
+        for key, value in (config.to_dict() if config is not None else SETTINGS_DEFAULTS).items()
+        if key in ("title", "subtitle", "brand_name", "start_text", "max_prints", "series_count", "sound_enabled")
+    }
+    active_ids = [meta["background_id"] for meta in Background.db_find_meta(db) if meta["active"]]
+    active_frame = db.db[FRAME.COLLECTION_NAME].find_one({"is_active": True}, {"_id": 1})
+    profile = profiles.add_profile(name, settings, active_ids, str(active_frame["_id"]) if active_frame else None)
+    return _profile_response(profile)
+
+
+@app.post(
+    "/api/v1/profiles/{profile_id}/apply",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    description="Switch to a profile: settings, which backgrounds guests see and the active frame. Backgrounds or frames that no longer exist are skipped."
+)
+async def api_profile_apply(profile_id: str, session: Session = Depends(auth(["boss"]))) -> OK:
+    db = session.mongodb_connection
+    profile = profiles.get_profile(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    existing = EventConfig.db_find(db)
+    settings = {**{k: v for k, v in SETTINGS_DEFAULTS.items() if k != "has_logo"}, **profile["settings"]}
+    if existing is not None:
+        settings["pin_fail_redirect_url"] = existing.pin_fail_redirect_url
+    config = EventConfig(**settings)
+    if existing is None:
+        config.db_save(db)
+    else:
+        config.db_update(db)
+
+    wanted = set(profile["active_background_ids"])
+    for meta in Background.db_find_meta(db):
+        should_show = meta["background_id"] in wanted
+        if meta["active"] != should_show:
+            Background.db_set_meta(db, meta["background_id"], active=should_show)
+
+    frame_id = profile.get("frame_id")
+    if frame_id and db.db[FRAME.COLLECTION_NAME].count_documents({"_id": frame_id}) > 0:
+        FRAME.db_set_active(db, frame_id)
+    return OK(ok=True)
+
+
+@app.delete(
+    "/api/v1/profiles/{profile_id}",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="Delete a saved profile (the settings it contained stay as they are)."
+)
+async def api_profile_delete(profile_id: str, session: Session = Depends(auth(["boss"]))) -> OK:
+    if not profiles.delete_profile(profile_id):
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return OK(ok=True)
 
 
 # ---------------------------
