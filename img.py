@@ -224,6 +224,18 @@ class IMG:
         data["gallery"] = self.gallery
         collection.update_one({"_id": self._id}, {"$set": data})
     
+    @classmethod
+    @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.FIND], roles=["boss", "img_viewer", "photo_booth", "printer"])
+    def db_find_png_bytes(cls, db_c: MongoDBConnection, _id: str) -> Optional[bytes]:
+        """
+        Return the stored PNG bytes without decoding or re-encoding them.
+        """
+        collection: Collection = db_c.db[cls.COLLECTION_NAME]
+        data = collection.find_one({"_id": _id}, {"img": 1})
+        if not data or data.get("img") is None:
+            return None
+        return bytes(data["img"])
+
     @mongodb_permissions(collection=IMG_COLLECTION, actions=[MongoDBPermissions.REMOVE], roles=["boss"])
     def db_delete(self, db_c: MongoDBConnection) -> None:
         """

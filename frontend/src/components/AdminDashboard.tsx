@@ -39,6 +39,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ token }) => {
       <Tabs
         value={activeTab}
         onChange={(_e, value) => setActiveTab(value)}
+        variant="scrollable"
+        scrollButtons="auto"
         sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
       >
         {TABS.map((label) => (

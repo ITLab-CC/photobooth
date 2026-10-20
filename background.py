@@ -9,6 +9,7 @@ from io import BytesIO
 
 from pymongo.collection import Collection
 
+from thumbnails import png_to_webp_thumbnail
 from db_connection import MongoDBConnection, MongoDBPermissions, mongodb_permissions
 
 # Define a module-level constant for the collection name.
@@ -265,12 +266,7 @@ class Background:
         if png_bytes is None:
             return None
 
-        with Image.open(BytesIO(png_bytes)) as img:
-            img.thumbnail((THUMBNAIL_MAX_SIZE, THUMBNAIL_MAX_SIZE), Image.Resampling.LANCZOS)
-            with BytesIO() as output:
-                img.save(output, format="WEBP", quality=80)
-                thumbnail = output.getvalue()
-
+        thumbnail = png_to_webp_thumbnail(png_bytes, THUMBNAIL_MAX_SIZE)
         _thumbnail_cache[_id] = thumbnail
         return thumbnail
 

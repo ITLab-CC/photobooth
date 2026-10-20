@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+import hashlib
 import shutil
 import torch
 import time
@@ -24,6 +25,7 @@ from fastapi_limiter.depends import RateLimiter
 import uvicorn
 
 from background import Background
+from thumbnails import png_to_webp_thumbnail
 from gallery import Gallery
 from img import IMG
 from frame import FRAME
@@ -97,7 +99,7 @@ async def old_img_eraser() -> None:
     while True:
         try:
             # check every minute if there are galleries that are expired
-            await asyncio.sleep(5)  # adjusted to 60 seconds as per comment
+            await asyncio.sleep(30)
             db = System["old_img_eraser"]
             galleries = Gallery.db_find_all(db)
 
@@ -662,20 +664,29 @@ async def api_image_list(session: Session = Depends(auth(["boss"]))) -> ImageLis
 @app.get(
     "/api/v1/image/{image_id}",
     dependencies=[Depends(RateLimiter(times=100, seconds=1))],
-    description="Retrieve a specific image by ID. Returns the image as a streaming PNG response."
+    description="Retrieve a specific image by ID as PNG, or as a small WebP thumbnail with thumb=true. Responses are cacheable."
 )
-async def api_image_get(image_id: str, session: Session = Depends(auth(["boss", "photo_booth", "printer"]))) -> StreamingResponse:
+async def api_image_get(
+    image_id: str,
+    request: Request,
+    thumb: bool = False,
+    session: Session = Depends(auth(["boss", "photo_booth", "printer"]))
+) -> Response:
     db = session.mongodb_connection
 
-    img = IMG.db_find(db, image_id)
-    if img is None:
-        raise HTTPException(status_code=404, detail="Image not found")
-    
-    img_bytes_io = io.BytesIO()
-    img.img.save(img_bytes_io, format="PNG")
-    img_bytes_io.seek(0)
+    # Photos never change after they are saved, so the id is a valid ETag.
+    etag = f'"{image_id}-{"thumb" if thumb else "full"}"'
+    cache_headers = {"ETag": etag, "Cache-Control": "private, max-age=3600, immutable"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
 
-    return StreamingResponse(content=img_bytes_io, media_type="image/png")
+    png_bytes = IMG.db_find_png_bytes(db, image_id)
+    if png_bytes is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if thumb:
+        return Response(content=png_to_webp_thumbnail(png_bytes), media_type="image/webp", headers=cache_headers)
+    return Response(content=png_bytes, media_type="image/png", headers=cache_headers)
 
 
 # ---------------------------
@@ -949,21 +960,23 @@ async def api_frame_activate(frame_id: str, session: Session = Depends(auth(["bo
 # get frame
 @app.get(
     "/api/v1/frame/{frame_id}",
-    dependencies=[Depends(RateLimiter(times=1, seconds=1))],
+    dependencies=[Depends(RateLimiter(times=20, seconds=1))],
     description="Retrieve a frame image by its ID and return it as a streaming PNG response."
 )
-async def api_frame_get(frame_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> StreamingResponse:
+async def api_frame_get(frame_id: str, request: Request, session: Session = Depends(auth(["boss", "photo_booth"]))) -> Response:
     db = session.mongodb_connection
 
-    img = FRAME.db_find(db, frame_id)
-    if img is None:
+    png_bytes = FRAME.db_find_png_bytes(db, frame_id)
+    if png_bytes is None:
         raise HTTPException(status_code=404, detail="Frame image not found")
-    
-    img_bytes_io = io.BytesIO()
-    img.frame.save(img_bytes_io, format="PNG")
-    img_bytes_io.seek(0)
 
-    return StreamingResponse(content=img_bytes_io, media_type="image/png")
+    # A frame image can be replaced via PATCH, so the ETag is derived from its content.
+    etag = f'"{hashlib.md5(png_bytes).hexdigest()}"'
+    headers = {"ETag": etag, "Cache-Control": "private, no-cache"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+
+    return Response(content=png_bytes, media_type="image/png", headers=headers)
 
 # delete frame
 @app.delete(

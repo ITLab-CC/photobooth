@@ -21,6 +21,10 @@ Photo Booth is a fun photo booth application that allows users to capture photos
 
 Photo Booth lets you snap photos and print them instantly. Whether for events or personal use, enjoy an integrated experience powered by FastAPI and React.
 
+**No data is shared with guests.** There are no QR codes, gallery links or PINs: photos only exist for the current session and the print job, and the AI runs entirely on the local server.
+
+The admin dashboard (`/admin`) has an overview with live status (database, GPU, AI model, disk, print queue), background management with bulk upload, names and a visible/hidden switch, the frame editor, the print queue and the event settings.
+
 ## System Requirements 💻
 
 ### Operating System and Hardware 🖥️
@@ -67,17 +71,17 @@ After installation, the server logs will display the usernames and passwords for
 ---------------Account---------------
 Username: boss
 Roles: ['boss']
-Password: uOItPy0Khn8XNz3OiNHKBQz.ksMoo+sL
+Password: <generated-password>
 --------------------------------------
 ---------------Account---------------
 Username: photo_booth
 Roles: ['photo_booth']
-Password: 4K_9*4VU/q.ahgu+v4j,Roi.uUM~fp1j
+Password: <generated-password>
 --------------------------------------
 ---------------Account---------------
 Username: printer
 Roles: ['printer']
-Password: aYp,xVl4GMRn/d2yP!NIdfLDxFJ.vkSy
+Password: <generated-password>
 --------------------------------------
 ------------------------------------------------------
 All services are running in the background.

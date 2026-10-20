@@ -47,7 +47,7 @@ const LazyGalleryThumbnail: React.FC<LazyGalleryThumbnailProps> = ({ token, imag
     let url = "";
     setIsLoading(true);
     
-    getImage(token, imageId)
+    getImage(token, imageId, true)
       .then((blob) => {
         url = URL.createObjectURL(blob);
         setImageUrl(url);

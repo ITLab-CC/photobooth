@@ -263,8 +263,13 @@ export async function listImages(token: string): Promise<ImageListResponse> {
 
 // 3.2) GET /api/v1/image/{image_id}
 // Gibt ein PNG-Stream zurück
-export async function getImage(token: string, imageId: string): Promise<Blob> {
-  const res = await fetch(`${BASE_URL}/api/v1/image/${imageId}`, {
+export async function getImage(
+  token: string,
+  imageId: string,
+  thumb = false
+): Promise<Blob> {
+  const query = thumb ? "?thumb=true" : "";
+  const res = await fetch(`${BASE_URL}/api/v1/image/${imageId}${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {

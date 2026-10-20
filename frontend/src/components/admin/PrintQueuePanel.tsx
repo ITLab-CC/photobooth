@@ -23,14 +23,20 @@ interface PrintQueuePanelProps {
 const PrintQueuePanel: React.FC<PrintQueuePanelProps> = ({ token, showMessage }) => {
   const [jobs, setJobs] = useState<PrintResponse[]>([]);
 
-  const refresh = () => {
+  const refresh = (silent = false) => {
     listPrintJobs(token)
       .then(setJobs)
-      .catch(() => showMessage("Fehler beim Laden der Druckwarteschlange", "error"));
+      .catch(() => {
+        if (!silent) showMessage("Fehler beim Laden der Druckwarteschlange", "error");
+      });
   };
 
+  // Neue Aufträge und gedruckte Aufträge sollen ohne Neuladen sichtbar werden.
   useEffect(() => {
-    if (token) refresh();
+    if (!token) return;
+    refresh();
+    const timer = setInterval(() => refresh(true), 5000);
+    return () => clearInterval(timer);
   }, [token]);
 
   const handleDelete = async (printId: string) => {
