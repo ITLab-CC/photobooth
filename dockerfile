@@ -51,6 +51,7 @@ COPY *.py ./
 
 COPY models ./models
 COPY smileys ./smileys
+COPY branding ./branding
 
 # Copy built frontend files to backend
 COPY --from=frontend-builder /frontend/dist ./frontend/dist

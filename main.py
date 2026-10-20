@@ -1548,6 +1548,9 @@ class StripRequest(BaseModel):
 
 STRIP_DEFAULT_SIZE = (1200, 1800)
 STRIP_MARGIN_RATIO = 0.04
+# The IT-Lab logo is fixed branding: it sits in the bottom right corner of every strip.
+STRIP_LOGO_PATH = os.path.join(os.getenv("BRANDING_DIR", "branding"), "itlab_logo.png")
+STRIP_LOGO_WIDTH_RATIO = 0.22  # of the paper's shorter side
 
 
 def face_focus(photo: Image.Image) -> Tuple[float, float]:
@@ -1576,6 +1579,15 @@ def crop_to_cell(photo: Image.Image, cell: Tuple[int, int], focus: Tuple[float, 
     return resized.crop((left, top, left + cell[0], top + cell[1]))
 
 
+def load_strip_logo(paper_size: Tuple[int, int]) -> Optional[Image.Image]:
+    try:
+        logo = Image.open(STRIP_LOGO_PATH).convert("RGBA")
+    except OSError:
+        return None  # a missing logo file must not stop a print
+    logo_width = max(1, int(min(paper_size) * STRIP_LOGO_WIDTH_RATIO))
+    return logo.resize((logo_width, max(1, round(logo.height * logo_width / logo.width))), Image.Resampling.LANCZOS)
+
+
 def compose_strip(photos: List[Image.Image], paper_size: Tuple[int, int]) -> Image.Image:
     """White paper with the photos in a row: stacked on portrait paper, side by side on landscape paper.
     Each photo is cropped around its faces so that nobody is cut off if the photo has to be trimmed."""
@@ -1583,14 +1595,18 @@ def compose_strip(photos: List[Image.Image], paper_size: Tuple[int, int]) -> Ima
     margin = int(min(width, height) * STRIP_MARGIN_RATIO)
     count = len(photos)
     paper = Image.new("RGB", paper_size, (255, 255, 255))
+    logo = load_strip_logo(paper_size)
+    footer = (logo.height + margin) if logo is not None else 0  # strip at the bottom reserved for the logo
     if height >= width:
-        cell = (width - 2 * margin, (height - margin * (count + 1)) // count)
+        cell = (width - 2 * margin, (height - footer - margin * (count + 1)) // count)
         positions = [(margin, margin + i * (cell[1] + margin)) for i in range(count)]
     else:
-        cell = ((width - margin * (count + 1)) // count, height - 2 * margin)
+        cell = ((width - margin * (count + 1)) // count, height - footer - 2 * margin)
         positions = [(margin + i * (cell[0] + margin), margin) for i in range(count)]
     for photo, position in zip(photos, positions):
         paper.paste(crop_to_cell(photo, cell, face_focus(photo)), position)
+    if logo is not None:
+        paper.paste(logo, (width - margin - logo.width, height - margin - logo.height), logo)
     return paper
 
 

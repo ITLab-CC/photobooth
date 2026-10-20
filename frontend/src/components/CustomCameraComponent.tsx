@@ -158,22 +158,30 @@ export default function CustomCameraComponent({
       {!isCapturing && (
         <Button
           variant="contained"
-          aria-label="Foto machen"
+          aria-label={seriesCount > 1 ? `${seriesCount} Fotos machen` : "Foto machen"}
           startIcon={<PhotoCameraIcon sx={{ fontSize: "2rem !important" }} />}
           sx={{
             position: "absolute",
             bottom: px(20),
             left: "50%",
             transform: "translateX(-50%)",
-            minHeight: px(72),
-            minWidth: px(300),
+            minHeight: px(84),
+            minWidth: px(340),
             px: 4,
             fontSize: "1.5rem",
             borderRadius: 40,
             boxShadow: "0 8px 22px rgba(0, 0, 0, 0.35)",
           }}
         >
-          Foto machen
+          {/* The second line tells the guests up front that several photos follow. */}
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.2 }}>
+            <span>{seriesCount > 1 ? "Fotos machen" : "Foto machen"}</span>
+            {seriesCount > 1 && (
+              <Typography component="span" sx={{ fontSize: "1rem", fontWeight: 400, opacity: 0.95 }}>
+                {seriesCount} Fotos hintereinander, danach wählt ihr
+              </Typography>
+            )}
+          </Box>
         </Button>
       )}
       
