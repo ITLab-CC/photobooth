@@ -21,7 +21,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --upgrade pip \
     && pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 \
-    && pip install -r requirements.txt
+    && pip install -r requirements.txt \
+    # Other packages can pull in opencv-python-headless or -contrib. Mixed OpenCV wheels
+    # overwrite each other and leave cv2.dnn empty, so end with exactly one clean install.
+    && pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python \
+    && pip install opencv-python
 
 # Stage 3: Final runtime environment
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
