@@ -3,7 +3,7 @@ import time
 import io
 import win32print
 import win32ui
-from PIL import Image, ImageWin
+from PIL import Image, ImageFilter, ImageWin
 from dotenv import load_dotenv
 import os
 import string
@@ -53,6 +53,15 @@ def print_image_from_bytes(img_bytes: bytes) -> None:
     scaled_width, scaled_height = [int(scale * i) for i in img.size]
     x: int = int((printer_size[0] - scaled_width) / 2)
     y: int = int((printer_size[1] - scaled_height) / 2)
+
+    if (scaled_width, scaled_height) != img.size:
+        # The printer driver stretches with a crude filter (blocky, soft). Resize here with a good one and
+        # let the driver print the picture 1:1.
+        lanczos = getattr(Image, "Resampling", Image).LANCZOS
+        img = img.convert("RGB").resize((scaled_width, scaled_height), lanczos)
+        if scale > 1:
+            # Enlarging softens the picture a little; a mild sharpening brings the edges back.
+            img = img.filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=2))
 
     dib = ImageWin.Dib(img)
     dib.draw(hDC.GetHandleOutput(), (x, y, x + scaled_width, y + scaled_height))

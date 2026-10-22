@@ -7,6 +7,7 @@ import {
   listFrames,
   deleteFrame,
   activateFrame,
+  upscaleFrame,
   listBackgrounds,
   getBackground,
   FrameResponse,
@@ -97,6 +98,27 @@ const FramesPanel: React.FC<FramesPanelProps> = ({ token, showMessage }) => {
     }
   };
 
+  const handleUpscale = async (frame: FrameResponse, factor: number) => {
+    const width = Math.round(frame.width * factor);
+    const height = Math.round(frame.height * factor);
+    if (
+      !window.confirm(
+        `Eine Kopie dieses Frames mit ${width} x ${height} Pixeln anlegen? Die Ausrichtung wird mit umgerechnet. ` +
+          "Das Bild des Rahmens wird dabei nur hochgerechnet, scharfe Kanten und Schrift werden nicht schärfer. " +
+          "Für das beste Ergebnis den Frame in dieser Größe neu exportieren und hochladen."
+      )
+    )
+      return;
+    try {
+      await upscaleFrame(token, frame.frame_id, factor);
+      refreshFrames();
+      showMessage(`Kopie mit ${width} x ${height} Pixeln angelegt. Mit "Aktiv setzen" einschalten.`);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message.match(/"detail":"([^"]+)"/)?.[1] : undefined;
+      showMessage(detail ?? "Der Frame konnte nicht vergrößert werden", "error");
+    }
+  };
+
   const handleSaved = () => {
     setEditorOpen(false);
     refreshFrames();
@@ -136,6 +158,11 @@ const FramesPanel: React.FC<FramesPanelProps> = ({ token, showMessage }) => {
             />
             <Box sx={{ ml: 1, flexGrow: 1 }}>
               <Typography variant="body2">Frame {index + 1}</Typography>
+              {f.width > 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                  {f.width} x {f.height} Pixel (so groß wird das fertige Foto)
+                </Typography>
+              )}
               {f.is_active && (
                 <Chip
                   icon={<CheckCircleIcon />}
@@ -150,6 +177,9 @@ const FramesPanel: React.FC<FramesPanelProps> = ({ token, showMessage }) => {
                 Aktiv setzen
               </Button>
             )}
+            <Button size="small" onClick={() => handleUpscale(f, 1.5)} sx={{ mr: 1 }}>
+              Größer (×1,5)
+            </Button>
             <IconButton size="small" onClick={() => handleEdit(f)}>
               <EditIcon />
             </IconButton>

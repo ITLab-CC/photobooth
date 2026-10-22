@@ -50,7 +50,7 @@ from face_props import PREVIEW_STYLES, PROP_STYLES, apply_face_props, render_ove
 import faceswap
 import printstate
 import profiles
-from framewindow import visible_window, window_in_background
+from framewindow import normalize_crop, visible_window, window_in_background
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -864,6 +864,8 @@ class FrameResponse(BaseModel):
     qr_position: Tuple[int, int] = (0, 0)
     qr_scale: float = 1.0
     is_active: bool = False
+    width: int = 0   # size of the frame image in pixels; it is also the size of the finished photo
+    height: int = 0
 
 
 class FramePatchRequest(BaseModel):
@@ -887,6 +889,8 @@ def _frame_to_response(img: FRAME) -> FrameResponse:
         qr_position=(img.qr_position[0], img.qr_position[1]),
         qr_scale=img.qr_scale,
         is_active=img.is_active,
+        width=img.frame.width,
+        height=img.frame.height,
     )
 
 
@@ -999,6 +1003,43 @@ async def api_frame_get(frame_id: str, request: Request, session: Session = Depe
         return Response(status_code=304, headers=headers)
 
     return Response(content=png_bytes, media_type="image/png", headers=headers)
+
+class FrameUpscaleRequest(BaseModel):
+    factor: float = Field(1.5, ge=1.1, le=3.0)
+
+
+@app.post(
+    "/api/v1/frame/{frame_id}/upscale",
+    response_model=FrameResponse,
+    dependencies=[Depends(RateLimiter(times=1, seconds=2))],
+    description="Make a copy of a frame with more pixels (alignment values scaled to match), so photos come out in a higher resolution. The copy is not activated."
+)
+async def api_frame_upscale(frame_id: str, req: FrameUpscaleRequest, session: Session = Depends(auth(["boss"]))) -> FrameResponse:
+    db = session.mongodb_connection
+
+    source = FRAME.db_find(db, frame_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Frame image not found")
+
+    factor = req.factor
+    new_size = (round(source.frame.width * factor), round(source.frame.height * factor))
+    if max(new_size) > 6000:
+        raise HTTPException(status_code=400, detail="The result would be larger than 6000 px")
+
+    crop = normalize_crop(source.background_crop)
+    enlarged = FRAME(
+        frame=source.frame.convert("RGBA").resize(new_size, Image.Resampling.LANCZOS),
+        # the background is enlarged by the same factor, so everything lines up exactly as before
+        background_scale=source.background_scale * factor,
+        background_offset=(round(source.background_offset[0] * factor), round(source.background_offset[1] * factor)),
+        background_crop=(round(crop[0] * factor), round(crop[1] * factor), round(crop[2] * factor), round(crop[3] * factor)),
+        qr_position=(round(source.qr_position[0] * factor), round(source.qr_position[1] * factor)),
+        qr_scale=source.qr_scale,
+        is_active=False,
+    )
+    enlarged.db_save(db)
+    return _frame_to_response(enlarged)
+
 
 class FrameWindowResponse(BaseModel):
     x: int
@@ -1268,14 +1309,35 @@ class ImageProcessResponse(BaseModel):
 # Load AI model for image processing
 Replacer = IMGReplacer()
 
+def scaled_size(frame_img: Optional[FRAME], bg_size: Tuple[int, int]) -> Tuple[int, int]:
+    """Size of a background after the frame's scale, the size add_frame would give it."""
+    if frame_img is None:
+        return bg_size
+    return (int(bg_size[0] * frame_img.background_scale), int(bg_size[1] * frame_img.background_scale))
+
+
+def scaled_background(bg: Image.Image, frame_img: Optional[FRAME]) -> Image.Image:
+    """
+    The background at the size it has inside the frame. The photo is composed at this size, so the people are
+    resampled once, straight from the camera picture to their final size, instead of twice.
+    """
+    size = scaled_size(frame_img, bg.size)
+    if size == bg.size:
+        return bg
+    return bg.resize(size, Image.Resampling.LANCZOS)
+
+
 def photo_region(frame_img: Optional[FRAME], bg_size: Tuple[int, int]) -> Optional[Tuple[int, int, int, int]]:
-    """The part of a background image that stays visible inside the frame, or None without a frame."""
+    """
+    The part of the (already frame-scaled) background that stays visible inside the frame, or None without a
+    frame. bg_size is the background's size before the frame's scale.
+    """
     if frame_img is None:
         return None
     window = visible_window(frame_img.frame, bg_size, frame_img.background_scale, frame_img.background_offset, frame_img.background_crop)
     if window is None:
         return None
-    return window_in_background(window, bg_size, frame_img.background_scale, frame_img.background_offset, frame_img.background_crop)
+    return window_in_background(window, scaled_size(frame_img, bg_size), 1.0, frame_img.background_offset, frame_img.background_crop)
 
 
 @app.post(
@@ -1346,7 +1408,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         try:
             img_with_new_background = Replacer.replace_background(
                 img_no_background,
-                background_img.img,
+                scaled_background(background_img.img, frame_img),
                 image.refine_foreground,
                 margin_ratio=0.9,
                 apply_alpha_threshold=True,
@@ -1367,10 +1429,10 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         first_background_img = Background.db_find(db, back_image_ids[0])
         if first_background_img is None:
             raise HTTPException(status_code=404, detail="No background images found")
-        x_size, y_size = first_background_img.img.size
+        x_size, y_size = scaled_size(frame_img, first_background_img.img.size)
 
         # Fill exactly the part of the frame that shows the photo, so the whole camera picture is visible.
-        region = photo_region(frame_img, (x_size, y_size))
+        region = photo_region(frame_img, first_background_img.img.size)
         if region is not None:
             fitted = resize_with_crop_or_pad(source_img, (region[2] - region[0], region[3] - region[1]))
             img_with_new_background = Image.new("RGBA", (x_size, y_size), (0, 0, 0, 0))
@@ -1398,10 +1460,11 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     img_with_frame = None
     if frame_img is not None:
         try:
+            # the photo was composed at its final size already, so add_frame must not scale it again
             img_with_frame = Replacer.add_frame(
                 img_with_new_background,
                 frame_img.frame,
-                frame_img.background_scale,
+                1.0,
                 frame_img.background_offset,
                 frame_img.background_crop
                 )

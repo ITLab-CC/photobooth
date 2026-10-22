@@ -493,6 +493,8 @@ export interface FrameResponse {
   qr_position: FrameOffset;
   qr_scale: number;
   is_active: boolean;
+  width: number;
+  height: number;
 }
 
 export interface FrameListResponse {
@@ -554,6 +556,11 @@ export interface FrameWindow {
 }
 export async function getFrameWindow(token: string, frameId: string): Promise<FrameWindow> {
   return await request<FrameWindow>("GET", `/api/v1/frame/${frameId}/window`, token);
+}
+
+// POST /api/v1/frame/{frame_id}/upscale: a copy with more pixels (alignment scaled to match)
+export async function upscaleFrame(token: string, frameId: string, factor: number): Promise<FrameResponse> {
+  return await request<FrameResponse>("POST", `/api/v1/frame/${frameId}/upscale`, token, { factor });
 }
 
 // 7.4) DELETE /api/v1/frame/{frame_id}
