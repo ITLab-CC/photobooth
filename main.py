@@ -46,7 +46,7 @@ from event_config import (
 )
 from process_img import IMGReplacer, resize_with_crop_or_pad
 from face_smiley_replacer import replace_faces_with_smileys_dnn
-from face_props import PROP_STYLES, apply_face_props
+from face_props import PREVIEW_STYLES, PROP_STYLES, apply_face_props, render_overlay
 import faceswap
 import printstate
 import profiles
@@ -1839,6 +1839,38 @@ async def api_print_clear(session: Session = Depends(auth(["boss"]))) -> OK:
 
 
 
+
+
+# ---------------------------
+# Live preview
+# ---------------------------
+class PreviewRequest(BaseModel):
+    image_base64: str  # a small picture (a JPEG or PNG a few hundred pixels wide) cut like the live image
+    style: str
+
+PREVIEW_MAX_SIDE = 640
+
+
+@app.post(
+    "/api/v1/preview/props",
+    dependencies=[Depends(RateLimiter(times=15, seconds=1))],
+    description="The Magic accessories for the faces in a small camera picture, as a transparent PNG of the same size, to lay over the live image. Nothing is stored."
+)
+def api_preview_props(req: PreviewRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> Response:
+    # A plain def: FastAPI runs it in a worker thread, so detection does not hold up other requests.
+    if req.style not in PREVIEW_STYLES:
+        raise HTTPException(status_code=400, detail="No live preview for this style")
+    try:
+        picture = Image.open(io.BytesIO(base64.b64decode(req.image_base64)))
+        picture.load()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image")
+    picture.thumbnail((PREVIEW_MAX_SIDE, PREVIEW_MAX_SIDE))
+
+    overlay = render_overlay(picture, req.style)
+    buffer = io.BytesIO()
+    overlay.save(buffer, format="PNG")
+    return Response(content=buffer.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 # ---------------------------

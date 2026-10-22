@@ -528,6 +528,19 @@ export async function getFrame(token: string, frameId: string): Promise<Blob> {
   return await res.blob();
 }
 
+// POST /api/v1/preview/props: the Magic accessories for a small camera picture, as a transparent PNG
+export async function previewProps(token: string, imageBase64: string, style: string): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/api/v1/preview/props`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ image_base64: imageBase64, style }),
+  });
+  if (!res.ok) {
+    throw new Error("Keine Live-Vorschau");
+  }
+  return await res.blob();
+}
+
 // GET /api/v1/frame/{frame_id}/window: the part of the frame that shows the guests' photo
 export interface FrameWindow {
   width: number;

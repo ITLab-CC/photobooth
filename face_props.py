@@ -1,6 +1,7 @@
 import math
 import os
 import random
+import threading
 import urllib.request
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
@@ -45,6 +46,8 @@ class Face(NamedTuple):
 
 
 _detector: Optional[Any] = None
+# The detector keeps its input size between calls, so photo processing and the live preview must not share it at once.
+_detector_lock = threading.Lock()
 
 
 def _load_detector() -> Any:
@@ -66,9 +69,10 @@ DETECT_SIDES = (640, 320)
 
 def _detect_rows(img_bgr: np.ndarray) -> Any:
     height, width = img_bgr.shape[:2]
-    detector = _load_detector()
-    detector.setInputSize((width, height))
-    _, rows = detector.detect(img_bgr)
+    with _detector_lock:
+        detector = _load_detector()
+        detector.setInputSize((width, height))
+        _, rows = detector.detect(img_bgr)
     return rows
 
 
@@ -326,20 +330,55 @@ def apply_face_props(img_orig: Image.Image, style: str) -> Image.Image:
 
     out = img_orig.convert("RGB")
     for face in faces:
-        (lx, ly), (rx, ry) = face.eye_left, face.eye_right
-        eye_distance = math.hypot(rx - lx, ry - ly)
-        if eye_distance < 1:
-            continue
-
-        w = max(1, int(round(eye_distance / EYE_DISTANCE)))
-        h = max(1, int(round(w * FACE_ASPECT)))
-        layer = render_props(w, h, _kinds_for_style(style))
-
-        # PIL rotates counter-clockwise; a right eye lower than the left means a clockwise tilt.
-        tilt = math.degrees(math.atan2(ry - ly, rx - lx))
-        pivot = ((LAYER_LEFT + 0.5) * w, (LAYER_TOP + EYE_LINE) * h)
-        layer = layer.rotate(-tilt, resample=Image.Resampling.BICUBIC, center=pivot)
-
-        mid_x, mid_y = (lx + rx) / 2, (ly + ry) / 2
-        out.paste(layer, (int(round(mid_x - pivot[0])), int(round(mid_y - pivot[1]))), layer)
+        placed = _placed_props(face, style)
+        if placed is not None:
+            layer, position = placed
+            out.paste(layer, position, layer)
     return out
+
+
+def _placed_props(face: Face, style: str) -> Optional[Tuple[Image.Image, Tuple[int, int]]]:
+    """The props for one face, rotated with the head, and the top-left position to paste them at."""
+    (lx, ly), (rx, ry) = face.eye_left, face.eye_right
+    eye_distance = math.hypot(rx - lx, ry - ly)
+    if eye_distance < 1:
+        return None
+
+    w = max(1, int(round(eye_distance / EYE_DISTANCE)))
+    h = max(1, int(round(w * FACE_ASPECT)))
+    layer = render_props(w, h, _kinds_for_style(style))
+
+    # PIL rotates counter-clockwise; a right eye lower than the left means a clockwise tilt.
+    tilt = math.degrees(math.atan2(ry - ly, rx - lx))
+    pivot = ((LAYER_LEFT + 0.5) * w, (LAYER_TOP + EYE_LINE) * h)
+    layer = layer.rotate(-tilt, resample=Image.Resampling.BICUBIC, center=pivot)
+
+    mid_x, mid_y = (lx + rx) / 2, (ly + ry) / 2
+    return layer, (int(round(mid_x - pivot[0])), int(round(mid_y - pivot[1])))
+
+
+# "mix" picks something at random for every photo, so there is nothing fixed to preview.
+PREVIEW_STYLES: Tuple[str, ...] = tuple(style for style in PROP_STYLES if style != "mix")
+
+
+def render_overlay(img: Image.Image, style: str) -> Image.Image:
+    """
+    Only the props, on a transparent image of the same size, for the live preview: the browser lays it over
+    the camera picture. Returns a fully transparent image if no face is found.
+    """
+    if style not in PREVIEW_STYLES:
+        raise ValueError(f"No live preview for style: {style}")
+
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    faces = detect_faces(cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2BGR))
+    for face in faces:
+        placed = _placed_props(face, style)
+        if placed is None:
+            continue
+        layer, position = placed
+        # Pasting without a mask copies the layer's alpha too (and clips at the edges); compositing then
+        # blends it over what is already there without darkening soft edges.
+        piece = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        piece.paste(layer, position)
+        overlay = Image.alpha_composite(overlay, piece)
+    return overlay

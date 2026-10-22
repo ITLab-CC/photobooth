@@ -88,6 +88,19 @@ const fadeInAnimation = keyframes`
   100% { opacity: 1; transform: translateY(0); }
 `;
 
+// Styles that can be shown live over the camera image (smileys, "mix" and the face swaps only after the photo).
+const LIVE_PREVIEW_STYLES: MagicStyle[] = [
+  "sunglasses",
+  "party_hat",
+  "crown",
+  "party",
+  "moustache",
+  "clown_nose",
+  "bunny_ears",
+  "halo",
+  "hearts",
+];
+
 // Horizontally scrolling row of large touch chips (Magic styles).
 const chipRowSx = {
   display: "flex",
@@ -633,6 +646,10 @@ export default function PhotoBoxPage() {
         {token && galleryId && !showResultModal && showMainContent && (
           <>
             <CustomCameraComponent
+              token={token}
+              liveStyle={
+                magicEnabled && !faceSwapId && !guestSwap && LIVE_PREVIEW_STYLES.includes(magicStyle) ? magicStyle : null
+              }
               aspect={captureAspect}
               seriesCount={runtimeConfig.seriesCount}
               onPhotosCaptured={handlePhotos}
