@@ -5,7 +5,7 @@ import CameraPreview from "./CameraPreview";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import confetti from "canvas-confetti";
 import { brand, previewSize, px } from "../theme";
-import { previewProps } from "../api";
+import { previewProps, reportCamera } from "../api";
 import { runtimeConfig } from "../config/event";
 import { playChime, playGo, playShutter, playTick } from "../utils/sound";
 
@@ -222,6 +222,12 @@ export default function CustomCameraComponent({
         width={size.width}
         height={size.height}
         onLoadedMetadata={() => {
+          const video = videoRef.current;
+          if (video && video.videoWidth > 0) {
+            // Tell the server which camera and resolution this is (shown in the admin overview).
+            const label = (video.srcObject as MediaStream | null)?.getVideoTracks()[0]?.label ?? "";
+            reportCamera(token, video.videoWidth, video.videoHeight, label).catch(() => undefined);
+          }
           setVideoReady(true);
         }}
       />

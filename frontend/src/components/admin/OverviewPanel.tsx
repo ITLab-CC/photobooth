@@ -96,6 +96,7 @@ const OverviewPanel: React.FC<OverviewPanelProps> = ({ token, showMessage }) => 
         <StatusCard title="Speicherplatz" check={health.disk} />
         <StatusCard title="Druckwarteschlange" check={health.print_queue} />
         <StatusCard title="Papier und Folie" check={health.media} />
+        <StatusCard title="Kamera (Livebild)" check={health.camera} />
       </Box>
 
       <Typography variant="h6" sx={{ mb: 1 }}>

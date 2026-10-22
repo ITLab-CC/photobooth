@@ -1233,6 +1233,14 @@ class ImageProcessRequest(BaseModel):
     swap_guest_faces: bool = False  # the people in the photo trade faces with each other (needs two or more)
     magic_style: str = "smileys"  # "smileys" or one of face_props.PROP_STYLES
 
+class CameraInfo:
+    """What the photo booth's browser reported about its camera. Only kept in memory."""
+    label: str = ""
+    width: int = 0
+    height: int = 0
+    reported_at: Optional[datetime] = None
+
+
 class ProcessingStats:
     """In-memory counters for the dashboard. Nothing about the photos is stored."""
     day: str = ""
@@ -1842,6 +1850,29 @@ async def api_print_clear(session: Session = Depends(auth(["boss"]))) -> OK:
 
 
 # ---------------------------
+# Camera report
+# ---------------------------
+class CameraReportRequest(BaseModel):
+    width: int = Field(..., ge=1, le=20000)
+    height: int = Field(..., ge=1, le=20000)
+    label: str = Field("", max_length=200)
+
+
+@app.post(
+    "/api/v1/camera/report",
+    response_model=OK,
+    dependencies=[Depends(RateLimiter(times=2, seconds=1))],
+    description="The photo booth tells the server which camera and resolution its live image comes from, so the admin overview can show it."
+)
+async def api_camera_report(report: CameraReportRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> OK:
+    CameraInfo.label = report.label.strip()
+    CameraInfo.width = report.width
+    CameraInfo.height = report.height
+    CameraInfo.reported_at = datetime.now()
+    return OK(ok=True)
+
+
+# ---------------------------
 # Live preview
 # ---------------------------
 class PreviewRequest(BaseModel):
@@ -1991,6 +2022,7 @@ class HealthResponse(BaseModel):
     disk: HealthCheck
     print_queue: HealthCheck
     media: HealthCheck
+    camera: HealthCheck
     backgrounds_total: int
     backgrounds_active: int
     photos_today: int
@@ -2033,6 +2065,16 @@ async def api_health(session: Session = Depends(auth(["boss"]))) -> HealthRespon
     except Exception as e:
         print_queue = HealthCheck(ok=False, detail=f"Nicht lesbar: {e}")
 
+    if CameraInfo.reported_at is None:
+        camera = HealthCheck(ok=False, detail="Die Fotobox hat noch kein Livebild gemeldet")
+    else:
+        # Full HD is the least that prints sharply once the picture is cut to the frame's opening.
+        camera = HealthCheck(
+            ok=min(CameraInfo.width, CameraInfo.height) >= 1080,
+            detail=f"{CameraInfo.label or 'Kamera'}: {CameraInfo.width} x {CameraInfo.height}"
+            + ("" if min(CameraInfo.width, CameraInfo.height) >= 1080 else " (unter Full HD, Druck wird unscharf)"),
+        )
+
     roll = printstate.status()
     media = HealthCheck(
         ok=not roll.low,
@@ -2052,6 +2094,7 @@ async def api_health(session: Session = Depends(auth(["boss"]))) -> HealthRespon
         disk=disk,
         print_queue=print_queue,
         media=media,
+        camera=camera,
         backgrounds_total=len(metas),
         backgrounds_active=sum(1 for m in metas if m["active"]),
         photos_today=ProcessingStats.photos if ProcessingStats.day == datetime.now().strftime("%Y-%m-%d") else 0,

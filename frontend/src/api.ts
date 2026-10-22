@@ -541,6 +541,11 @@ export async function previewProps(token: string, imageBase64: string, style: st
   return await res.blob();
 }
 
+// POST /api/v1/camera/report: which camera and resolution the live image comes from
+export async function reportCamera(token: string, width: number, height: number, label: string): Promise<void> {
+  await request<{ ok: boolean }>("POST", "/api/v1/camera/report", token, { width, height, label });
+}
+
 // GET /api/v1/frame/{frame_id}/window: the part of the frame that shows the guests' photo
 export interface FrameWindow {
   width: number;
@@ -773,6 +778,7 @@ export interface HealthResponse {
   disk: HealthCheck;
   print_queue: HealthCheck;
   media: HealthCheck;
+  camera: HealthCheck;
   backgrounds_total: number;
   backgrounds_active: number;
   photos_today: number;

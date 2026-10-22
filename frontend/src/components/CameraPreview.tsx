@@ -14,7 +14,11 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
     let activeStream: MediaStream | null = null;
     async function initCamera() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // Ask for the best picture the camera has: without a request browsers often hand out only 640x480.
+        // "ideal" takes the closest mode, so a camera that tops out lower still works.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+        });
         activeStream = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
