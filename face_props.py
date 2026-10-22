@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 YUNET_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
 YUNET_PATH = "models/face_detection_yunet_2023mar.onnx"
@@ -17,6 +17,9 @@ PROP_STYLES: Tuple[str, ...] = (
     "sunglasses", "party_hat", "crown", "party",
     "moustache", "clown_nose", "bunny_ears", "halo", "hearts", "mix",
 )
+
+# Styles that change the faces themselves instead of drawing props on them.
+SPECIAL_STYLES: Tuple[str, ...] = ("upside_down",)
 
 # Props are drawn at this multiple of their final size and scaled down for smooth edges.
 SUPERSAMPLE = 2
@@ -335,6 +338,48 @@ def apply_face_props(img_orig: Image.Image, style: str) -> Image.Image:
             layer, position = placed
             out.paste(layer, position, layer)
     return out
+
+
+def flip_faces(img_orig: Image.Image) -> Image.Image:
+    """
+    Turn every face upside down in place: the face area is rotated by 180 degrees around its centre and blended
+    back through a soft oval, so the hair and the neck stay where they are. Returns the original if no face is found.
+    """
+    img_cv = cv2.cvtColor(np.array(img_orig.convert("RGB")), cv2.COLOR_RGB2BGR)
+    faces = detect_faces(img_cv)
+    if not faces:
+        return img_orig
+
+    result = img_orig.convert("RGB")
+    for face in faces:
+        (lx, ly), (rx, ry) = face.eye_left, face.eye_right
+        eye_distance = math.hypot(rx - lx, ry - ly)
+        if eye_distance < 1:
+            continue
+        # Face area as in the props: width from the eye distance, centred between eyes and mouth.
+        width = eye_distance / EYE_DISTANCE
+        height = width * FACE_ASPECT
+        centre = (face.kps[:, 0].mean(), face.kps[:, 1].mean())
+        side = int(round(height * 1.25))
+        left, top = int(round(centre[0] - side / 2)), int(round(centre[1] - side / 2))
+        if side < 8:
+            continue
+
+        # Work on a copy with room around the face, so the crop never leaves the picture.
+        pad = side
+        padded = ImageOps.expand(result, border=pad, fill=(0, 0, 0))
+        crop = padded.crop((left + pad, top + pad, left + pad + side, top + pad + side))
+        flipped = crop.rotate(180)
+
+        mask = Image.new("L", (side, side), 0)
+        ImageDraw.Draw(mask).ellipse(
+            [side * 0.5 - width * 0.55, side * 0.5 - height * 0.52, side * 0.5 + width * 0.55, side * 0.5 + height * 0.52],
+            fill=255,
+        )
+        mask = mask.filter(ImageFilter.GaussianBlur(max(1.0, side * 0.04)))
+        padded.paste(flipped, (left + pad, top + pad), mask)
+        result = padded.crop((pad, pad, pad + result.width, pad + result.height))
+    return result
 
 
 def _placed_props(face: Face, style: str) -> Optional[Tuple[Image.Image, Tuple[int, int]]]:

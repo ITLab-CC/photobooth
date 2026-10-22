@@ -66,6 +66,7 @@ const MAGIC_STYLES: { value: MagicStyle; label: string }[] = [
   { value: "bunny_ears", label: "🐰 Hasenohren" },
   { value: "halo", label: "😇 Heiligenschein" },
   { value: "hearts", label: "😍 Herzaugen" },
+  { value: "upside_down", label: "🙃 Kopfüber" },
   { value: "mix", label: "🎲 Überraschung" },
 ];
 

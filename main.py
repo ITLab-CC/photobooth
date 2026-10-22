@@ -50,7 +50,7 @@ from event_config import (
 )
 from process_img import IMGReplacer
 from face_smiley_replacer import replace_faces_with_smileys_dnn
-from face_props import PREVIEW_STYLES, PROP_STYLES, apply_face_props, render_overlay
+from face_props import PREVIEW_STYLES, PROP_STYLES, SPECIAL_STYLES, apply_face_props, flip_faces, render_overlay
 import faceswap
 import printstate
 import profiles
@@ -1329,7 +1329,7 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     db = session.mongodb_connection
     started_at = time.perf_counter()
 
-    if image.magic_style != "smileys" and image.magic_style not in PROP_STYLES:
+    if image.magic_style != "smileys" and image.magic_style not in PROP_STYLES and image.magic_style not in SPECIAL_STYLES:
         raise HTTPException(status_code=400, detail=f"Unknown magic_style: {image.magic_style}")
 
     # get the image
@@ -1417,6 +1417,8 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
                 img_with_new_background = replace_faces_with_smileys_dnn(
                     img_with_new_background
                     )
+            elif image.magic_style == "upside_down":
+                img_with_new_background = flip_faces(img_with_new_background)
             else:
                 img_with_new_background = apply_face_props(
                     img_with_new_background,

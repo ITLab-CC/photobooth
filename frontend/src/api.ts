@@ -377,6 +377,7 @@ export type MagicStyle =
   | "bunny_ears"
   | "halo"
   | "hearts"
+  | "upside_down"
   | "mix";
 
 export interface ImageProcessRequest {
