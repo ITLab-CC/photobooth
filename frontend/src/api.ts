@@ -617,6 +617,7 @@ export interface EventConfigResponse {
   max_prints: number;
   series_count: number;
   sound_enabled: boolean;
+  subject_anchor: "bottom" | "center";
   has_logo: boolean;
 }
 

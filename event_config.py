@@ -13,6 +13,7 @@ EVENT_CONFIG_ID = "CONFIG-default"
 DEFAULT_START_TEXT = "Erschaffe eine Erinnerung"
 DEFAULT_MAX_PRINTS = 3  # copies of one photo a guest can print
 MAX_PRINTS_LIMIT = 10
+DEFAULT_SUBJECT_ANCHOR = "bottom"  # people stand on the lower edge of the photo ("center" puts them in the middle)
 DEFAULT_SERIES_COUNT = 3  # photos taken in a row, the guests pick the best one (1 = single photo)
 MAX_SERIES_COUNT = 5
 
@@ -27,6 +28,7 @@ class EventConfig:
     max_prints: int = DEFAULT_MAX_PRINTS
     series_count: int = DEFAULT_SERIES_COUNT
     sound_enabled: bool = True
+    subject_anchor: str = DEFAULT_SUBJECT_ANCHOR
     _id: str = field(default=EVENT_CONFIG_ID)
 
     # Collection name for MongoDB.
@@ -48,6 +50,7 @@ class EventConfig:
             "max_prints": self.max_prints,
             "series_count": self.series_count,
             "sound_enabled": self.sound_enabled,
+            "subject_anchor": self.subject_anchor,
         }
 
     def __str__(self) -> str:
@@ -162,6 +165,7 @@ class EventConfig:
             max_prints=int(data.get("max_prints", DEFAULT_MAX_PRINTS)),
             series_count=int(data.get("series_count", DEFAULT_SERIES_COUNT)),
             sound_enabled=bool(data.get("sound_enabled", True)),
+            subject_anchor=str(data.get("subject_anchor", DEFAULT_SUBJECT_ANCHOR)),
             _id=str(data.get("_id", EVENT_CONFIG_ID)),
         )
 

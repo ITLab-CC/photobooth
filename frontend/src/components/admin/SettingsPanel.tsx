@@ -1,5 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Box, TextField, Button, AlertColor, Stack, Typography, Switch, FormControlLabel, Paper } from "@mui/material";
+import {
+  Box,
+  TextField,
+  Button,
+  AlertColor,
+  Stack,
+  Typography,
+  Switch,
+  FormControlLabel,
+  Paper,
+  ToggleButton,
+  ToggleButtonGroup,
+} from "@mui/material";
 import {
   getEventConfig,
   updateEventConfig,
@@ -197,6 +209,25 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
           helperText="So viele Exemplare eines Fotos können Gäste höchstens drucken. Bei 1 entfällt die Auswahl."
           fullWidth
         />
+        <Box>
+          <Typography variant="body2" sx={{ mb: 0.5 }}>
+            Personen im Bild
+          </Typography>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={config.subject_anchor}
+            onChange={(_e, value) => value && setConfig((prev) => (prev ? { ...prev, subject_anchor: value } : prev))}
+            aria-label="Position der Personen"
+          >
+            <ToggleButton value="bottom">Unten (stehen auf dem Rand)</ToggleButton>
+            <ToggleButton value="center">In der Mitte</ToggleButton>
+          </ToggleButtonGroup>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+            Bei "Unten" stehen die Personen auf dem unteren Rand des Fotos, wer unten vom Kamerabild abgeschnitten ist,
+            läuft aus dem Bild. Bei "Mitte" schweben sie mit Abstand nach allen Seiten.
+          </Typography>
+        </Box>
         <FormControlLabel
           control={
             <Switch

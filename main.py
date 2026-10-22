@@ -11,7 +11,7 @@ from collections import deque
 import io
 from math import ceil
 import os
-from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -39,6 +39,7 @@ from printer import PrinterQueueItem
 from event_config import (
     DEFAULT_MAX_PRINTS,
     DEFAULT_SERIES_COUNT,
+    DEFAULT_SUBJECT_ANCHOR,
     DEFAULT_START_TEXT,
     MAX_PRINTS_LIMIT,
     MAX_SERIES_COUNT,
@@ -1109,6 +1110,7 @@ SETTINGS_DEFAULTS = {
     "max_prints": DEFAULT_MAX_PRINTS,
     "series_count": DEFAULT_SERIES_COUNT,
     "sound_enabled": True,
+    "subject_anchor": DEFAULT_SUBJECT_ANCHOR,
     "has_logo": False,
 }
 
@@ -1124,6 +1126,7 @@ class SettingsRequest(BaseModel):
     max_prints: int = Field(DEFAULT_MAX_PRINTS, ge=1, le=MAX_PRINTS_LIMIT)
     series_count: int = Field(DEFAULT_SERIES_COUNT, ge=1, le=MAX_SERIES_COUNT)
     sound_enabled: bool = True
+    subject_anchor: Literal["bottom", "center"] = "bottom"
 
 
 class SettingsResponse(BaseModel):
@@ -1135,6 +1138,7 @@ class SettingsResponse(BaseModel):
     max_prints: int = DEFAULT_MAX_PRINTS
     series_count: int = DEFAULT_SERIES_COUNT
     sound_enabled: bool = True
+    subject_anchor: str = DEFAULT_SUBJECT_ANCHOR
     has_logo: bool = False
 
 
@@ -1148,6 +1152,7 @@ def _settings_response(config: EventConfig, has_logo: bool) -> SettingsResponse:
         max_prints=config.max_prints,
         series_count=config.series_count,
         sound_enabled=config.sound_enabled,
+        subject_anchor=config.subject_anchor,
         has_logo=has_logo,
     )
 
@@ -1187,6 +1192,7 @@ async def api_settings_update(settings: SettingsRequest, session: Session = Depe
         max_prints=settings.max_prints,
         series_count=settings.series_count,
         sound_enabled=settings.sound_enabled,
+        subject_anchor=settings.subject_anchor,
     )
     if existing is None:
         config.db_save(db)
@@ -1368,6 +1374,9 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
 
+        event_config = EventConfig.db_find(db)
+        subject_anchor = event_config.subject_anchor if event_config is not None else DEFAULT_SUBJECT_ANCHOR
+
         # replace background: the background is cut to the opening of the frame (formatfüllend), so it always
         # fills it, whatever size it has; the people are fitted into that area
         try:
@@ -1380,7 +1389,8 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
                 image.refine_foreground,
                 margin_ratio=0.9,
                 apply_alpha_threshold=True,
-                light_match=image.light_match
+                light_match=image.light_match,
+                anchor=subject_anchor
                 )
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
@@ -1512,7 +1522,7 @@ async def api_profile_add(req: ProfileRequest, session: Session = Depends(auth([
     settings = {
         key: value
         for key, value in (config.to_dict() if config is not None else SETTINGS_DEFAULTS).items()
-        if key in ("title", "subtitle", "brand_name", "start_text", "max_prints", "series_count", "sound_enabled")
+        if key in ("title", "subtitle", "brand_name", "start_text", "max_prints", "series_count", "sound_enabled", "subject_anchor")
     }
     active_ids = [meta["background_id"] for meta in Background.db_find_meta(db) if meta["active"]]
     active_frame = db.db[FRAME.COLLECTION_NAME].find_one({"is_active": True}, {"_id": 1})

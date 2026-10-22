@@ -4,6 +4,8 @@ from PIL import Image
 from PIL.Image import Image as PilImage
 
 
+import cv2
+import numpy as np
 import torch
 from relight import match_light
 from ben2 import BEN_Base  # type: ignore
@@ -23,32 +25,48 @@ def get_bbox_with_alpha_threshold(img: Image.Image, alpha_threshold: int = 128) 
         Optional[Tuple[int, int, int, int]]: The bounding box as (left, top, right, bottom),
                                              or None if no pixel meets the threshold.
     """
-    rgba = img.convert("RGBA")
-    
-    min_x, min_y = rgba.width, rgba.height
-    max_x, max_y = 0, 0
-
-    for y in range(rgba.height):
-        for x in range(rgba.width):
-            # Explicitly cast the result to a 4-tuple to satisfy the type checker
-            pixel = cast(Tuple[int, int, int, int], rgba.getpixel((x, y)))
-            r, g, b, a = pixel
-            if a >= alpha_threshold:
-                if x < min_x:
-                    min_x = x
-                if x > max_x:
-                    max_x = x
-                if y < min_y:
-                    min_y = y
-                if y > max_y:
-                    max_y = y
-
-    if max_x < min_x or max_y < min_y:
+    alpha = np.asarray(img.convert("RGBA"))[..., 3]
+    solid = alpha >= alpha_threshold
+    rows = np.flatnonzero(solid.any(axis=1))
+    columns = np.flatnonzero(solid.any(axis=0))
+    if rows.size == 0:
         return None  # No pixels found meeting the alpha threshold
 
     # The bounding box is defined as (left, top, right, bottom),
     # where right and bottom are one pixel past the last included pixel.
-    return (min_x, min_y, max_x + 1, max_y + 1)
+    return (int(columns[0]), int(rows[0]), int(columns[-1]) + 1, int(rows[-1]) + 1)
+
+
+def clean_cutout_edges(cutout: Image.Image) -> Image.Image:
+    """
+    Remove the light fringe around a cut-out person. The matte's edge pixels still carry the colour of the old
+    background, which shows as a bright outline on the new one. The matte is thinned by about a pixel and
+    smoothed, and the colours near the edge are taken from the inside of the person instead.
+    """
+    rgba = np.asarray(cutout.convert("RGBA"))
+    rgb = rgba[..., :3].astype(np.float32)
+    alpha = rgba[..., 3]
+
+    step = max(1, round(max(cutout.size) / 1100))  # one pixel at Full HD, more for larger pictures
+    eroded = cv2.erode(alpha, np.ones((2 * step + 1, 2 * step + 1), np.uint8))
+    softened = cv2.GaussianBlur(eroded, (0, 0), step * 0.8)
+
+    # Colours are only trusted well inside the person (about three pixels from the edge at Full HD).
+    deep = 2 * step + 1
+    inside = cv2.erode((alpha >= 250).astype(np.uint8), np.ones((2 * deep + 1, 2 * deep + 1), np.uint8)).astype(np.float32)
+    sigma = 3.0 * step + 1.0
+    colour_sum = cv2.GaussianBlur(rgb * inside[..., None], (0, 0), sigma)
+    weight = cv2.GaussianBlur(inside, (0, 0), sigma)[..., None]
+    from_inside = colour_sum / np.maximum(weight, 1e-4)
+    cleaned = np.where((inside[..., None] > 0.5) | (weight < 0.02), rgb, from_inside)
+
+    return Image.fromarray(np.dstack([np.clip(cleaned, 0, 255).astype(np.uint8), softened]), "RGBA")
+
+
+# With anchor="bottom": share of the height kept free above the subject, and the gap left under
+# a subject whose feet are in the picture.
+BOTTOM_ANCHOR_TOP_MARGIN = 0.04
+BOTTOM_ANCHOR_FLOOR_MARGIN = 0.03
 
 
 class IMGReplacer:
@@ -100,7 +118,8 @@ class IMGReplacer:
         refine_foreground: bool = False,
         margin_ratio: float = 0.9,
         apply_alpha_threshold: bool = True,
-        light_match: bool = False
+        light_match: bool = False,
+        anchor: str = "center"
     ) -> Image.Image:
         """
         Replaces the background of the input image with a new background.
@@ -113,10 +132,13 @@ class IMGReplacer:
         :param margin_ratio: For example, 0.9 means 90% of the maximum possible size (adds an automatic margin).
         :param apply_alpha_threshold: If True, uses get_bbox_with_alpha_threshold to ignore semi-transparent edge pixels.
         :param light_match: If True, adapt the subject's brightness/color to the new background (see relight.py).
+        :param anchor: "center" puts the subject in the middle; "bottom" lets it stand on the lower edge, and a
+                       person who is cut off at the bottom of the camera picture continues beyond the lower edge
+                       instead of ending in mid-air.
         :return: Composited image (RGBA).
         """
         # 1) Isolate the foreground
-        fg_rgba = foreground.convert("RGBA")
+        fg_rgba = clean_cutout_edges(foreground)
         bg_rgba = new_background.convert("RGBA")
         frame_w, frame_h = bg_rgba.size
 
@@ -134,16 +156,14 @@ class IMGReplacer:
         subj_width = right - left
         subj_height = bottom - top
 
-        # 3) Contain approach: Determine the scale required for the subject to exactly fit the frame (without margin)
-        contain_scale = min(frame_w / subj_width, frame_h / subj_height)
+        # 3) Contain approach: scale the subject to fit the frame, leaving a margin
+        if anchor == "bottom":
+            # width keeps its margin; the height may use nearly everything, as the subject stands on the lower edge
+            final_scale = min(frame_w * margin_ratio / subj_width, frame_h * (1 - BOTTOM_ANCHOR_TOP_MARGIN) / subj_height)
+        else:
+            final_scale = min(frame_w / subj_width, frame_h / subj_height) * margin_ratio
 
-        # 4) margin_ratio => Safety margin.
-        #    The subject fills only margin_ratio * contain_scale.
-        #    If you never want to upscale beyond the original size,
-        #    limit: final_scale = min(contain_scale * margin_ratio, 1.0)
-        final_scale = contain_scale * margin_ratio
-
-        # 5) Scale the entire image
+        # 4) Scale the entire image
         new_fg_width = int(fg_rgba.width * final_scale)
         new_fg_height = int(fg_rgba.height * final_scale)
 
@@ -155,19 +175,15 @@ class IMGReplacer:
 
         fg_rgba_scaled = fg_rgba.resize((new_fg_width, new_fg_height), resample_method)
 
-        # 6) Determine the center of the scaled subject
-        scaled_bbox = fg_rgba_scaled.getbbox()
-        if scaled_bbox:
-            left_s, top_s, right_s, bottom_s = scaled_bbox
-            subj_center_x = (left_s + right_s) // 2
-            subj_center_y = (top_s + bottom_s) // 2
+        # 5) Place it: centered horizontally, and either centered vertically or standing on the lower edge
+        offset_x = round(frame_w / 2 - (left + right) / 2 * final_scale)
+        if anchor == "bottom":
+            cut_off_below = bottom >= fg_rgba.height - max(2, fg_rgba.height // 250)
+            floor_gap = 0 if cut_off_below else round(frame_h * BOTTOM_ANCHOR_FLOOR_MARGIN)
+            # a subject cut off by the camera picture bleeds one pixel past the edge so no seam shows
+            offset_y = round(frame_h - floor_gap - bottom * final_scale) + (1 if cut_off_below else 0)
         else:
-            subj_center_x = new_fg_width // 2
-            subj_center_y = new_fg_height // 2
-
-        # 7) Center the subject in the frame
-        offset_x = (frame_w // 2) - subj_center_x
-        offset_y = (frame_h // 2) - subj_center_y
+            offset_y = round(frame_h / 2 - (top + bottom) / 2 * final_scale)
 
         # 8) Create a new RGBA image with the same size as the background
         new_fg = Image.new("RGBA", (frame_w, frame_h), (0, 0, 0, 0))
