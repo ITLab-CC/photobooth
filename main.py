@@ -52,6 +52,7 @@ import faceswap
 import printstate
 import profiles
 from framewindow import cover_fit, frame_opening, normalize_crop
+from groupadvice import advice
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -1920,6 +1921,35 @@ def api_preview_props(req: PreviewRequest, session: Session = Depends(auth(["bos
     buffer = io.BytesIO()
     overlay.save(buffer, format="PNG")
     return Response(content=buffer.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+class HintRequest(BaseModel):
+    image_base64: str  # a small picture, cut like the live image
+
+
+class HintResponse(BaseModel):
+    code: str  # nobody, edge, back, closer, together or ok
+    text: str
+    faces: int
+
+
+@app.post(
+    "/api/v1/preview/hint",
+    response_model=HintResponse,
+    dependencies=[Depends(RateLimiter(times=10, seconds=1))],
+    description="A short hint for the people in front of the camera (come closer, step back, stand closer together, ...), computed from the faces in a small camera picture. Nothing is stored."
+)
+def api_preview_hint(req: HintRequest, session: Session = Depends(auth(["boss", "photo_booth"]))) -> HintResponse:
+    try:
+        picture = Image.open(io.BytesIO(base64.b64decode(req.image_base64)))
+        picture.load()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image")
+    picture.thumbnail((PREVIEW_MAX_SIDE, PREVIEW_MAX_SIDE))
+
+    faces = face_props.detect_faces(cv2.cvtColor(np.array(picture.convert("RGB")), cv2.COLOR_RGB2BGR))
+    code, text = advice([face.box for face in faces], picture.width, picture.height)
+    return HintResponse(code=code, text=text, faces=len(faces))
 
 
 # ---------------------------

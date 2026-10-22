@@ -5,7 +5,7 @@ import CameraPreview from "./CameraPreview";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import confetti from "canvas-confetti";
 import { brand, previewSize, px } from "../theme";
-import { previewProps, reportCamera } from "../api";
+import { previewHint, previewProps, reportCamera, PreviewHint } from "../api";
 import { runtimeConfig } from "../config/event";
 import { playChime, playGo, playShutter, playTick } from "../utils/sound";
 
@@ -22,6 +22,8 @@ const flashAnimation = keyframes`
 // How the live preview of the Magic accessories works: a small copy of the live image goes to the server a few
 // times per second, which returns only the accessories as a transparent picture to lay over the live image.
 const PREVIEW_WIDTH = 320;
+const HINT_PAUSE_MS = 500; // hints change slowly, so they are asked for less often than the accessories
+const HINT_STABLE_ANSWERS = 2; // a hint shows only after the same answer came this many times in a row, so it does not flicker
 const PREVIEW_PAUSE_MS = 80; // pause between two requests; the next one starts after the answer arrived
 
 interface CustomCameraComponentProps {
@@ -60,6 +62,43 @@ export default function CustomCameraComponent({
   const [message, setMessage] = useState<string | null>(null);
 
   const size = previewSize(aspect);
+
+  // Hint for the people in front of the camera ("closer", "step back", ...), shown on the live image.
+  const [hint, setHint] = useState<PreviewHint | null>(null);
+
+  useEffect(() => {
+    if (!videoReady || isCapturing) {
+      setHint(null);
+      return;
+    }
+    let cancelled = false;
+    let lastCode = "";
+    let repeats = 0;
+    const run = async () => {
+      while (!cancelled) {
+        const frame = grabFrame(true);
+        if (!frame) {
+          await sleep(500);
+          continue;
+        }
+        try {
+          const answer = await previewHint(token, frame);
+          if (cancelled) return;
+          repeats = answer.code === lastCode ? repeats + 1 : 1;
+          lastCode = answer.code;
+          if (repeats >= HINT_STABLE_ANSWERS) setHint(answer);
+        } catch {
+          await sleep(1000); // the hint is a help only, never a requirement for the photo
+        }
+        await sleep(HINT_PAUSE_MS);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoReady, isCapturing, aspect, token]);
 
   // The accessories to lay over the live image (an object URL of the latest transparent picture).
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
@@ -297,6 +336,40 @@ export default function CustomCameraComponent({
         />
       )}
  
+      {hint && !isCapturing && (
+        <Box
+          role="status"
+          aria-live="polite"
+          sx={{
+            position: "absolute",
+            top: px(16),
+            left: 0,
+            right: 0,
+            display: "flex",
+            justifyContent: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <Typography
+            variant="h6"
+            sx={{
+              px: 3,
+              py: 1,
+              borderRadius: 30,
+              color: "#ffffff",
+              fontWeight: 600,
+              textAlign: "center",
+              backgroundColor: hint.code === "ok" ? brand.teal : brand.navy,
+              boxShadow: "0 4px 14px rgba(0, 0, 0, 0.3)",
+              transition: "background-color 0.3s",
+            }}
+          >
+            {hint.code === "ok" ? "✓ " : ""}
+            {hint.text}
+          </Typography>
+        </Box>
+      )}
+
       {seriesLabel && (
         <Typography
           variant="h5"

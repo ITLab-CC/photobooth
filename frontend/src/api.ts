@@ -550,6 +550,16 @@ export async function reportCamera(token: string, width: number, height: number,
   await request<{ ok: boolean }>("POST", "/api/v1/camera/report", token, { width, height, label });
 }
 
+// POST /api/v1/preview/hint: a short hint for the people in front of the camera
+export interface PreviewHint {
+  code: "nobody" | "edge" | "back" | "closer" | "together" | "ok";
+  text: string;
+  faces: number;
+}
+export async function previewHint(token: string, imageBase64: string): Promise<PreviewHint> {
+  return await request<PreviewHint>("POST", "/api/v1/preview/hint", token, { image_base64: imageBase64 });
+}
+
 // GET /api/v1/frame/{frame_id}/window: the part of the frame that shows the guests' photo
 export interface FrameWindow {
   x: number;
