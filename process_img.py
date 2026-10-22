@@ -63,6 +63,41 @@ def clean_cutout_edges(cutout: Image.Image) -> Image.Image:
     return Image.fromarray(np.dstack([np.clip(cleaned, 0, 255).astype(np.uint8), softened]), "RGBA")
 
 
+def ground_shadow(alpha: np.ndarray, strength: float = 0.5) -> Optional[np.ndarray]:
+    """
+    A soft contact shadow under the feet of the people in a cut-out, as opacity values 0..1 of the same size.
+    Only columns whose lowest point is near the ground line get one (not hanging hands), and none where the
+    person is cut off by the picture's lower edge (there are no feet to put a shadow under).
+    """
+    height, width = alpha.shape
+    solid = alpha >= 128
+    has_body = solid.any(axis=0)
+    if not has_body.any():
+        return None
+    lowest = height - 1 - np.argmax(solid[::-1], axis=0)  # lowest solid row of every column
+    top = int(np.flatnonzero(solid.any(axis=1))[0])
+    not_cut_off = lowest < height - max(3, height // 250)
+    standing = has_body & not_cut_off
+    if not standing.any():
+        return None
+    # The ground line is where the lowest visible feet are; people cut off at the picture's edge do not count.
+    ground_line = int(lowest[standing].max())
+    body_height = max(1, ground_line - top)
+
+    near_ground = lowest >= ground_line - 0.25 * body_height  # perspective puts people at different depths
+    columns = standing & near_ground
+    if not columns.any():
+        return None
+
+    thickness = max(2.0, 0.014 * body_height)
+    rows = np.arange(height, dtype=np.float32)[:, None]
+    centre = (lowest.astype(np.float32) + 0.35 * thickness)[None, :]
+    band = np.exp(-(((rows - centre) / thickness) ** 2)) * columns[None, :]
+    # widen a little sideways so neighbouring feet join into one soft patch under the group
+    spread = cv2.GaussianBlur(band.astype(np.float32), (0, 0), sigmaX=max(1.5, 0.012 * width), sigmaY=0.8)
+    return np.clip(spread * strength * 1.6, 0.0, strength)
+
+
 # With anchor="bottom": share of the height kept free above the subject, and the gap left under
 # a subject whose feet are in the picture.
 BOTTOM_ANCHOR_TOP_MARGIN = 0.04
@@ -188,6 +223,15 @@ class IMGReplacer:
         # 8) Create a new RGBA image with the same size as the background
         new_fg = Image.new("RGBA", (frame_w, frame_h), (0, 0, 0, 0))
         new_fg.paste(fg_rgba_scaled, (offset_x, offset_y), fg_rgba_scaled)
+
+        # A soft shadow on the ground under the people comes first, so they stand on it instead of floating.
+        shadow = ground_shadow(np.asarray(fg_rgba_scaled)[..., 3])
+        if shadow is not None:
+            shadow_rgba = np.zeros(shadow.shape + (4,), np.uint8)
+            shadow_rgba[..., 3] = (shadow * 255).astype(np.uint8)
+            shadow_layer = Image.new("RGBA", (frame_w, frame_h), (0, 0, 0, 0))
+            shadow_layer.paste(Image.fromarray(shadow_rgba, "RGBA"), (offset_x, offset_y))
+            bg_rgba = Image.alpha_composite(bg_rgba, shadow_layer)
 
         if light_match:
             new_fg = match_light(new_fg, bg_rgba)
