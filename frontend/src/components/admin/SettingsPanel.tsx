@@ -114,7 +114,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
   };
 
   // Number fields keep the last valid value while the admin is typing.
-  const updateNumber = (field: "max_prints" | "series_count", value: string, min: number, max: number) => {
+  const updateNumber = (
+    field: "max_prints" | "series_count" | "countdown_seconds",
+    value: string,
+    min: number,
+    max: number
+  ) => {
     const parsed = parseInt(value, 10);
     if (Number.isNaN(parsed)) return;
     setConfig((prev) => (prev ? { ...prev, [field]: Math.min(max, Math.max(min, parsed)) } : prev));
@@ -198,6 +203,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ token, showMessage }) => 
           onChange={(e) => updateNumber("series_count", e.target.value, 1, 5)}
           slotProps={{ htmlInput: { min: 1, max: 5 } }}
           helperText="So viele Fotos nimmt die Fotobox hintereinander auf, die Gäste wählen das beste. Bei 1 gibt es keine Auswahl."
+          fullWidth
+        />
+        <TextField
+          label="Countdown vor dem Foto (Sekunden)"
+          type="number"
+          value={config.countdown_seconds}
+          onChange={(e) => updateNumber("countdown_seconds", e.target.value, 2, 10)}
+          slotProps={{ htmlInput: { min: 2, max: 10 } }}
+          helperText="Mehr Zeit zum Aufstellen für große Gruppen. Die weiteren Fotos einer Serie zählen eine Sekunde weniger."
           fullWidth
         />
         <TextField

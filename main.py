@@ -37,11 +37,14 @@ from img import IMG
 from frame import FRAME
 from printer import PrinterQueueItem
 from event_config import (
+    DEFAULT_COUNTDOWN_SECONDS,
     DEFAULT_MAX_PRINTS,
     DEFAULT_SERIES_COUNT,
     DEFAULT_SUBJECT_ANCHOR,
     DEFAULT_START_TEXT,
+    MAX_COUNTDOWN_SECONDS,
     MAX_PRINTS_LIMIT,
+    MIN_COUNTDOWN_SECONDS,
     MAX_SERIES_COUNT,
     EventConfig,
 )
@@ -1112,6 +1115,7 @@ SETTINGS_DEFAULTS = {
     "series_count": DEFAULT_SERIES_COUNT,
     "sound_enabled": True,
     "subject_anchor": DEFAULT_SUBJECT_ANCHOR,
+    "countdown_seconds": DEFAULT_COUNTDOWN_SECONDS,
     "has_logo": False,
 }
 
@@ -1128,6 +1132,7 @@ class SettingsRequest(BaseModel):
     series_count: int = Field(DEFAULT_SERIES_COUNT, ge=1, le=MAX_SERIES_COUNT)
     sound_enabled: bool = True
     subject_anchor: Literal["bottom", "center"] = "bottom"
+    countdown_seconds: int = Field(DEFAULT_COUNTDOWN_SECONDS, ge=MIN_COUNTDOWN_SECONDS, le=MAX_COUNTDOWN_SECONDS)
 
 
 class SettingsResponse(BaseModel):
@@ -1140,6 +1145,7 @@ class SettingsResponse(BaseModel):
     series_count: int = DEFAULT_SERIES_COUNT
     sound_enabled: bool = True
     subject_anchor: str = DEFAULT_SUBJECT_ANCHOR
+    countdown_seconds: int = DEFAULT_COUNTDOWN_SECONDS
     has_logo: bool = False
 
 
@@ -1154,6 +1160,7 @@ def _settings_response(config: EventConfig, has_logo: bool) -> SettingsResponse:
         series_count=config.series_count,
         sound_enabled=config.sound_enabled,
         subject_anchor=config.subject_anchor,
+        countdown_seconds=config.countdown_seconds,
         has_logo=has_logo,
     )
 
@@ -1194,6 +1201,7 @@ async def api_settings_update(settings: SettingsRequest, session: Session = Depe
         series_count=settings.series_count,
         sound_enabled=settings.sound_enabled,
         subject_anchor=settings.subject_anchor,
+        countdown_seconds=settings.countdown_seconds,
     )
     if existing is None:
         config.db_save(db)
@@ -1523,7 +1531,7 @@ async def api_profile_add(req: ProfileRequest, session: Session = Depends(auth([
     settings = {
         key: value
         for key, value in (config.to_dict() if config is not None else SETTINGS_DEFAULTS).items()
-        if key in ("title", "subtitle", "brand_name", "start_text", "max_prints", "series_count", "sound_enabled", "subject_anchor")
+        if key in ("title", "subtitle", "brand_name", "start_text", "max_prints", "series_count", "sound_enabled", "subject_anchor", "countdown_seconds")
     }
     active_ids = [meta["background_id"] for meta in Background.db_find_meta(db) if meta["active"]]
     active_frame = db.db[FRAME.COLLECTION_NAME].find_one({"is_active": True}, {"_id": 1})

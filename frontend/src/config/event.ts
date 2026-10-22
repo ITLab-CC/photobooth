@@ -27,6 +27,7 @@ export const runtimeConfig = {
   maxPrints: MAX_PRINTS, // copies of one photo a guest may print
   seriesCount: SERIES_COUNT, // photos taken in a row before the guests pick one (1 = single photo)
   soundEnabled: true, // countdown ticks and shutter sound
+  countdownSeconds: 3, // countdown before the first photo; later photos of a series count down one less
   // Object URL of the logo uploaded in the admin dashboard; null = use the built-in logo.
   logoUrl: null as string | null,
 };
@@ -49,6 +50,7 @@ export async function initEventConfig(token: string): Promise<void> {
     runtimeConfig.maxPrints = config.max_prints;
     runtimeConfig.seriesCount = config.series_count;
     runtimeConfig.soundEnabled = config.sound_enabled;
+    runtimeConfig.countdownSeconds = config.countdown_seconds;
     if (config.has_logo) {
       runtimeConfig.logoUrl = URL.createObjectURL(await getEventLogo(token));
     }

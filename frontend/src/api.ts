@@ -628,6 +628,7 @@ export interface EventConfigResponse {
   series_count: number;
   sound_enabled: boolean;
   subject_anchor: "bottom" | "center";
+  countdown_seconds: number;
   has_logo: boolean;
 }
 

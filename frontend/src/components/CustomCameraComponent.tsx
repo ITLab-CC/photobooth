@@ -208,7 +208,8 @@ export default function CustomCameraComponent({
           await sleep(1500);
           setMessage(null);
         }
-        await countDown(i === 0 ? 3 : 2);
+        // the first photo gets the full countdown, the others one second less (the group is posing already)
+        await countDown(i === 0 ? runtimeConfig.countdownSeconds : Math.max(2, runtimeConfig.countdownSeconds - 1));
         const shot = grabFrame();
         if (runtimeConfig.soundEnabled) playShutter();
         setCountdown(null);

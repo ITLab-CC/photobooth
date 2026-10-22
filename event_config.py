@@ -14,6 +14,9 @@ DEFAULT_START_TEXT = "Erschaffe eine Erinnerung"
 DEFAULT_MAX_PRINTS = 3  # copies of one photo a guest can print
 MAX_PRINTS_LIMIT = 10
 DEFAULT_SUBJECT_ANCHOR = "bottom"  # people stand on the lower edge of the photo ("center" puts them in the middle)
+DEFAULT_COUNTDOWN_SECONDS = 3  # countdown before the first photo; the following photos of a series count down one less
+MIN_COUNTDOWN_SECONDS = 2
+MAX_COUNTDOWN_SECONDS = 10
 DEFAULT_SERIES_COUNT = 3  # photos taken in a row, the guests pick the best one (1 = single photo)
 MAX_SERIES_COUNT = 5
 
@@ -29,6 +32,7 @@ class EventConfig:
     series_count: int = DEFAULT_SERIES_COUNT
     sound_enabled: bool = True
     subject_anchor: str = DEFAULT_SUBJECT_ANCHOR
+    countdown_seconds: int = DEFAULT_COUNTDOWN_SECONDS
     _id: str = field(default=EVENT_CONFIG_ID)
 
     # Collection name for MongoDB.
@@ -51,6 +55,7 @@ class EventConfig:
             "series_count": self.series_count,
             "sound_enabled": self.sound_enabled,
             "subject_anchor": self.subject_anchor,
+            "countdown_seconds": self.countdown_seconds,
         }
 
     def __str__(self) -> str:
@@ -166,6 +171,7 @@ class EventConfig:
             series_count=int(data.get("series_count", DEFAULT_SERIES_COUNT)),
             sound_enabled=bool(data.get("sound_enabled", True)),
             subject_anchor=str(data.get("subject_anchor", DEFAULT_SUBJECT_ANCHOR)),
+            countdown_seconds=int(data.get("countdown_seconds", DEFAULT_COUNTDOWN_SECONDS)),
             _id=str(data.get("_id", EVENT_CONFIG_ID)),
         )
 
