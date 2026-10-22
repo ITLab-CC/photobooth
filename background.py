@@ -25,6 +25,10 @@ class Background:
     _id: str = field(default_factory=lambda: f"Back-{uuid.uuid4()}")
     name: str = ""
     active: bool = True
+    # Which part of the background stays visible when it has to be cut to the frame's opening
+    # (0 = left/top, 0.5 = middle, 1 = right/bottom).
+    focus_x: float = 0.5
+    focus_y: float = 0.5
 
     # Collection name for MongoDB
     COLLECTION_NAME: str = BACKGROUND_COLLECTION
@@ -44,6 +48,8 @@ class Background:
             "img": self.img,  # Convert to binary data before saving.
             "name": self.name,
             "active": self.active,
+            "focus_x": self.focus_x,
+            "focus_y": self.focus_y,
         }
 
     def __str__(self) -> str:
@@ -174,7 +180,9 @@ class Background:
             img=image,
             _id=str(data.get("_id")),
             name=str(data.get("name", "")),
-            active=bool(data.get("active", True))
+            active=bool(data.get("active", True)),
+            focus_x=float(data.get("focus_x", 0.5)),
+            focus_y=float(data.get("focus_y", 0.5))
         )
 
     @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.INSERT], roles=["boss"])
@@ -284,13 +292,23 @@ class Background:
                 "background_id": str(doc["_id"]),
                 "name": str(doc.get("name", "")),
                 "active": bool(doc.get("active", True)),
+                "focus_x": float(doc.get("focus_x", 0.5)),
+                "focus_y": float(doc.get("focus_y", 0.5)),
             }
-            for doc in collection.find(query, {"_id": 1, "name": 1, "active": 1})
+            for doc in collection.find(query, {"_id": 1, "name": 1, "active": 1, "focus_x": 1, "focus_y": 1})
         ]
 
     @classmethod
     @mongodb_permissions(collection=BACKGROUND_COLLECTION, actions=[MongoDBPermissions.UPDATE], roles=["boss"])
-    def db_set_meta(cls, db_c: MongoDBConnection, _id: str, name: Optional[str] = None, active: Optional[bool] = None) -> bool:
+    def db_set_meta(
+        cls,
+        db_c: MongoDBConnection,
+        _id: str,
+        name: Optional[str] = None,
+        active: Optional[bool] = None,
+        focus_x: Optional[float] = None,
+        focus_y: Optional[float] = None,
+    ) -> bool:
         """
         Update name and/or active flag without touching the image data.
         Returns False if the background does not exist.
@@ -300,6 +318,10 @@ class Background:
             changes["name"] = name
         if active is not None:
             changes["active"] = active
+        if focus_x is not None:
+            changes["focus_x"] = min(1.0, max(0.0, focus_x))
+        if focus_y is not None:
+            changes["focus_y"] = min(1.0, max(0.0, focus_y))
         if not changes:
             return cls.db_find_png_bytes(db_c, _id) is not None
         collection: Collection = db_c.db[cls.COLLECTION_NAME]

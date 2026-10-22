@@ -10,6 +10,7 @@ import {
   LinearProgress,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import CropIcon from "@mui/icons-material/Crop";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import {
   createBackground,
@@ -19,6 +20,7 @@ import {
   BackgroundResponse,
 } from "../../api";
 import BackgroundImage from "../BackgroundImage";
+import BackgroundCropDialog from "./BackgroundCropDialog";
 
 interface BackgroundsPanelProps {
   token: string;
@@ -42,6 +44,7 @@ const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({ token, showMessage 
   const inputRef = useRef<HTMLInputElement>(null);
   const [backgrounds, setBackgrounds] = useState<BackgroundResponse[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [cropTarget, setCropTarget] = useState<BackgroundResponse | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
 
   const reload = async () => {
@@ -96,7 +99,10 @@ const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({ token, showMessage 
     uploadFiles(Array.from(e.dataTransfer.files));
   };
 
-  const patchBackground = async (backgroundId: string, patch: { name?: string; active?: boolean }) => {
+  const patchBackground = async (
+    backgroundId: string,
+    patch: { name?: string; active?: boolean; focus_x?: number; focus_y?: number }
+  ) => {
     try {
       const updated = await updateBackground(token, backgroundId, patch);
       setBackgrounds((prev) => prev.map((bg) => (bg.background_id === backgroundId ? updated : bg)));
@@ -204,6 +210,9 @@ const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({ token, showMessage 
                 onChange={(e) => patchBackground(bg.background_id, { active: e.target.checked })}
               />
             </Box>
+            <IconButton size="small" aria-label="Bildausschnitt" onClick={() => setCropTarget(bg)}>
+              <CropIcon />
+            </IconButton>
             <IconButton size="small" color="error" onClick={() => handleDeleteBackground(bg.background_id)}>
               <DeleteIcon />
             </IconButton>
@@ -215,6 +224,19 @@ const BackgroundsPanel: React.FC<BackgroundsPanelProps> = ({ token, showMessage 
           </Typography>
         )}
       </Box>
+
+      <BackgroundCropDialog
+        open={cropTarget !== null}
+        token={token}
+        background={cropTarget}
+        onClose={() => setCropTarget(null)}
+        onSave={(focusX, focusY) => {
+          if (cropTarget) {
+            patchBackground(cropTarget.background_id, { focus_x: focusX, focus_y: focusY });
+          }
+          setCropTarget(null);
+        }}
+      />
     </Box>
   );
 };

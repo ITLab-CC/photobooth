@@ -1,19 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography, Button, Paper, IconButton, Chip, AlertColor } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import {
-  listFrames,
-  deleteFrame,
-  activateFrame,
-  upscaleFrame,
-  listBackgrounds,
-  getBackground,
-  FrameResponse,
-} from "../../api";
+import { listFrames, deleteFrame, activateFrame, upscaleFrame, createFrame, FrameResponse } from "../../api";
 import FrameImage from "../FrameImage";
-import FrameEditor from "./FrameEditor";
 
 interface FramesPanelProps {
   token: string;
@@ -23,11 +13,6 @@ interface FramesPanelProps {
 const FramesPanel: React.FC<FramesPanelProps> = ({ token, showMessage }) => {
   const [frames, setFrames] = useState<FrameResponse[]>([]);
   const frameInputRef = useRef<HTMLInputElement>(null);
-  const [backgroundSampleUrl, setBackgroundSampleUrl] = useState<string | null>(null);
-
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editingFrame, setEditingFrame] = useState<FrameResponse | null>(null);
-  const [newFrameBase64, setNewFrameBase64] = useState<string | null>(null);
 
   const refreshFrames = () => {
     listFrames(token)
@@ -39,43 +24,27 @@ const FramesPanel: React.FC<FramesPanelProps> = ({ token, showMessage }) => {
     if (token) refreshFrames();
   }, [token]);
 
-  // Load one sample background (if any exist) so the editor has something to preview against.
-  useEffect(() => {
-    if (!token) return;
-    listBackgrounds(token)
-      .then((res) => {
-        if (res.backgrounds.length === 0) return;
-        return getBackground(token, res.backgrounds[0].background_id).then((blob) => {
-          setBackgroundSampleUrl(URL.createObjectURL(blob));
-        });
-      })
-      .catch(() => {
-        // No sample available — the editor will just show the frame without a preview background.
-      });
-  }, [token]);
-
   const handleUploadClick = () => {
     frameInputRef.current?.click();
   };
 
+  // The frame's opening decides where the photo goes, so a frame needs no alignment: upload and it is ready.
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).replace(/^data:image\/[a-z]+;base64,/, "");
-      setNewFrameBase64(base64);
-      setEditingFrame(null);
-      setEditorOpen(true);
+    reader.onload = async () => {
+      const base64 = (reader.result as string).replace(/^data:image\/[a-z+.-]+;base64,/, "");
+      try {
+        await createFrame(token, base64);
+        refreshFrames();
+        showMessage('Frame hochgeladen. Mit "Aktiv setzen" einschalten.');
+      } catch {
+        showMessage("Der Frame konnte nicht hochgeladen werden", "error");
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = "";
-  };
-
-  const handleEdit = (frame: FrameResponse) => {
-    setEditingFrame(frame);
-    setNewFrameBase64(null);
-    setEditorOpen(true);
   };
 
   const handleDelete = async (frameId: string) => {
@@ -119,17 +88,16 @@ const FramesPanel: React.FC<FramesPanelProps> = ({ token, showMessage }) => {
     }
   };
 
-  const handleSaved = () => {
-    setEditorOpen(false);
-    refreshFrames();
-  };
-
   return (
     <Box sx={{ maxWidth: 640 }}>
       <Box sx={{ mb: 3 }}>
         <Button variant="contained" onClick={handleUploadClick}>
           Neuen Frame hochladen
         </Button>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Der durchsichtige Bereich des Frames ist das Fenster für das Foto. Die Größe des Frames ist die Größe des
+          fertigen Fotos.
+        </Typography>
         <input
           type="file"
           accept="image/*"
@@ -180,9 +148,6 @@ const FramesPanel: React.FC<FramesPanelProps> = ({ token, showMessage }) => {
             <Button size="small" onClick={() => handleUpscale(f, 1.5)} sx={{ mr: 1 }}>
               Größer (×1,5)
             </Button>
-            <IconButton size="small" onClick={() => handleEdit(f)}>
-              <EditIcon />
-            </IconButton>
             <IconButton size="small" color="error" onClick={() => handleDelete(f.frame_id)}>
               <DeleteIcon />
             </IconButton>
@@ -195,16 +160,6 @@ const FramesPanel: React.FC<FramesPanelProps> = ({ token, showMessage }) => {
         )}
       </Box>
 
-      <FrameEditor
-        open={editorOpen}
-        token={token}
-        frame={editingFrame}
-        newFrameBase64={newFrameBase64}
-        backgroundSampleUrl={backgroundSampleUrl}
-        onClose={() => setEditorOpen(false)}
-        onSaved={handleSaved}
-        showMessage={showMessage}
-      />
     </Box>
   );
 };

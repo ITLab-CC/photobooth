@@ -44,13 +44,13 @@ from event_config import (
     MAX_SERIES_COUNT,
     EventConfig,
 )
-from process_img import IMGReplacer, resize_with_crop_or_pad
+from process_img import IMGReplacer
 from face_smiley_replacer import replace_faces_with_smileys_dnn
 from face_props import PREVIEW_STYLES, PROP_STYLES, apply_face_props, render_overlay
 import faceswap
 import printstate
 import profiles
-from framewindow import normalize_crop, visible_window, window_in_background
+from framewindow import cover_fit, frame_opening, normalize_crop
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -723,10 +723,14 @@ class BackgroundResponse(BaseModel):
     background_id: str
     name: str = ""
     active: bool = True
+    focus_x: float = 0.5  # which part stays visible when the background is cut to the frame (0 left/top, 1 right/bottom)
+    focus_y: float = 0.5
 
 class BackgroundPatchRequest(BaseModel):
     name: Optional[str] = None
     active: Optional[bool] = None
+    focus_x: Optional[float] = Field(None, ge=0, le=1)
+    focus_y: Optional[float] = Field(None, ge=0, le=1)
 
 @app.post(
     "/api/v1/background",
@@ -810,7 +814,7 @@ async def api_background_patch(background_id: str, patch: BackgroundPatchRequest
     db = session.mongodb_connection
 
     name = patch.name.strip() if patch.name is not None else None
-    if not Background.db_set_meta(db, background_id, name=name, active=patch.active):
+    if not Background.db_set_meta(db, background_id, name=name, active=patch.active, focus_x=patch.focus_x, focus_y=patch.focus_y):
         raise HTTPException(status_code=404, detail="Background image not found")
 
     for meta in Background.db_find_meta(db):
@@ -1055,7 +1059,7 @@ class FrameWindowResponse(BaseModel):
     "/api/v1/frame/{frame_id}/window",
     response_model=FrameWindowResponse,
     dependencies=[Depends(RateLimiter(times=5, seconds=1))],
-    description="The part of the frame that shows the guests' photo. The photo booth crops its live image to this shape, so what the guests see is what ends up in the picture."
+    description="The opening of the frame, i.e. the area that shows the guests' photo. The photo booth cuts its live image to this shape, so what the guests see is what ends up in the picture."
 )
 async def api_frame_window(frame_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> FrameWindowResponse:
     db = session.mongodb_connection
@@ -1065,16 +1069,7 @@ async def api_frame_window(frame_id: str, session: Session = Depends(auth(["boss
         raise HTTPException(status_code=404, detail="Frame image not found")
 
     frame_width, frame_height = frame_img.frame.size
-    # The frame was aligned on a background image; any one of them gives the same answer if they share a size.
-    bg_size = (frame_width, frame_height)
-    background_ids = Background.db_find_ids(db)
-    if background_ids:
-        png = Background.db_find_png_bytes(db, background_ids[0])
-        if png is not None:
-            bg_size = Image.open(io.BytesIO(png)).size
-
-    window = visible_window(frame_img.frame, bg_size, frame_img.background_scale, frame_img.background_offset, frame_img.background_crop)
-    x0, y0, x1, y1 = window if window is not None else (0, 0, frame_width, frame_height)
+    x0, y0, x1, y1 = frame_opening(frame_img.frame)
     return FrameWindowResponse(
         x=x0, y=y0, width=x1 - x0, height=y1 - y0, frame_width=frame_width, frame_height=frame_height,
         aspect=(x1 - x0) / (y1 - y0),
@@ -1309,37 +1304,6 @@ class ImageProcessResponse(BaseModel):
 # Load AI model for image processing
 Replacer = IMGReplacer()
 
-def scaled_size(frame_img: Optional[FRAME], bg_size: Tuple[int, int]) -> Tuple[int, int]:
-    """Size of a background after the frame's scale, the size add_frame would give it."""
-    if frame_img is None:
-        return bg_size
-    return (int(bg_size[0] * frame_img.background_scale), int(bg_size[1] * frame_img.background_scale))
-
-
-def scaled_background(bg: Image.Image, frame_img: Optional[FRAME]) -> Image.Image:
-    """
-    The background at the size it has inside the frame. The photo is composed at this size, so the people are
-    resampled once, straight from the camera picture to their final size, instead of twice.
-    """
-    size = scaled_size(frame_img, bg.size)
-    if size == bg.size:
-        return bg
-    return bg.resize(size, Image.Resampling.LANCZOS)
-
-
-def photo_region(frame_img: Optional[FRAME], bg_size: Tuple[int, int]) -> Optional[Tuple[int, int, int, int]]:
-    """
-    The part of the (already frame-scaled) background that stays visible inside the frame, or None without a
-    frame. bg_size is the background's size before the frame's scale.
-    """
-    if frame_img is None:
-        return None
-    window = visible_window(frame_img.frame, bg_size, frame_img.background_scale, frame_img.background_offset, frame_img.background_crop)
-    if window is None:
-        return None
-    return window_in_background(window, scaled_size(frame_img, bg_size), 1.0, frame_img.background_offset, frame_img.background_crop)
-
-
 @app.post(
     "/api/v1/image/process",
     response_model=ImageProcessResponse,
@@ -1371,12 +1335,12 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
     else:
         background_img = None
 
-    # get the frame (not needed when the photo becomes part of a strip)
-    frame_img = None
-    if not image.skip_frame:
-        frame_img = FRAME.db_find(db, image.img_frame_id)
-        if frame_img is None:
-            raise HTTPException(status_code=404, detail="Frame image not found")
+    # get the frame: its opening is the area the photo is made for (also for strips, which do not draw the frame)
+    frame_img = FRAME.db_find(db, image.img_frame_id) if image.img_frame_id else None
+    if frame_img is None and not image.skip_frame:
+        raise HTTPException(status_code=404, detail="Frame image not found")
+    opening = frame_opening(frame_img.frame) if frame_img is not None else None
+    target_size = (opening[2] - opening[0], opening[3] - opening[1]) if opening is not None else None
 
     # face swap works on the camera photo itself, before the person is cut out
     source_img = img.img
@@ -1404,42 +1368,28 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error removing background from image: " + str(e))
 
-        # replace background
+        # replace background: the background is cut to the opening of the frame (formatfüllend), so it always
+        # fills it, whatever size it has; the people are fitted into that area
         try:
+            fitted_background = background_img.img
+            if target_size is not None:
+                fitted_background = cover_fit(fitted_background, target_size, (background_img.focus_x, background_img.focus_y))
             img_with_new_background = Replacer.replace_background(
                 img_no_background,
-                scaled_background(background_img.img, frame_img),
+                fitted_background,
                 image.refine_foreground,
                 margin_ratio=0.9,
                 apply_alpha_threshold=True,
-                light_match=image.light_match,
-                region=photo_region(frame_img, background_img.img.size)
+                light_match=image.light_match
                 )
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
     else:
-        # Dont replace the background but resize it to the size of the background image
+        # No new background: the camera picture fills the opening of the frame
+        img_with_new_background = cover_fit(source_img, target_size) if target_size is not None else source_img
 
-        # get the size of the first background image
-        # get any background image
-        back_image_ids = Background.db_find_ids(db)
-        if len(back_image_ids) == 0:
-            raise HTTPException(status_code=404, detail="No background images found")
-
-        first_background_img = Background.db_find(db, back_image_ids[0])
-        if first_background_img is None:
-            raise HTTPException(status_code=404, detail="No background images found")
-        x_size, y_size = scaled_size(frame_img, first_background_img.img.size)
-
-        # Fill exactly the part of the frame that shows the photo, so the whole camera picture is visible.
-        region = photo_region(frame_img, first_background_img.img.size)
-        if region is not None:
-            fitted = resize_with_crop_or_pad(source_img, (region[2] - region[0], region[3] - region[1]))
-            img_with_new_background = Image.new("RGBA", (x_size, y_size), (0, 0, 0, 0))
-            img_with_new_background.paste(fitted, (region[0], region[1]))
-        else:
-            img_with_new_background = resize_with_crop_or_pad(source_img, (x_size, y_size))
-
+    # from here on the photo is exactly what the frame's opening will show
+    img_with_new_background = img_with_new_background.convert("RGB")
 
     # magic: replace faces with smileys or put props (sunglasses, hats, crowns) on them
     if image.random_stuff:
@@ -1456,18 +1406,13 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error applying magic to image: " + str(e))
 
-    # Add a Frame to the image
+    # Add the frame: the photo goes behind the opening on an opaque white sheet, so nothing can ever print black
     img_with_frame = None
-    if frame_img is not None:
+    if frame_img is not None and not image.skip_frame and opening is not None:
         try:
-            # the photo was composed at its final size already, so add_frame must not scale it again
-            img_with_frame = Replacer.add_frame(
-                img_with_new_background,
-                frame_img.frame,
-                1.0,
-                frame_img.background_offset,
-                frame_img.background_crop
-                )
+            sheet = Image.new("RGBA", frame_img.frame.size, (255, 255, 255, 255))
+            sheet.paste(img_with_new_background, (opening[0], opening[1]))
+            img_with_frame = Image.alpha_composite(sheet, frame_img.frame.convert("RGBA"))
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error adding frame to image: " + str(e))
 

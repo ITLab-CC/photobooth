@@ -287,6 +287,8 @@ export interface BackgroundResponse {
   background_id: string;
   name: string;
   active: boolean;
+  focus_x: number; // which part stays visible when the background is cut to the frame (0 left/top, 1 right/bottom)
+  focus_y: number;
 }
 export interface BackgroundListResponse {
   backgrounds: BackgroundResponse[];
@@ -310,7 +312,7 @@ export async function createBackground(
 export async function updateBackground(
   token: string,
   backgroundId: string,
-  patch: { name?: string; active?: boolean }
+  patch: { name?: string; active?: boolean; focus_x?: number; focus_y?: number }
 ): Promise<BackgroundResponse> {
   return await request<BackgroundResponse>(
     "PATCH",
@@ -550,8 +552,12 @@ export async function reportCamera(token: string, width: number, height: number,
 
 // GET /api/v1/frame/{frame_id}/window: the part of the frame that shows the guests' photo
 export interface FrameWindow {
+  x: number;
+  y: number;
   width: number;
   height: number;
+  frame_width: number;
+  frame_height: number;
   aspect: number;
 }
 export async function getFrameWindow(token: string, frameId: string): Promise<FrameWindow> {
