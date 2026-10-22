@@ -15,11 +15,11 @@ YUNET_PATH = "models/face_detection_yunet_2023mar.onnx"
 # Styles a guest can pick. "smileys" is handled by face_smiley_replacer.
 PROP_STYLES: Tuple[str, ...] = (
     "sunglasses", "party_hat", "crown", "party",
-    "moustache", "clown_nose", "bunny_ears", "halo", "hearts", "mix",
+    "moustache", "clown_nose", "bunny_ears", "halo", "hearts", "googly_eyes", "mix",
 )
 
 # Styles that change the faces themselves instead of drawing props on them.
-SPECIAL_STYLES: Tuple[str, ...] = ("upside_down",)
+SPECIAL_STYLES: Tuple[str, ...] = ("upside_down", "thatcher", "twin", "big_heads")
 
 # Props are drawn at this multiple of their final size and scaled down for smooth edges.
 SUPERSAMPLE = 2
@@ -289,6 +289,19 @@ def _hearts(c: _Canvas) -> None:
         c.draw.polygon(_ellipse_points(c, fx - 0.045, EYE_LINE - 0.045, 0.03, 0.02, -35), fill=(255, 255, 255, 140))
 
 
+def _googly_eyes(c: _Canvas) -> None:
+    c.set_scale(1.0)
+    radius = c.w * 0.15 * SUPERSAMPLE
+    for fx, look in ((0.30, (-0.03, 0.045)), (0.70, (-0.04, 0.04))):
+        cx, cy = c.p(fx, EYE_LINE)
+        c.draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=(255, 255, 255, 255), outline=(20, 20, 20, 255), width=max(2, int(radius * 0.09)))
+        pupil = radius * 0.46
+        px_, py_ = cx + look[0] * c.w * SUPERSAMPLE * 2.2, cy + look[1] * c.h * SUPERSAMPLE * 2.2
+        c.draw.ellipse([px_ - pupil, py_ - pupil, px_ + pupil, py_ + pupil], fill=(15, 15, 20, 255))
+        glint = pupil * 0.35
+        c.draw.ellipse([px_ - pupil * 0.2 - glint, py_ - pupil * 0.45 - glint, px_ - pupil * 0.2 + glint, py_ - pupil * 0.45 + glint], fill=(255, 255, 255, 255))
+
+
 _PROP_DRAWERS: Dict[str, Callable[[_Canvas], None]] = {
     "sunglasses": _sunglasses,
     "party_hat": _party_hat,
@@ -298,6 +311,7 @@ _PROP_DRAWERS: Dict[str, Callable[[_Canvas], None]] = {
     "bunny_ears": _bunny_ears,
     "halo": _halo,
     "hearts": _hearts,
+    "googly_eyes": _googly_eyes,
 }
 
 
@@ -380,6 +394,152 @@ def flip_faces(img_orig: Image.Image) -> Image.Image:
         padded.paste(flipped, (left + pad, top + pad), mask)
         result = padded.crop((pad, pad, pad + result.width, pad + result.height))
     return result
+
+
+def _face_geometry(face: Face) -> Optional[Tuple[float, float, float, float, float]]:
+    """Centre x and y of the face, its width and height, and the head tilt in degrees; None if unusable."""
+    (lx, ly), (rx, ry) = face.eye_left, face.eye_right
+    eye_distance = math.hypot(rx - lx, ry - ly)
+    if eye_distance < 1:
+        return None
+    width = eye_distance / EYE_DISTANCE
+    return (
+        float(face.kps[:, 0].mean()),
+        float(face.kps[:, 1].mean()),
+        width,
+        width * FACE_ASPECT,
+        math.degrees(math.atan2(ry - ly, rx - lx)),
+    )
+
+
+def _oval_mask(size: Tuple[int, int], half_width: float, half_height: float, feather: float) -> Image.Image:
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).ellipse(
+        [size[0] / 2 - half_width, size[1] / 2 - half_height, size[0] / 2 + half_width, size[1] / 2 + half_height], fill=255
+    )
+    return mask.filter(ImageFilter.GaussianBlur(max(1.0, feather)))
+
+
+def _turn_patch(canvas: Image.Image, cx: float, cy: float, half_width: float, half_height: float) -> None:
+    """Rotate the oval patch around (cx, cy) by 180 degrees in place and blend it softly back."""
+    side = int(round(2 * max(half_width, half_height) * 1.3))
+    if side < 6:
+        return
+    left, top = int(round(cx - side / 2)), int(round(cy - side / 2))
+    pad = side
+    padded = ImageOps.expand(canvas, border=pad, fill=(0, 0, 0))
+    box = (left + pad, top + pad, left + pad + side, top + pad + side)
+    turned = padded.crop(box).rotate(180)
+    padded.paste(turned, box[:2], _oval_mask((side, side), half_width, half_height, side * 0.06))
+    canvas.paste(padded.crop((pad, pad, pad + canvas.width, pad + canvas.height)))
+
+
+def thatcher_faces(img_orig: Image.Image) -> Image.Image:
+    """The Thatcher illusion: both eyes and the mouth are turned upside down, the face itself stays upright."""
+    img_cv = cv2.cvtColor(np.array(img_orig.convert("RGB")), cv2.COLOR_RGB2BGR)
+    faces = detect_faces(img_cv)
+    if not faces:
+        return img_orig
+    result = img_orig.convert("RGB")
+    for face in faces:
+        geometry = _face_geometry(face)
+        if geometry is None:
+            continue
+        _, _, width, height, _ = geometry
+        for eye in (face.eye_left, face.eye_right):
+            _turn_patch(result, eye[0], eye[1], width * 0.17, height * 0.085)
+        mouth = ((face.kps[3][0] + face.kps[4][0]) / 2, (face.kps[3][1] + face.kps[4][1]) / 2)
+        mouth_width = math.hypot(face.kps[4][0] - face.kps[3][0], face.kps[4][1] - face.kps[3][1])
+        _turn_patch(result, mouth[0], mouth[1], max(mouth_width * 0.8, width * 0.2), height * 0.09)
+    return result
+
+
+def twin_faces(img_orig: Image.Image) -> Image.Image:
+    """The left half of every face (as seen in the picture) is mirrored onto the right half."""
+    frame = cv2.cvtColor(np.array(img_orig.convert("RGB")), cv2.COLOR_RGB2BGR)
+    faces = detect_faces(frame)
+    if not faces:
+        return img_orig
+    for face in faces:
+        geometry = _face_geometry(face)
+        if geometry is None:
+            continue
+        cx, cy, width, height, tilt = geometry
+        side = int(round(height * 1.5))
+        if side < 16:
+            continue
+        # Cut a square around the face, turn it upright, mirror, turn it back and blend it in.
+        x0, y0 = int(round(cx - side / 2)), int(round(cy - side / 2))
+        padded = cv2.copyMakeBorder(frame, side, side, side, side, cv2.BORDER_REPLICATE)
+        crop = padded[y0 + side : y0 + 2 * side, x0 + side : x0 + 2 * side].copy()
+        centre = (side / 2, side / 2)
+        upright_matrix = cv2.getRotationMatrix2D(centre, tilt, 1.0)
+        upright = cv2.warpAffine(crop, upright_matrix, (side, side), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+        points = np.hstack([face.kps - np.array([x0, y0], dtype=np.float32), np.ones((5, 1), np.float32)]) @ upright_matrix.T
+        axis = int(round(points[:, 0].mean()))
+        span = min(axis, side - axis)
+        if span < 4:
+            continue
+        mirrored = upright.copy()
+        mirrored[:, axis : axis + span] = upright[:, axis - span : axis][:, ::-1]
+
+        back_matrix = cv2.getRotationMatrix2D(centre, -tilt, 1.0)
+        turned_back = cv2.warpAffine(mirrored, back_matrix, (side, side), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+        mask = np.asarray(_oval_mask((side, side), width * 0.55, height * 0.55, side * 0.05), dtype=np.float32)[..., None] / 255.0
+        blended = turned_back.astype(np.float32) * mask + crop.astype(np.float32) * (1 - mask)
+        padded[y0 + side : y0 + 2 * side, x0 + side : x0 + 2 * side] = blended.astype(np.uint8)
+        frame = padded[side:-side, side:-side]
+    return Image.fromarray(cv2.cvtColor(np.ascontiguousarray(frame), cv2.COLOR_BGR2RGB))
+
+
+def _bulge(frame: np.ndarray, cx: float, cy: float, radius: float, strength: float) -> np.ndarray:
+    """Magnify the area around (cx, cy); the effect fades out smoothly at the radius. Strength 0.35 is about 1.5x."""
+    height, width = frame.shape[:2]
+    x0, y0 = max(0, int(cx - radius)), max(0, int(cy - radius))
+    x1, y1 = min(width, int(cx + radius) + 1), min(height, int(cy + radius) + 1)
+    if x1 - x0 < 4 or y1 - y0 < 4:
+        return frame
+    ys, xs = np.mgrid[y0:y1, x0:x1].astype(np.float32)
+    dx, dy = xs - cx, ys - cy
+    ratio = np.minimum(np.hypot(dx, dy) / radius, 1.0)
+    shrink = 1.0 - strength * (1.0 - ratio**2) ** 2  # source distance relative to the target distance
+    map_x, map_y = cx + dx * shrink, cy + dy * shrink
+    out = frame.copy()
+    out[y0:y1, x0:x1] = cv2.remap(frame, map_x, map_y, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    return out
+
+
+def big_heads(img_orig: Image.Image) -> Image.Image:
+    """A caricature: every head is magnified, the eyes a little more."""
+    frame = cv2.cvtColor(np.array(img_orig.convert("RGB")), cv2.COLOR_RGB2BGR)
+    faces = detect_faces(frame)
+    if not faces:
+        return img_orig
+    for face in faces:
+        geometry = _face_geometry(face)
+        if geometry is None:
+            continue
+        cx, cy, width, height, _ = geometry
+        frame = _bulge(frame, cx, cy, height * 1.05, 0.38)
+        for eye in (face.eye_left, face.eye_right):
+            frame = _bulge(frame, eye[0], eye[1], width * 0.22, 0.45)
+    return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+
+_SPECIALS: Dict[str, Callable[[Image.Image], Image.Image]] = {
+    "upside_down": flip_faces,
+    "thatcher": thatcher_faces,
+    "twin": twin_faces,
+    "big_heads": big_heads,
+}
+
+
+def apply_special(img: Image.Image, style: str) -> Image.Image:
+    """Run one of the SPECIAL_STYLES."""
+    if style not in _SPECIALS:
+        raise ValueError(f"Unknown style: {style}")
+    return _SPECIALS[style](img)
 
 
 def _placed_props(face: Face, style: str) -> Optional[Tuple[Image.Image, Tuple[int, int]]]:

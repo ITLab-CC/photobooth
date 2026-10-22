@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 import base64
 import hashlib
+import random
 import shutil
 import threading
 import torch
@@ -50,7 +51,7 @@ from event_config import (
 )
 from process_img import IMGReplacer
 from face_smiley_replacer import replace_faces_with_smileys_dnn
-from face_props import PREVIEW_STYLES, PROP_STYLES, SPECIAL_STYLES, apply_face_props, flip_faces, render_overlay
+from face_props import PREVIEW_STYLES, PROP_STYLES, SPECIAL_STYLES, apply_face_props, apply_special, render_overlay
 import faceswap
 import printstate
 import profiles
@@ -1412,17 +1413,22 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
 
     # magic: replace faces with smileys or put props (sunglasses, hats, crowns) on them
     if image.random_stuff:
+        # "Ueberraschung": one pick per photo; the face tricks are twice as likely as accessories, which are
+        # picked at random per face anyway
+        style = image.magic_style
+        if style == "mix":
+            style = random.choice(list(SPECIAL_STYLES) + ["mix"] * 2)
         try:
-            if image.magic_style == "smileys":
+            if style == "smileys":
                 img_with_new_background = replace_faces_with_smileys_dnn(
                     img_with_new_background
                     )
-            elif image.magic_style == "upside_down":
-                img_with_new_background = flip_faces(img_with_new_background)
+            elif style in SPECIAL_STYLES:
+                img_with_new_background = apply_special(img_with_new_background, style)
             else:
                 img_with_new_background = apply_face_props(
                     img_with_new_background,
-                    image.magic_style
+                    style
                     )
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error applying magic to image: " + str(e))

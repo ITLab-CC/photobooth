@@ -66,7 +66,11 @@ const MAGIC_STYLES: { value: MagicStyle; label: string }[] = [
   { value: "bunny_ears", label: "🐰 Hasenohren" },
   { value: "halo", label: "😇 Heiligenschein" },
   { value: "hearts", label: "😍 Herzaugen" },
+  { value: "googly_eyes", label: "👀 Wackelaugen" },
   { value: "upside_down", label: "🙃 Kopfüber" },
+  { value: "thatcher", label: "🤪 Verdreht" },
+  { value: "twin", label: "🪞 Zwilling" },
+  { value: "big_heads", label: "🎈 Dicke Köpfe" },
   { value: "mix", label: "🎲 Überraschung" },
 ];
 
@@ -100,6 +104,7 @@ const LIVE_PREVIEW_STYLES: MagicStyle[] = [
   "bunny_ears",
   "halo",
   "hearts",
+  "googly_eyes",
 ];
 
 // Horizontally scrolling row of large touch chips (Magic styles).
