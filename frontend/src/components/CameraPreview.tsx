@@ -1,13 +1,15 @@
 import React, { useEffect } from "react";
 import { Box, Paper } from "@mui/material";
-import { KIOSK_WIDTH } from "../theme";
 
 interface CameraPreviewProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onLoadedMetadata?: () => void;
+  /** Size of the visible image in pixels. The video fills it (cropped, not stretched). */
+  width: number;
+  height: number;
 }
 
-const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadata }) => {
+const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadata, width, height }) => {
   useEffect(() => {
     let activeStream: MediaStream | null = null;
     async function initCamera() {
@@ -33,8 +35,8 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
       sx={{ 
         overflow: "hidden", 
         borderRadius: 2,
-        width: "100%",
-        maxWidth: `${KIOSK_WIDTH}px`,
+        width: `${width}px`,
+        maxWidth: "100%",
         margin: "0 auto",
         boxSizing: "border-box",
       }}
@@ -48,7 +50,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ videoRef, onLoadedMetadat
         sx={{
           display: "block", // inline video leaves a baseline gap that shows as a white strip
           width: "100%",
-          height: `${KIOSK_WIDTH}px`,
+          height: `${height}px`,
           objectFit: "cover",
           transform: "scaleX(-1)",
         }}

@@ -528,6 +528,16 @@ export async function getFrame(token: string, frameId: string): Promise<Blob> {
   return await res.blob();
 }
 
+// GET /api/v1/frame/{frame_id}/window: the part of the frame that shows the guests' photo
+export interface FrameWindow {
+  width: number;
+  height: number;
+  aspect: number;
+}
+export async function getFrameWindow(token: string, frameId: string): Promise<FrameWindow> {
+  return await request<FrameWindow>("GET", `/api/v1/frame/${frameId}/window`, token);
+}
+
 // 7.4) DELETE /api/v1/frame/{frame_id}
 export async function deleteFrame(
   token: string,

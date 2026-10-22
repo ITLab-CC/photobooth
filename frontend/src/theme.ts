@@ -8,15 +8,29 @@ export const KIOSK_SCALE = Math.min(
   Math.max(1, (typeof window !== "undefined" ? window.innerWidth : DESIGN_WIDTH) / DESIGN_WIDTH)
 );
 
+// Width of the kiosk's content column.
+export const KIOSK_WIDTH = Math.round(680 * KIOSK_SCALE);
+
 // Height taken by everything except the camera image (title, Magic, backgrounds, margins), at scale 1.
 const OTHER_UI_HEIGHT = 560;
-// The camera image is square. It fills the width, but shrinks on screens too short to also show the controls.
-export const KIOSK_WIDTH = Math.round(
-  Math.min(
-    680 * KIOSK_SCALE,
-    Math.max(420, (typeof window !== "undefined" ? window.innerHeight : 1000) - OTHER_UI_HEIGHT * KIOSK_SCALE)
-  )
+const MAX_PREVIEW_HEIGHT = Math.max(
+  420,
+  (typeof window !== "undefined" ? window.innerHeight : 1000) - OTHER_UI_HEIGHT * KIOSK_SCALE
 );
+
+/**
+ * Size of the live camera image for a given width/height ratio. It uses the full column width, but is
+ * made smaller on screens too short to also show the controls below it.
+ */
+export const previewSize = (aspect: number): { width: number; height: number } => {
+  let width = KIOSK_WIDTH;
+  let height = width / aspect;
+  if (height > MAX_PREVIEW_HEIGHT) {
+    height = MAX_PREVIEW_HEIGHT;
+    width = height * aspect;
+  }
+  return { width: Math.round(width), height: Math.round(height) };
+};
 
 // Scale a pixel size for the kiosk screen.
 export const px = (value: number): number => Math.round(value * KIOSK_SCALE);

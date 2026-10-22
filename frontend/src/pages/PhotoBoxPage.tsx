@@ -28,6 +28,7 @@ import {
   listFaces,
   addGalleryImage,
   listFrames,
+  getFrameWindow,
   getImage,
   printImage,
 } from "../api";
@@ -128,6 +129,8 @@ export default function PhotoBoxPage() {
   const [swapReady, setSwapReady] = useState(false);
   // Photos of a series while the guests pick the best one (base64 PNG).
   const [candidates, setCandidates] = useState<string[] | null>(null);
+  // Shape of the photo area of the frame (width / height); the live image and the photos are cut to it.
+  const [captureAspect, setCaptureAspect] = useState(1);
   // Progress text while a photo strip is made from the whole series.
   const [stripNote, setStripNote] = useState<{ text: string; done: number; total: number } | null>(null);
   const [frameId, setFrameId] = useState<string | null>(null);
@@ -182,8 +185,11 @@ export default function PhotoBoxPage() {
       listFrames(token)
         .then((res) => {
           if (res.frames && res.frames.length > 0) {
-            const activeFrame = res.frames.find((f) => f.is_active);
-            setFrameId((activeFrame ?? res.frames[0]).frame_id);
+            const activeFrame = (res.frames.find((f) => f.is_active) ?? res.frames[0]);
+            setFrameId(activeFrame.frame_id);
+            getFrameWindow(token, activeFrame.frame_id)
+              .then((window) => setCaptureAspect(Math.min(3, Math.max(1 / 3, window.aspect))))
+              .catch((err) => console.error("Fehler beim Laden des Foto-Ausschnitts:", err));
           }
         })
         .catch((err) => {
@@ -627,6 +633,7 @@ export default function PhotoBoxPage() {
         {token && galleryId && !showResultModal && showMainContent && (
           <>
             <CustomCameraComponent
+              aspect={captureAspect}
               seriesCount={runtimeConfig.seriesCount}
               onPhotosCaptured={handlePhotos}
               onError={showNotice}

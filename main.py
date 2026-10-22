@@ -50,6 +50,7 @@ from face_props import PROP_STYLES, apply_face_props
 import faceswap
 import printstate
 import profiles
+from framewindow import visible_window, window_in_background
 from setup import check_dotenv, setup
 from db_connection import MongoDBConnection
 from session import Session, SessionManager
@@ -999,6 +1000,46 @@ async def api_frame_get(frame_id: str, request: Request, session: Session = Depe
 
     return Response(content=png_bytes, media_type="image/png", headers=headers)
 
+class FrameWindowResponse(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
+    frame_width: int
+    frame_height: int
+    aspect: float  # width / height of the part of the frame that shows the photo
+
+
+@app.get(
+    "/api/v1/frame/{frame_id}/window",
+    response_model=FrameWindowResponse,
+    dependencies=[Depends(RateLimiter(times=5, seconds=1))],
+    description="The part of the frame that shows the guests' photo. The photo booth crops its live image to this shape, so what the guests see is what ends up in the picture."
+)
+async def api_frame_window(frame_id: str, session: Session = Depends(auth(["boss", "photo_booth"]))) -> FrameWindowResponse:
+    db = session.mongodb_connection
+
+    frame_img = FRAME.db_find(db, frame_id)
+    if frame_img is None:
+        raise HTTPException(status_code=404, detail="Frame image not found")
+
+    frame_width, frame_height = frame_img.frame.size
+    # The frame was aligned on a background image; any one of them gives the same answer if they share a size.
+    bg_size = (frame_width, frame_height)
+    background_ids = Background.db_find_ids(db)
+    if background_ids:
+        png = Background.db_find_png_bytes(db, background_ids[0])
+        if png is not None:
+            bg_size = Image.open(io.BytesIO(png)).size
+
+    window = visible_window(frame_img.frame, bg_size, frame_img.background_scale, frame_img.background_offset, frame_img.background_crop)
+    x0, y0, x1, y1 = window if window is not None else (0, 0, frame_width, frame_height)
+    return FrameWindowResponse(
+        x=x0, y=y0, width=x1 - x0, height=y1 - y0, frame_width=frame_width, frame_height=frame_height,
+        aspect=(x1 - x0) / (y1 - y0),
+    )
+
+
 # delete frame
 @app.delete(
     "/api/v1/frame/{frame_id}",
@@ -1219,6 +1260,16 @@ class ImageProcessResponse(BaseModel):
 # Load AI model for image processing
 Replacer = IMGReplacer()
 
+def photo_region(frame_img: Optional[FRAME], bg_size: Tuple[int, int]) -> Optional[Tuple[int, int, int, int]]:
+    """The part of a background image that stays visible inside the frame, or None without a frame."""
+    if frame_img is None:
+        return None
+    window = visible_window(frame_img.frame, bg_size, frame_img.background_scale, frame_img.background_offset, frame_img.background_crop)
+    if window is None:
+        return None
+    return window_in_background(window, bg_size, frame_img.background_scale, frame_img.background_offset, frame_img.background_crop)
+
+
 @app.post(
     "/api/v1/image/process",
     response_model=ImageProcessResponse,
@@ -1291,7 +1342,8 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
                 image.refine_foreground,
                 margin_ratio=0.9,
                 apply_alpha_threshold=True,
-                light_match=image.light_match
+                light_match=image.light_match,
+                region=photo_region(frame_img, background_img.img.size)
                 )
         except Exception as e:
             raise HTTPException(status_code=500, detail="Error replacing background in image: " + str(e))
@@ -1309,8 +1361,14 @@ async def api_image_process(image: ImageProcessRequest, session: Session = Depen
             raise HTTPException(status_code=404, detail="No background images found")
         x_size, y_size = first_background_img.img.size
 
-        # resize the image
-        img_with_new_background = resize_with_crop_or_pad(source_img, (x_size, y_size))
+        # Fill exactly the part of the frame that shows the photo, so the whole camera picture is visible.
+        region = photo_region(frame_img, (x_size, y_size))
+        if region is not None:
+            fitted = resize_with_crop_or_pad(source_img, (region[2] - region[0], region[3] - region[1]))
+            img_with_new_background = Image.new("RGBA", (x_size, y_size), (0, 0, 0, 0))
+            img_with_new_background.paste(fitted, (region[0], region[1]))
+        else:
+            img_with_new_background = resize_with_crop_or_pad(source_img, (x_size, y_size))
 
 
     # magic: replace faces with smileys or put props (sunglasses, hats, crowns) on them

@@ -100,7 +100,8 @@ class IMGReplacer:
         refine_foreground: bool = False,
         margin_ratio: float = 0.9,
         apply_alpha_threshold: bool = True,
-        light_match: bool = False
+        light_match: bool = False,
+        region: Optional[Tuple[int, int, int, int]] = None
     ) -> Image.Image:
         """
         Replaces the background of the input image with a new background.
@@ -112,6 +113,8 @@ class IMGReplacer:
         :param refine_foreground: If True, uses BEN2 "Refined Matting" (slower but more accurate).
         :param margin_ratio: For example, 0.9 means 90% of the maximum possible size (adds an automatic margin).
         :param apply_alpha_threshold: If True, uses get_bbox_with_alpha_threshold to ignore semi-transparent edge pixels.
+        :param region: (x0, y0, x1, y1) in background pixels. If given, the subject is fitted into and centered
+                       in this rectangle instead of the whole background, so nobody ends up under the frame.
         :param light_match: If True, adapt the subject's brightness/color to the new background (see relight.py).
         :return: Composited image (RGBA).
         """
@@ -134,8 +137,15 @@ class IMGReplacer:
         subj_width = right - left
         subj_height = bottom - top
 
-        # 3) Contain approach: Determine the scale required for the subject to exactly fit the frame (without margin)
-        contain_scale = min(frame_w / subj_width, frame_h / subj_height)
+        # The area the subject has to fit into: the whole background, or just the part the frame leaves visible.
+        if region is not None:
+            area_x0, area_y0, area_x1, area_y1 = region
+        else:
+            area_x0, area_y0, area_x1, area_y1 = 0, 0, frame_w, frame_h
+        area_w, area_h = max(1, area_x1 - area_x0), max(1, area_y1 - area_y0)
+
+        # 3) Contain approach: Determine the scale required for the subject to exactly fit the area (without margin)
+        contain_scale = min(area_w / subj_width, area_h / subj_height)
 
         # 4) margin_ratio => Safety margin.
         #    The subject fills only margin_ratio * contain_scale.
@@ -165,9 +175,9 @@ class IMGReplacer:
             subj_center_x = new_fg_width // 2
             subj_center_y = new_fg_height // 2
 
-        # 7) Center the subject in the frame
-        offset_x = (frame_w // 2) - subj_center_x
-        offset_y = (frame_h // 2) - subj_center_y
+        # 7) Center the subject in the area
+        offset_x = (area_x0 + area_w // 2) - subj_center_x
+        offset_y = (area_y0 + area_h // 2) - subj_center_y
 
         # 8) Create a new RGBA image with the same size as the background
         new_fg = Image.new("RGBA", (frame_w, frame_h), (0, 0, 0, 0))

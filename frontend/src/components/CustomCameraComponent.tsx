@@ -4,7 +4,7 @@ import { keyframes } from "@mui/system";
 import CameraPreview from "./CameraPreview";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import confetti from "canvas-confetti";
-import { KIOSK_WIDTH, brand, px } from "../theme";
+import { brand, previewSize, px } from "../theme";
 import { runtimeConfig } from "../config/event";
 import { playChime, playGo, playShutter, playTick } from "../utils/sound";
 
@@ -19,6 +19,11 @@ const flashAnimation = keyframes`
 `;
 
 interface CustomCameraComponentProps {
+  /**
+   * Width / height of the part of the frame that shows the photo. The live image and the saved photos are
+   * cut to exactly this shape, so everybody who is in the live image is in the picture.
+   */
+  aspect: number;
   /** Photos taken in a row. With more than one, the guests pick the best afterwards. */
   seriesCount: number;
   /** Called with the base64 PNG of every photo of a complete series. */
@@ -29,6 +34,7 @@ interface CustomCameraComponentProps {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function CustomCameraComponent({
+  aspect,
   seriesCount,
   onPhotosCaptured,
   onError,
@@ -41,6 +47,8 @@ export default function CustomCameraComponent({
   const [flashActive, setFlashActive] = useState<boolean>(false);
   const [seriesLabel, setSeriesLabel] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const size = previewSize(aspect);
 
   const reportError = (text: string) => {
     console.error(text);
@@ -69,13 +77,19 @@ export default function CustomCameraComponent({
     if (!video || !canvas || video.videoWidth === 0 || video.videoHeight === 0) {
       return null;
     }
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // The preview shows the video cropped to `aspect` around its centre; cut the photo the same way.
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const sourceWidth = videoAspect > aspect ? video.videoHeight * aspect : video.videoWidth;
+    const sourceHeight = videoAspect > aspect ? video.videoHeight : video.videoWidth / aspect;
+    const sourceX = (video.videoWidth - sourceWidth) / 2;
+    const sourceY = (video.videoHeight - sourceHeight) / 2;
+    canvas.width = Math.round(sourceWidth);
+    canvas.height = Math.round(sourceHeight);
     const context = canvas.getContext("2d");
     if (!context) {
       return null;
     }
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/, "");
   };
 
@@ -137,9 +151,9 @@ export default function CustomCameraComponent({
       <Box
         position="relative"
         sx={{
-          width: "100%",
-          maxWidth: `${KIOSK_WIDTH}px`,
-          height: `${KIOSK_WIDTH}px`,
+          width: `${size.width}px`,
+          maxWidth: "100%",
+          height: `${size.height}px`,
           margin: "8px auto",
           cursor: isCapturing ? "default" : "pointer",
         }}
@@ -147,6 +161,8 @@ export default function CustomCameraComponent({
       >
       <CameraPreview
         videoRef={videoRef}
+        width={size.width}
+        height={size.height}
         onLoadedMetadata={() => {
           setVideoReady(true);
         }}
